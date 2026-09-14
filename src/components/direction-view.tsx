@@ -1,5 +1,6 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { useStudio } from "@/lib/store";
@@ -13,15 +14,19 @@ export function DirectionView() {
 
   return (
     <div className="min-h-dvh bg-bg">
-      <header className="flex items-center justify-between px-5 py-4 md:px-8">
-        <Wordmark />
-        <button
-          className="text-sm text-muted hover:text-fg"
-          onClick={() => useStudio.setState({ currentId: null })}
-        >
-          返回
-        </button>
-      </header>
+      <AppHeader
+        className="py-4"
+        leading={<Wordmark />}
+        extra={
+          <button
+            type="button"
+            className="h-11 px-2 text-sm text-muted hover:text-fg"
+            onClick={() => useStudio.setState({ currentId: null })}
+          >
+            返回
+          </button>
+        }
+      />
       <main className="mx-auto max-w-6xl px-5 pb-16">
         <div className="mb-8 max-w-2xl">
           <p className="text-xs uppercase tracking-[0.22em] text-subtle">Step 1 · 定方向</p>

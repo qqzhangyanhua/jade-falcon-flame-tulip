@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { ImagePlus, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { parseBrief, generateCandidate } from "@/lib/ai";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { fallbackBoardSvg } from "@/lib/fallback-board";
 import { PRESETS } from "@/lib/presets";
 import { fileToDataUrl } from "@/lib/resize-image";
@@ -25,6 +28,8 @@ export function BriefView() {
   const setCandidates = useStudio((s) => s.setCandidates);
   const patchCandidate = useStudio((s) => s.patchCandidate);
   const projects = useStudio((s) => s.projects);
+  const { user, isPending: authPending } = useCurrentUserState();
+  const navigate = useNavigate();
 
   async function onFile(file: File) {
     try {
@@ -35,6 +40,11 @@ export function BriefView() {
   }
 
   async function start() {
+    if (authPending) return;
+    if (!user) {
+      navigate({ to: "/login" });
+      return;
+    }
     const text = brief.trim();
     if (!text) {
       toast.error("先写一句产品描述");
@@ -83,9 +93,7 @@ export function BriefView() {
 
   return (
     <div className="min-h-dvh bg-bg">
-      <header className="flex items-center justify-between px-5 py-3 md:px-8">
-        <Wordmark />
-      </header>
+      <AppHeader leading={<Wordmark />} />
 
       <main className="mx-auto flex max-w-2xl flex-col gap-6 px-5 pb-12 pt-4 md:pt-8">
         <div className="space-y-3">
@@ -137,8 +145,12 @@ export function BriefView() {
             <img src={proto} alt="原型" className="mt-3 max-h-24 rounded-md border border-border object-contain" />
           ) : null}
 
-          <Button className="mt-4 w-full" size="lg" disabled={busy} onClick={() => void start()}>
-            {busy ? "正在解析并出四个方向…" : "生成四个方向"}
+          <Button className="mt-4 w-full" size="lg" disabled={busy || authPending} onClick={() => void start()}>
+            {busy
+              ? "正在解析并出四个方向…"
+              : !user && !authPending
+                ? "登录后生成四个方向"
+                : "生成四个方向"}
             {!busy ? <ArrowRight className="size-4" /> : null}
           </Button>
           <p className="mt-2 text-center text-xs text-subtle">每次出图会调用模型，请确认描述后再点。</p>

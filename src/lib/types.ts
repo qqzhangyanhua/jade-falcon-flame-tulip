@@ -118,3 +118,10 @@ export function adoptedRev(asset: Asset): ImageRev | null {
   if (!asset.adoptedId) return asset.revs.at(-1) ?? null;
   return asset.revs.find((r) => r.id === asset.adoptedId) ?? asset.revs.at(-1) ?? null;
 }
+
+export type ProfileRecord = {
+  displayName: string;
+  title: string;
+  bio: string;
+  updatedAt: string | null;
+};

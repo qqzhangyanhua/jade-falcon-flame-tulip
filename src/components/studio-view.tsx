@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Download, Loader2, PanelLeft } from "lucide-react";
 import { toast } from "sonner";
+import { AuthSlot } from "@/components/auth-slot";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { generateSlotFn, tuneImageFn } from "@/lib/ai";
@@ -180,18 +181,21 @@ export function StudioView() {
             {SLOTS.find((s) => s.id === slot)?.label} · {currentImg ? `v${asset!.revs.findIndex((r) => r.id === currentImg.id) + 1}` : "未出图"}
           </span>
         </div>
-        <a
-          className={cn(
-            "inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm",
-            !currentImg && "pointer-events-none opacity-40",
-          )}
-          href={currentImg?.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <Download className="size-3.5" />
-          下载
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            className={cn(
+              "inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm",
+              !currentImg && "pointer-events-none opacity-40",
+            )}
+            href={currentImg?.url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Download className="size-3.5" />
+            下载
+          </a>
+          <AuthSlot compact />
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

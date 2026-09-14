@@ -89,6 +89,7 @@ export type Project = {
   createdAt: number;
   currentStyleId: string | null;
   currentSlot: Slot;
+  currentImageModelId: string;
   phase: "brief" | "direction" | "studio";
   intent: BriefIntent | null;
   candidates: Candidate[];

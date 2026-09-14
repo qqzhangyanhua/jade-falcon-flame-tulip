@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>出图工作台说明 · 一页对齐稿</title>
+<style>
+  :root {
+    --ink: #1a1d24;
+    --muted: #5c6470;
+    --line: #d8dde4;
+    --bg: #f4f6f8;
+    --paper: #fff;
+    --accent: #2b5dff;
+    --warn: #b45309;
+    --ok: #0f766e;
+    --chip: #eef2ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 13px/1.5 "PingFang SC", "Noto Sans SC", "Helvetica Neue", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  .page {
+    max-width: 1180px;
+    margin: 24px auto 48px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 28px 32px 36px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin-bottom: 18px; }
+  h2 {
+    font-size: 14px;
+    margin: 22px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .lead {
+    background: #f8fafc;
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 0 0 16px;
+  }
+  /* wireframe */
+  .wf {
+    border: 1.5px solid #111;
+    font-size: 11px;
+    background: #fafbfc;
+  }
+  .top {
+    display: grid;
+    grid-template-columns: 140px 1.2fr 1fr 1.3fr 160px;
+    border-bottom: 1.5px solid #111;
+    min-height: 44px;
+  }
+  .top > div, .bot > div, .mid > div { padding: 6px 8px; }
+  .mid {
+    display: grid;
+    grid-template-columns: 200px 1fr 220px;
+    min-height: 280px;
+  }
+  .left { border-right: 1.5px solid #111; }
+  .right { border-left: 1.5px solid #111; }
+  .bot {
+    display: grid;
+    grid-template-columns: 1.4fr 1.4fr 90px 90px;
+    border-top: 1.5px solid #111;
+    min-height: 44px;
+  }
+  .box {
+    border: 1px dashed #8b93a0;
+    background: #fff;
+    padding: 6px;
+    margin-top: 6px;
+  }
+  .pair { display: grid; grid-template-columns: 1fr 1.2fr; gap: 8px; }
+  .tag {
+    display: inline-block;
+    background: var(--chip);
+    color: #1e3a8a;
+    border-radius: 3px;
+    padding: 0 6px;
+    font-weight: 600;
+  }
+  .call { color: var(--accent); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border: 1px solid var(--line); padding: 6px 8px; vertical-align: top; text-align: left; }
+  th { background: #f8fafc; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .warn { color: var(--warn); }
+  .ok { color: var(--ok); }
+  ul { margin: 6px 0; padding-left: 18px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .k { font-weight: 600; }
+  .foot { margin-top: 18px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>出图工作台说明 · 一页对齐稿</h1>
+  <div class="sub">给设计 / 开发直接对齐 · 对应需求 v0.3 · 只画段 2，不含 4 宫格选风格</div>
+  <div class="lead">
+    这一页解决三件事：顶栏随时看清「改的是哪一层」；右侧用两条时间线回看版本；微调必须拆成「只改这张」和「写回风格」。
+    当前工作风格只能有一条。版本只追加，不覆盖。
+  </div>
+
+  <h2>1. 总布局</h2>
+  <div class="wf">
+    <div class="top">
+      <div><span class="tag">TOP 56</span><br><b>项目名</b><br>云朵健身</div>
+      <div><b>风格线 ▾</b><br>极简商务 · 色点<br><span class="call">① 当前工作风格</span></div>
+      <div><b>风格版本 ▾</b><br>rev2 · 更密<br><span class="call">② DNA 指针</span></div>
+      <div><b>当前图</b><br>官网首屏 · v3<br><span class="call">③ 采用稿</span></div>
+      <div>对比 A|B · 下载<br><span class="muted">重选风格 → 回段1</span></div>
+    </div>
+    <div class="mid">
+      <div class="left">
+        <span class="tag">LEFT 280</span>
+        <div class="box">
+          <b>Style Card</b><br>色条 · 气质词 · 禁止项<br>Do / Don't
+        </div>
+        <div class="box">
+          备选风格 · 最多 2 条<br>□ 年轻活力　□ 还可再开
+        </div>
+        <div class="box">物料槽<br>[旗舰页] [KV] [<b>官网首屏</b>]</div>
+      </div>
+      <div>
+        <span class="tag">CENTER</span>
+        <div class="pair">
+          <div class="box" style="min-height:150px;">钉住对照<br>上一采用 / 微调前<br><span class="muted">editing 时必现</span></div>
+          <div class="box" style="min-height:150px;border-style:solid;">当前图<br>官网首屏 · v3<br><span class="ok">adopted</span></div>
+        </div>
+        <div class="box">
+          快捷：更像风格卡 · 更干净 · 换构图<br>
+          滑杆：明暗 冷暖 对比 饱和 质地<br>
+          <b>[只改此图]</b>　<span class="warn">[写回风格…]</span>
+          <span class="call"> ← 双出口，主次不能对调</span>
+        </div>
+      </div>
+      <div class="right">
+        <span class="tag">RIGHT 320</span>
+        <div class="box"><b>Tab 图版本</b> | Tab 风格版本</div>
+        <div class="box">
+          v3 去左上装饰　●采用<br>
+          v2 更暖<br>
+          v1 首次生成<br>
+          <span class="muted">点预览 · 「设为当前」才生效</span>
+        </div>
+      </div>
+    </div>
+    <div class="bot">
+      <div><span class="tag">BOTTOM 72</span><br>物料类型：旗舰页 / KV / 官网首屏</div>
+      <div>内容一句：春季训练营报名<br><span class="muted">不是自由 prompt 大框</span></div>
+      <div><b>出 2 张</b></div>
+      <div>下载采用稿</div>
+    </div>
+  </div>
+  <p class="muted">桌面 1440 宽一屏看完。微调面板从中栏右侧贴出 360px，时间线可收成图标，不要把双出口藏进菜单。</p>
+
+  <h2>2. 顶栏三层状态</h2>
+  <table>
+    <tr><th>控件</th><th>绑定</th><th>显示</th><th>切换后果</th><th>禁止</th></tr>
+    <tr>
+      <td>风格线 ▾</td>
+      <td><code>project.current_style_id</code></td>
+      <td>极简商务 + 色点</td>
+      <td>左卡、中图、右时间线、底栏出图全部切到该线。其他线保留。</td>
+      <td>不在中栏切风格；不可两条线同时出图</td>
+    </tr>
+    <tr>
+      <td>风格版本 ▾</td>
+      <td><code>style.current_rev</code></td>
+      <td>rev2 · 更密</td>
+      <td>只影响之后新图的 DNA。已采用图不变脸，并保留生成时的 rev 快照。</td>
+      <td>顶栏不能直接改色号 / 字体文件</td>
+    </tr>
+    <tr>
+      <td>当前图</td>
+      <td><code>asset.adopted_image_id</code></td>
+      <td>官网首屏 · v3</td>
+      <td>中画布换成该 ImageRev。</td>
+      <td>未「设为当前」的点击只预览</td>
+    </tr>
+    <tr>
+      <td>物料槽</td>
+      <td><code>ui_hero | kv | web_home</code></td>
+      <td>三段按钮，当前加粗</td>
+      <td>画布和「图版本」Tab 跟着换槽。</td>
+      <td>不因换槽丢掉另一槽的采用稿</td>
+    </tr>
+  </table>
+
+  <h2>3. 右侧双时间线</h2>
+  <div class="grid2">
+    <div>
+      <p class="k">图版本 Tab</p>
+      <ul>
+        <li>列表：当前槽下全部 ImageRev，按时间倒序</li>
+        <li>字段：thumb / vN / action_type / 一句话 diff / adopted 标记</li>
+        <li>点击 = 预览；「设为当前采用」= 改 <code>adopted_image_id</code></li>
+      </ul>
+    </div>
+    <div>
+      <p class="k">风格版本 Tab</p>
+      <ul>
+        <li>列表：当前风格线下全部 StyleRev</li>
+        <li>字段：bible 缩略 / revN / change_log / current 标记</li>
+        <li>「设为当前」只移动 <code>current_rev</code></li>
+        <li>图条目旁标注「生成于 revX」，用来解释漂在哪一版</li>
+      </ul>
+    </div>
+  </div>
+  <p>两条时间线禁止混成一条。回退不做整项目一键回到上周。</p>
+
+  <h2>4. 微调双出口</h2>
+  <table>
+    <tr><th>出口</th><th>默认</th><th>请求</th><th>留下什么</th><th>确认文案</th></tr>
+    <tr>
+      <td><b>只改此图</b>（主按钮）</td>
+      <td>是</td>
+      <td><code>POST /tune {image_id, edit_scope, params, writeback:none}</code></td>
+      <td>insert ImageRev，parent=当前图。下一张新图不带这次修改。</td>
+      <td>无需二次确认</td>
+    </tr>
+    <tr>
+      <td><span class="warn">写回风格</span>（次按钮）</td>
+      <td>否</td>
+      <td><code>writeback:promote</code> → insert ImageRev + insert StyleRev</td>
+      <td>风格升一版。旧图保留。默认不重出整个图集。</td>
+      <td>「会影响这条线以后出的新图，已采用的图不会自动变。」</td>
+    </tr>
+  </table>
+  <p>P0 动作：更像风格卡 / 更干净 / 换构图 / 明暗冷暖对比饱和质地滑杆 / 一句局部指令。滑杆换了材质或密度家族、或连续两张都改同一轴 → 提示改走写回，不自动写回。</p>
+  <p>editing 时：中栏必须钉住改前对照；底栏「出 2 张」禁用，避免和「改这张」抢提交。</p>
+
+  <h2>5. 关键状态</h2>
+  <table>
+    <tr><th>状态</th><th>中栏</th><th>禁用</th></tr>
+    <tr><td><code>idle</code></td><td>当前采用稿；刚进页时是锁定预告</td><td>无采用稿则下载禁用</td></tr>
+    <tr><td><code>generating</code></td><td>占位 + 进度</td><td>切风格线 / 写回 / 归档</td></tr>
+    <tr><td><code>comparing_img</code> / <code>editing</code></td><td>左旧右新</td><td>底栏出图</td></tr>
+    <tr><td><code>comparing_style</code></td><td>左风格 A 右风格 B，必须同物料槽</td><td>同时出图</td></tr>
+    <tr><td><code>writeback_confirm</code></td><td>模态压在画布上</td><td>其他提交</td></tr>
+  </table>
+
+  <h2>6. 用户动作 → 字段</h2>
+  <table>
+    <tr><th>动作</th><th>改哪些字段</th><th>不改什么</th><th>UI 反馈</th></tr>
+    <tr><td>切风格线</td><td><code>project.current_style_id</code></td><td>其他线的图和 rev</td><td>左卡 / 画布 / 右时间线整页换上下文</td></tr>
+    <tr><td>切物料槽</td><td><code>ui.current_slot</code></td><td>风格 DNA</td><td>画布换该槽 adopted 图；图版本列表跟着换</td></tr>
+    <tr><td>设图为当前采用</td><td><code>asset.adopted_image_id</code></td><td>style.current_rev</td><td>画布换图；该条出现「采用」</td></tr>
+    <tr><td>设风格 rev 为当前</td><td><code>style.current_rev</code></td><td>已采用图文件</td><td>顶栏 rev 变；后续出图用新 DNA</td></tr>
+    <tr><td>只改此图</td><td>insert ImageRev(parent, writeback=none)</td><td>style spec</td><td>左右对照；新图可设采用</td></tr>
+    <tr><td>写回风格</td><td>insert ImageRev + insert StyleRev</td><td>旧图文件</td><td>二次确认；默认不重出图集</td></tr>
+    <tr><td>出图</td><td>insert Asset? + ImageRev ×2</td><td>其他风格线</td><td>generating；完成后对照或单图</td></tr>
+    <tr><td>归档风格线</td><td>status=archived</td><td>文件</td><td>备选消失，可从归档找回</td></tr>
+  </table>
+  <p>当前线以外的图只读，微调按钮灰掉，tooltip「先切到这条风格线」。对照态中栏 1:1，左「改前 v2」，右「本次 v3」。</p>
+
+  <h2>7. 接口最小集</h2>
+  <table>
+    <tr><th>动作</th><th>请求</th></tr>
+    <tr><td>出图</td><td><code>POST {project_id, style_id, style_rev, slot, content, n:2}</code></td></tr>
+    <tr><td>微调</td><td><code>POST {image_id, edit_scope, params, writeback}</code></td></tr>
+    <tr><td>设采用</td><td><code>POST {asset_id, image_id}</code></td></tr>
+    <tr><td>切风格线</td><td><code>POST {project_id, style_id}</code></td></tr>
+    <tr><td>切风格版本</td><td><code>POST {style_id, rev}</code></td></tr>
+  </table>
+  <p>回放历史图：用该图冻结的 <code>style_rev</code> spec + params，禁止读当时的 current_rev。</p>
+
+  <h2>8. 空状态与危险操作</h2>
+  <ul>
+    <li>刚从段 1 进入：中栏是界面预告 + KV 预告；图版本只有「锁定预览 · v0」；三槽显示未出图。</li>
+    <li>某槽未出图：虚线框「出一张」；文案「选物料槽，填一句内容」。</li>
+    <li>备选为 0：显示「还可再开 2 条」，点击回段 1，不在本页开 4 宫格。</li>
+    <li>切走风格线时，未采用的微调稿留在原线的图版本里，不跟着带走。</li>
+    <li>归档当前工作线前，必须先指定另一条顶上。</li>
+    <li>删除 = 归档，不是真删。</li>
+  </ul>
+
+  <h2>9. 这一页不要出现</h2>
+  <p>图层 / 笔刷 / 自由 prompt 大框 / 整项目一键回滚 / 两条风格同时出图 / 微调里改色号与字体文件 / 把「再生成」做成唯一按钮。</p>
+
+  <div class="foot">
+    信息层级：顶栏 = 我在改哪一层 · 左栏 = 这条线长什么样 · 中栏 = 这一张图 · 右栏 = 从哪来、回哪去 · 底栏 = 下一张出什么。<br>
+    关联需求：PRD v0.2 主流程 · v0.3 版本 / 多风格 / 微调。
+  </div>
+</div>
+</body>
+</html>

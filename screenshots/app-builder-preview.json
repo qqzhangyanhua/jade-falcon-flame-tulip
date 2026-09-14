@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Keystone",
+      "hasCanvas": false,
+      "bodyTextLen": 179,
+      "bodyTextHash": "2c25a5c3240ff8f1be296a0db1fe452412606e33405f94ae7e7d60e547511264",
+      "bodyTextPrefix": "Keystone 定调 STYLE LOCK-IN 先锁定方向，再出同一品牌的图 结构和气质拆开。一次锁定，产品界面、品牌主视觉",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Keystone",
+      "hasCanvas": false,
+      "bodyTextLen": 179,
+      "bodyTextHash": "2c25a5c3240ff8f1be296a0db1fe452412606e33405f94ae7e7d60e547511264",
+      "bodyTextPrefix": "Keystone 定调 STYLE LOCK-IN 先锁定方向，再出同一品牌的图 结构和气质拆开。一次锁定，产品界面、品牌主视觉",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

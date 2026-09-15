@@ -40,6 +40,7 @@ type ProjectRow = {
   user_id: string;
   current_image_model_id: string;
   created_at_ms: number;
+  deleted_at_ms: number | null;
 };
 
 type JobRow = {
@@ -121,6 +122,7 @@ function toProject(row: ProjectRow): StudioProjectRecord {
     userId: row.user_id,
     currentImageModelId: row.current_image_model_id,
     createdAt: Number(row.created_at_ms),
+    deletedAt: row.deleted_at_ms === null ? null : Number(row.deleted_at_ms),
   };
 }
 
@@ -240,7 +242,9 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
           id,
           user_id,
           current_image_model_id,
-          (extract(epoch from created_at) * 1000) as created_at_ms
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when deleted_at is null then null
+               else extract(epoch from deleted_at) * 1000 end as deleted_at_ms
       `;
       return rows[0] ? toProject(rows[0]) : record;
     },
@@ -250,7 +254,9 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
           id,
           user_id,
           current_image_model_id,
-          (extract(epoch from created_at) * 1000) as created_at_ms
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when deleted_at is null then null
+               else extract(epoch from deleted_at) * 1000 end as deleted_at_ms
         from studio_projects
         where id = ${id}
       `;
@@ -260,12 +266,29 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
       const rows = await sql<ProjectRow>`
         update studio_projects
         set current_image_model_id = ${modelId}
+        where id = ${id} and deleted_at is null
+        returning
+          id,
+          user_id,
+          current_image_model_id,
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when deleted_at is null then null
+               else extract(epoch from deleted_at) * 1000 end as deleted_at_ms
+      `;
+      return rows[0] ? toProject(rows[0]) : null;
+    },
+    async markDeleted(id, deletedAt) {
+      const rows = await sql<ProjectRow>`
+        update studio_projects
+        set deleted_at = coalesce(deleted_at, to_timestamp(${deletedAt / 1000}))
         where id = ${id}
         returning
           id,
           user_id,
           current_image_model_id,
-          (extract(epoch from created_at) * 1000) as created_at_ms
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when deleted_at is null then null
+               else extract(epoch from deleted_at) * 1000 end as deleted_at_ms
       `;
       return rows[0] ? toProject(rows[0]) : null;
     },
@@ -465,6 +488,12 @@ export function createSqlRevStore(sql: Sql): ImageRevStore {
       `;
       return rows.map(toRev);
     },
+    async deleteByProject(projectId) {
+      await sql`
+        delete from image_revs
+        where project_id = ${projectId}
+      `;
+    },
   };
 }
 
@@ -504,6 +533,12 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
       const blob = toBlob(row);
       if (blob.bytes.byteLength === 0) return null;
       return blob;
+    },
+    async deleteByProject(projectId) {
+      await sql`
+        delete from image_blobs
+        where project_id = ${projectId}
+      `;
     },
   };
 }

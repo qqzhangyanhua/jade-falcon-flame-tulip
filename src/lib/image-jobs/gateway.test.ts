@@ -14,6 +14,7 @@ import {
 } from "./memory.ts";
 import {
   createStudioProject,
+  deleteStudioProject,
   getStudioImageState,
   listImageModelPicker,
   pickProjectImageModel,
@@ -319,11 +320,13 @@ describe("image job gateway", () => {
     assert.equal(world.calls.length, 0);
   });
 
-  it("includes quota_exceeded and in_flight in the closed client error set", () => {
+  it("includes quota_exceeded, in_flight, and project_deleted in the closed client error set", () => {
     assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("quota_exceeded"));
     assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("in_flight"));
+    assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("project_deleted"));
     assert.equal(IMAGE_JOB_USER_MESSAGES.quota_exceeded, "今日额度已用完");
     assert.equal(IMAGE_JOB_USER_MESSAGES.in_flight, "当前有进行中的出图");
+    assert.equal(IMAGE_JOB_USER_MESSAGES.project_deleted, "项目已删除");
     assert.equal(
       (IMAGE_JOB_ACTIONS as readonly string[]).includes("parse"),
       false,
@@ -454,6 +457,7 @@ describe("daily quota (Beijing time)", () => {
       userId: "user-2",
       currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
       createdAt: 1,
+      deletedAt: null,
     });
     const otherJob = await runImageJob(
       world,
@@ -583,6 +587,7 @@ describe("parallel limits", () => {
       userId: world.userId,
       currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
       createdAt: 1,
+      deletedAt: null,
     });
 
     const first = runImageJob(world, jobInput(world, { slot: "ui_hero", n: 1 }));
@@ -619,6 +624,7 @@ describe("parallel limits", () => {
       userId: world.userId,
       currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
       createdAt: 1,
+      deletedAt: null,
     });
 
     const pending = [0, 1, 2, 3].map(() =>
@@ -991,6 +997,7 @@ describe("list jobs", () => {
       userId: "admin-1",
       currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
       createdAt: 1,
+      deletedAt: null,
     });
 
     const older = await runImageJob(
@@ -1099,5 +1106,135 @@ describe("list jobs", () => {
     assert.equal(stranger.ok, true);
     if (!stranger.ok) return;
     assert.deepEqual(stranger.jobs, []);
+  });
+});
+
+describe("delete project keeps the job ledger", () => {
+  it("lets the owner delete, then list-jobs keeps rows without opening or thumbnails", async () => {
+    const world = createMemoryGatewayWorld();
+    const generated = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(generated.ok, true);
+    if (!generated.ok) return;
+    const imageId = generated.revs[0]?.id ?? "";
+    assert.ok(imageId);
+
+    const before = await listUserJobs(world, { userId: world.userId });
+    assert.equal(before.ok, true);
+    if (!before.ok) return;
+    assert.equal(before.jobs.length, 1);
+    assert.equal(before.jobs[0]?.projectAlive, true);
+    assert.equal(before.jobs[0]?.imageUrls.length, 1);
+
+    const deleted = await deleteStudioProject(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+    });
+    assert.equal(deleted.ok, true);
+    if (!deleted.ok) return;
+    assert.ok(deleted.value.deletedAt);
+
+    const listed = await listUserJobs(world, { userId: world.userId });
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+    assert.equal(listed.jobs.length, 1);
+    assert.equal(listed.jobs[0]?.id, generated.job.id);
+    assert.equal(listed.jobs[0]?.projectAlive, false);
+    assert.deepEqual(listed.jobs[0]?.imageUrls, []);
+
+    const storedJob = await world.jobs.get(generated.job.id);
+    assert.ok(storedJob);
+    assert.equal(storedJob?.projectId, world.projectId);
+
+    const listedImages = await listJobImages(world, {
+      userId: world.userId,
+      jobId: generated.job.id,
+    });
+    assert.equal(listedImages.ok, true);
+    if (listedImages.ok) assert.deepEqual(listedImages.images, []);
+
+    const opened = await openJobImage(world, {
+      userId: world.userId,
+      imageId,
+    });
+    assert.equal(opened.ok, false);
+    if (!opened.ok) assert.equal(opened.code, "not_found");
+    assert.equal(await world.blobs.get(imageId), null);
+    assert.deepEqual(await world.revs.listByJob(generated.job.id), []);
+
+    const openState = await getStudioImageState(world.catalog, world.projects, world.quota, {
+      userId: world.userId,
+      projectId: world.projectId,
+      now: world.now?.() ?? 0,
+    });
+    assert.equal(openState.ok, false);
+    if (!openState.ok) assert.equal(openState.code, "project_deleted");
+
+    const rerun = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(rerun.ok, false);
+    if (!rerun.ok) assert.equal(rerun.code, "project_deleted");
+  });
+
+  it("does not refund today's reserved quota", async () => {
+    const world = createMemoryGatewayWorld({ cap: 5 });
+    const generated = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(generated.ok, true);
+    const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(before.used, 1);
+    assert.equal(before.remaining, 4);
+
+    const deleted = await deleteStudioProject(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+    });
+    assert.equal(deleted.ok, true);
+
+    const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(after.used, before.used);
+    assert.equal(after.remaining, before.remaining);
+    assert.equal(after.cap, before.cap);
+    assert.equal(after.beijingDay, before.beijingDay);
+  });
+
+  it("forbids non-owners and administrators from deleting another user's project", async () => {
+    const world = createMemoryGatewayWorld({
+      userId: "designer-1",
+      roles: { "designer-1": "user", "admin-1": "admin" },
+    });
+    const generated = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(generated.ok, true);
+    if (!generated.ok) return;
+    const imageId = generated.revs[0]?.id ?? "";
+
+    assert.equal(await resolveStudioRole(world.roles, "admin-1"), "admin");
+    const adminAttempt = await deleteStudioProject(world, {
+      userId: "admin-1",
+      projectId: world.projectId,
+    });
+    assert.equal(adminAttempt.ok, false);
+    if (!adminAttempt.ok) assert.equal(adminAttempt.code, "forbidden");
+
+    const strangerAttempt = await deleteStudioProject(world, {
+      userId: "user-2",
+      projectId: world.projectId,
+    });
+    assert.equal(strangerAttempt.ok, false);
+    if (!strangerAttempt.ok) assert.equal(strangerAttempt.code, "forbidden");
+
+    const anonAttempt = await deleteStudioProject(world, {
+      userId: "",
+      projectId: world.projectId,
+    });
+    assert.equal(anonAttempt.ok, false);
+    if (!anonAttempt.ok) assert.equal(anonAttempt.code, "unauthorized");
+
+    const project = await world.projects.get(world.projectId);
+    assert.equal(project?.deletedAt, null);
+    assert.ok(await world.blobs.get(imageId));
+
+    const listed = await listUserJobs(world, { userId: "designer-1" });
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+    assert.equal(listed.jobs[0]?.projectAlive, true);
+    assert.equal(listed.jobs[0]?.imageUrls.length, 1);
   });
 });

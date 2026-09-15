@@ -1,3 +1,4 @@
+import { isProjectAlive } from "./projects.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
 import type {
   ImageJobHistoryItem,
@@ -19,12 +20,13 @@ export async function listUserJobs(
   const items: ImageJobHistoryItem[] = [];
   for (const job of jobs) {
     const project = await deps.projects.get(job.projectId);
-    const revs = await deps.revs.listByJob(job.id);
+    const projectAlive = isProjectAlive(project);
+    const revs = projectAlive ? await deps.revs.listByJob(job.id) : [];
     const live = catalogById.get(job.catalogModelId);
     items.push({
       id: job.id,
       projectId: job.projectId,
-      projectAlive: Boolean(project),
+      projectAlive,
       action: job.action,
       slot: job.slot,
       displayNameSnapshot: job.displayNameSnapshot,

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Download, PanelLeft } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
+import { DeleteProjectControl } from "@/components/delete-project-control";
 import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -214,6 +215,7 @@ export function StudioView() {
             <Download className="size-3.5" />
             下载
           </a>
+          <DeleteProjectControl projectId={project.id} compact />
           <JobHistoryLink compact />
           <AuthSlot compact />
         </div>

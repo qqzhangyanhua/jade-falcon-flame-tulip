@@ -75,7 +75,10 @@ export function createMemoryProjects(
   );
   return {
     async create(record) {
-      const next = cloneProject(record);
+      const next = cloneProject({
+        ...record,
+        deletedAt: record.deletedAt ?? null,
+      });
       projects.set(next.id, next);
       return cloneProject(next);
     },
@@ -85,8 +88,14 @@ export function createMemoryProjects(
     },
     async updateCurrentModel(id, modelId) {
       const project = projects.get(id);
-      if (!project) return null;
+      if (!project || project.deletedAt !== null) return null;
       project.currentImageModelId = modelId;
+      return cloneProject(project);
+    },
+    async markDeleted(id, deletedAt) {
+      const project = projects.get(id);
+      if (!project) return null;
+      if (project.deletedAt === null) project.deletedAt = deletedAt;
       return cloneProject(project);
     },
   };
@@ -188,6 +197,11 @@ export function createMemoryRevs(): ImageRevStore {
     async listByJob(jobId) {
       return revs.filter((rev) => rev.jobId === jobId).map(cloneRev);
     },
+    async deleteByProject(projectId) {
+      for (let index = revs.length - 1; index >= 0; index -= 1) {
+        if (revs[index]?.projectId === projectId) revs.splice(index, 1);
+      }
+    },
   };
 }
 
@@ -202,6 +216,11 @@ export function createMemoryBlobs(): ImageBlobStore {
     async get(id) {
       const blob = blobs.get(id);
       return blob ? cloneBlob(blob) : null;
+    },
+    async deleteByProject(projectId) {
+      for (const [id, blob] of blobs) {
+        if (blob.projectId === projectId) blobs.delete(id);
+      }
     },
   };
 }
@@ -289,6 +308,7 @@ export function createMemoryGatewayWorld(opts?: {
       userId,
       currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
       createdAt: 1,
+      deletedAt: null,
       ...opts?.project,
     },
   ]);

@@ -21,6 +21,7 @@ export const IMAGE_JOB_ERROR_CODES = [
   "quota_exceeded",
   "in_flight",
   "upstream_failed",
+  "project_deleted",
 ] as const;
 
 export type ImageJobErrorCode = (typeof IMAGE_JOB_ERROR_CODES)[number];
@@ -42,6 +43,7 @@ export type StudioProjectRecord = {
   userId: string;
   currentImageModelId: string;
   createdAt: number;
+  deletedAt: number | null;
 };
 
 export type ImageJobStatus = "running" | "succeeded" | "failed";

@@ -14,7 +14,10 @@ function isSlotAction(action: ImageJobAction): action is ImageRev["action"] {
   return action === "generate" || action === "tune" || action === "compose";
 }
 
-export function openStudioFromJob(input: OpenFromJobInput): boolean {
+export function openStudioFromJob(
+  input: OpenFromJobInput & { projectAlive?: boolean },
+): boolean {
+  if (input.projectAlive === false) return false;
   const state = useStudio.getState();
   const project = state.projects.find((item) => item.id === input.projectId);
   if (!project) return false;

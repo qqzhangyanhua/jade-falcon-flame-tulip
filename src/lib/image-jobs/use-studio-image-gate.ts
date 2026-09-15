@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ensureStudioProjectFn,
   getImageStudioStateFn,
+  imageJobErrorCode,
   pickProjectImageModelFn,
   type StudioImageState,
 } from "@/lib/image-jobs";
@@ -22,6 +23,13 @@ export function useStudioImageGate(projectId: string | undefined) {
       setCurrentImageModel(next.currentImageModelId);
       setError(null);
     } catch (err) {
+      const code = imageJobErrorCode(err);
+      if (
+        projectId &&
+        (code === "project_deleted" || code === "not_found" || code === "forbidden")
+      ) {
+        useStudio.getState().removeProject(projectId);
+      }
       setError(messageForImageJobError(err));
     }
   }, [projectId, setCurrentImageModel]);

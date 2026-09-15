@@ -1,5 +1,7 @@
 import type {
   CatalogModel,
+  ImageBlobRecord,
+  ImageBytesFetcher,
   ImageJobErrorCode,
   ImageJobRecord,
   ImageRevRecord,
@@ -54,14 +56,21 @@ export type ImageRevStore = {
   listByJob: (jobId: string) => Promise<ImageRevRecord[]>;
 };
 
+export type ImageBlobStore = {
+  put: (record: ImageBlobRecord) => Promise<ImageBlobRecord>;
+  get: (id: string) => Promise<ImageBlobRecord | null>;
+};
+
 export type ImageJobGatewayDeps = {
   catalog: ModelCatalogStore;
   projects: StudioProjectStore;
   jobs: ImageJobStore;
   revs: ImageRevStore;
+  blobs: ImageBlobStore;
   quota: QuotaStore;
   roles: RoleStore;
   upstream: ImageUpstreamLike;
+  fetchImage?: ImageBytesFetcher;
   now?: () => number;
   newId?: (prefix: string) => string;
 };

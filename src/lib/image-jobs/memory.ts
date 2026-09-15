@@ -3,8 +3,12 @@ import { concurrencyBlock } from "./concurrency.ts";
 import { newEntityId } from "./ids.ts";
 import { cloneModel } from "./availability.ts";
 import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
+import { decodeDataUrl } from "./durable.ts";
 import type {
   CatalogModel,
+  ImageBlobRecord,
+  ImageBytes,
+  ImageBytesFetcher,
   ImageJobErrorCode,
   ImageJobRecord,
   ImageRevRecord,
@@ -14,6 +18,7 @@ import type {
   StudioRole,
 } from "./types.ts";
 import type {
+  ImageBlobStore,
   ImageJobGatewayDeps,
   ImageJobStore,
   ImageRevStore,
@@ -29,6 +34,10 @@ function cloneJob(job: ImageJobRecord): ImageJobRecord {
 
 function cloneRev(rev: ImageRevRecord): ImageRevRecord {
   return { ...rev };
+}
+
+function cloneBlob(blob: ImageBlobRecord): ImageBlobRecord {
+  return { ...blob, bytes: new Uint8Array(blob.bytes) };
 }
 
 function cloneProject(project: StudioProjectRecord): StudioProjectRecord {
@@ -176,6 +185,30 @@ export function createMemoryRevs(): ImageRevStore {
   };
 }
 
+export function createMemoryBlobs(): ImageBlobStore {
+  const blobs = new Map<string, ImageBlobRecord>();
+  return {
+    async put(record) {
+      const next = cloneBlob(record);
+      blobs.set(next.id, next);
+      return cloneBlob(next);
+    },
+    async get(id) {
+      const blob = blobs.get(id);
+      return blob ? cloneBlob(blob) : null;
+    },
+  };
+}
+
+export async function defaultMemoryFetchImage(url: string): Promise<ImageBytes | null> {
+  if (url.startsWith("data:")) return decodeDataUrl(url);
+  if (!url.startsWith("https://img.example/")) return null;
+  return {
+    bytes: new TextEncoder().encode(url),
+    contentType: "image/png",
+  };
+}
+
 export const DEFAULT_IMAGE_MODEL_ID = "mdl-imagine-2";
 export const DEFAULT_CHAT_MODEL_ID = "mdl-grok-chat";
 
@@ -224,6 +257,7 @@ export function createMemoryGatewayWorld(opts?: {
   userId?: string;
   projectId?: string;
   upstream?: ImageUpstream["run"];
+  fetchImage?: ImageBytesFetcher;
   cap?: number;
   now?: () => number;
   roles?: Record<string, StudioRole>;
@@ -235,6 +269,7 @@ export function createMemoryGatewayWorld(opts?: {
   projects: StudioProjectStore;
   jobs: ImageJobStore;
   revs: ImageRevStore;
+  blobs: ImageBlobStore;
   quota: QuotaStore;
   roles: RoleStore;
 } {
@@ -257,6 +292,8 @@ export function createMemoryGatewayWorld(opts?: {
     projects,
     jobs: createMemoryJobs((record) => quota.tryReserve(record.userId, record.createdAt)),
     revs: createMemoryRevs(),
+    blobs: createMemoryBlobs(),
+    fetchImage: opts?.fetchImage ?? defaultMemoryFetchImage,
     quota,
     roles: createMemoryRoles(opts?.roles),
     upstream,

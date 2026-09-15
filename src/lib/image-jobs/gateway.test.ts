@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { evaluateImageAction, listEnabledImagePicker } from "./availability.ts";
 import { beijingCalendarDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES, messageForImageJobError } from "./errors.ts";
+import { DURABLE_IMAGE_PATH_PREFIX, listJobImages, openJobImage } from "./durable.ts";
 import { runImageJob } from "./gateway.ts";
 import {
   DEFAULT_CHAT_MODEL_ID,
@@ -257,6 +258,14 @@ describe("image job gateway", () => {
     assert.equal(JSON.stringify(result).includes("quota"), false);
     const revs = result.job ? await world.revs.listByJob(result.job.id) : [];
     assert.equal(revs.length, 0);
+    if (result.job) {
+      const listed = await listJobImages(world, {
+        userId: world.userId,
+        jobId: result.job.id,
+      });
+      assert.equal(listed.ok, true);
+      if (listed.ok) assert.equal(listed.images.length, 0);
+    }
   });
 
   it("records one job for one accepted upstream call even with two variants", async () => {
@@ -794,6 +803,177 @@ describe("project model pointer and picker", () => {
     assert.deepEqual(
       listEnabledImagePicker(models).map((item) => item.id),
       ["mdl-a", "mdl-z"],
+    );
+  });
+});
+
+describe("durable image copies", () => {
+  function assertOriginCopy(url: string, upstream: string): void {
+    assert.equal(url.startsWith(DURABLE_IMAGE_PATH_PREFIX), true);
+    assert.notEqual(url, upstream);
+    assert.equal(url.includes("img.example"), false);
+    assert.equal(url.startsWith("data:"), false);
+  }
+
+  async function assertListOpenMatch(
+    world: ReturnType<typeof createMemoryGatewayWorld>,
+    jobId: string,
+    expectedUrls: string[],
+  ): Promise<void> {
+    const listed = await listJobImages(world, { userId: world.userId, jobId });
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+    assert.deepEqual(
+      listed.images.map((image) => image.url),
+      expectedUrls,
+    );
+    for (const image of listed.images) {
+      const opened = await openJobImage(world, {
+        userId: world.userId,
+        imageId: image.id,
+      });
+      assert.equal(opened.ok, true);
+      if (!opened.ok) return;
+      assert.equal(opened.image.url, image.url);
+      assert.equal(opened.image.jobId, jobId);
+      assert.ok(opened.image.bytes.byteLength > 0);
+      const stored = await world.blobs.get(image.id);
+      assert.ok(stored);
+      assert.deepEqual(opened.image.bytes, stored?.bytes);
+    }
+  }
+
+  it("persists an app-owned copy for generate, tune, compose, and candidates", async () => {
+    const cases: Array<{
+      action: ImageJobAction;
+      n: number;
+      imageUrl?: string;
+      upstream: string[];
+    }> = [
+      { action: "direction", n: 1, upstream: ["https://img.example/candidate.png"] },
+      { action: "generate", n: 2, upstream: ["https://img.example/a.png", "https://img.example/b.png"] },
+      {
+        action: "tune",
+        n: 1,
+        imageUrl: "https://img.example/src.png",
+        upstream: ["https://img.example/tune.png"],
+      },
+      {
+        action: "compose",
+        n: 1,
+        imageUrl: "https://img.example/src.png",
+        upstream: ["https://img.example/compose.png"],
+      },
+    ];
+
+    for (const item of cases) {
+      const world = createMemoryGatewayWorld({
+        upstream: async () => ({ ok: true, urls: item.upstream }),
+      });
+      const result = await runImageJob(
+        world,
+        jobInput(world, {
+          action: item.action,
+          n: item.n,
+          imageUrl: item.imageUrl,
+        }),
+      );
+      assert.equal(result.ok, true);
+      if (!result.ok) return;
+      assert.equal(result.revs.length, item.upstream.length);
+      for (const [index, rev] of result.revs.entries()) {
+        assertOriginCopy(rev.url, item.upstream[index] ?? "");
+        assert.equal(rev.jobId, result.job.id);
+      }
+      await assertListOpenMatch(
+        world,
+        result.job.id,
+        result.revs.map((rev) => rev.url),
+      );
+    }
+  });
+
+  it("keeps list/open on the durable copy after the upstream URL expires", async () => {
+    const upstreamUrl = "https://img.example/live.png";
+    const liveBytes = new TextEncoder().encode("durable-pixels");
+    let upstreamLive = true;
+    const world = createMemoryGatewayWorld({
+      upstream: async () => ({ ok: true, urls: [upstreamUrl] }),
+      fetchImage: async (url) => {
+        if (!upstreamLive) return null;
+        if (url !== upstreamUrl) return null;
+        return { bytes: liveBytes, contentType: "image/png" };
+      },
+    });
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assertOriginCopy(result.revs[0]?.url ?? "", upstreamUrl);
+
+    upstreamLive = false;
+    const listed = await listJobImages(world, {
+      userId: world.userId,
+      jobId: result.job.id,
+    });
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+    assert.equal(listed.images.length, 1);
+    assert.equal(listed.images[0]?.url, result.revs[0]?.url);
+
+    const opened = await openJobImage(world, {
+      userId: world.userId,
+      imageId: listed.images[0]?.id ?? "",
+    });
+    assert.equal(opened.ok, true);
+    if (!opened.ok) return;
+    assert.deepEqual(opened.image.bytes, liveBytes);
+    assert.equal(opened.image.url, result.revs[0]?.url);
+  });
+
+  it("stores no picture and no successful ImageRev when persist cannot copy bytes", async () => {
+    const world = createMemoryGatewayWorld({
+      upstream: async () => ({ ok: true, urls: ["https://img.example/gone.png"] }),
+      fetchImage: async () => null,
+    });
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.code, "upstream_failed");
+    assert.equal(result.job?.status, "failed");
+    const revs = result.job ? await world.revs.listByJob(result.job.id) : [];
+    assert.equal(revs.length, 0);
+    const listed = result.job
+      ? await listJobImages(world, { userId: world.userId, jobId: result.job.id })
+      : { ok: true as const, images: [] };
+    assert.equal(listed.ok, true);
+    if (listed.ok) assert.equal(listed.images.length, 0);
+  });
+
+  it("rewrites a durable source to bytes for tune instead of sending the origin path upstream", async () => {
+    const first = createMemoryGatewayWorld();
+    const generated = await runImageJob(first, jobInput(first, { n: 1 }));
+    assert.equal(generated.ok, true);
+    if (!generated.ok) return;
+    const durableUrl = generated.revs[0]?.url ?? "";
+    assert.equal(durableUrl.startsWith(DURABLE_IMAGE_PATH_PREFIX), true);
+
+    const tuned = await runImageJob(
+      first,
+      jobInput(first, {
+        action: "tune",
+        n: 1,
+        imageUrl: durableUrl,
+      }),
+    );
+    assert.equal(tuned.ok, true);
+    if (!tuned.ok) return;
+    const sent = first.calls[1]?.imageUrl ?? "";
+    assert.equal(sent.startsWith("data:image/"), true);
+    assert.equal(sent.includes(DURABLE_IMAGE_PATH_PREFIX), false);
+    await assertListOpenMatch(
+      first,
+      tuned.job.id,
+      tuned.revs.map((rev) => rev.url),
     );
   });
 });

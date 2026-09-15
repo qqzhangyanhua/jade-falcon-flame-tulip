@@ -1,3 +1,4 @@
+import { persistDurableCopies, resolveUpstreamImageUrl } from "./durable.ts";
 import { newEntityId } from "./ids.ts";
 import { evaluateImageAction } from "./availability.ts";
 import { resolveJobSlot } from "./concurrency.ts";
@@ -37,6 +38,13 @@ export async function runImageJob(
   });
   if (!verdict.ok) return fail(verdict.code);
 
+  let imageUrl = input.imageUrl;
+  if (imageUrl) {
+    const resolved = await resolveUpstreamImageUrl(deps, input.userId, imageUrl);
+    if (!resolved) return fail("not_found");
+    imageUrl = resolved;
+  }
+
   const now = deps.now?.() ?? Date.now();
   const newId = deps.newId ?? newEntityId;
   const reserved = await deps.jobs.insertReserved({
@@ -64,7 +72,7 @@ export async function runImageJob(
       prompt: input.prompt,
       aspect: input.aspect ?? "16:9",
       n: input.n ?? 1,
-      imageUrl: input.imageUrl,
+      imageUrl,
     });
   } catch {
     upstreamResult = { ok: false };
@@ -78,19 +86,24 @@ export async function runImageJob(
     return fail("upstream_failed", failed);
   }
 
-  const revs: ImageRevRecord[] = [];
-  for (const url of upstreamResult.urls) {
-    revs.push(
-      await deps.revs.append({
-        id: newId("img"),
-        jobId: job.id,
-        projectId: input.projectId,
-        userId: input.userId,
-        url,
-        action: input.action,
-        createdAt: finishedAt,
-      }),
-    );
+  let revs: ImageRevRecord[] | null;
+  try {
+    revs = await persistDurableCopies(deps, {
+      jobId: job.id,
+      projectId: input.projectId,
+      userId: input.userId,
+      action: input.action,
+      sourceUrls: upstreamResult.urls,
+      createdAt: finishedAt,
+    });
+  } catch {
+    revs = null;
+  }
+  if (!revs || revs.length === 0) {
+    const failed =
+      (await deps.jobs.finish(job.id, "failed", "upstream_failed", finishedAt)) ??
+      { ...job, status: "failed" as const, errorCode: "upstream_failed" as const, finishedAt };
+    return fail("upstream_failed", failed);
   }
 
   const succeeded =

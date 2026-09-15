@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { candidatePrompt, slotPrompt, SLOT_ASPECT, tunePrompt } from "@/lib/prompts";
 import { PRESETS } from "@/lib/presets";
 import type { Slot, StyleDna } from "@/lib/types";
+import { fetchRemoteImage, listJobImages, openJobImage } from "./durable.ts";
 import { ImageJobError } from "./errors.ts";
 import { runImageJob, unwrapImageJob } from "./gateway.ts";
 import {
@@ -17,6 +18,7 @@ import {
 import { createSqlQuotaStore, createSqlRoleStore } from "./quota-sql.ts";
 import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "./quota.ts";
 import {
+  createSqlBlobStore,
   createSqlCatalogStore,
   createSqlJobStore,
   createSqlProjectStore,
@@ -39,9 +41,11 @@ async function createSqlGatewayDeps(): Promise<ImageJobGatewayDeps> {
     projects: createSqlProjectStore(sql),
     jobs: createSqlJobStore(sql),
     revs: createSqlRevStore(sql),
+    blobs: createSqlBlobStore(sql),
     quota: createSqlQuotaStore(sql),
     roles: createSqlRoleStore(sql),
     upstream: createXaiImageUpstream(),
+    fetchImage: fetchRemoteImage,
   };
 }
 
@@ -290,4 +294,44 @@ export const composeImageFn = createServerFn({ method: "POST" })
       n: 1,
       imageUrl: data.imageUrl,
     });
+  });
+
+export const listJobImagesFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { jobId: string }) => {
+    const jobId = input.jobId.trim();
+    if (!jobId) throw new ImageJobError("not_found");
+    return { jobId };
+  })
+  .handler(async ({ context, data }) => {
+    const deps = await createSqlGatewayDeps();
+    const result = await listJobImages(deps, {
+      userId: context.userId,
+      jobId: data.jobId,
+    });
+    if (!result.ok) throw new ImageJobError(result.code);
+    return result.images;
+  });
+
+export const openJobImageFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { imageId: string }) => {
+    const imageId = input.imageId.trim();
+    if (!imageId) throw new ImageJobError("not_found");
+    return { imageId };
+  })
+  .handler(async ({ context, data }) => {
+    const deps = await createSqlGatewayDeps();
+    const result = await openJobImage(deps, {
+      userId: context.userId,
+      imageId: data.imageId,
+    });
+    if (!result.ok) throw new ImageJobError(result.code);
+    return {
+      id: result.image.id,
+      jobId: result.image.jobId,
+      url: result.image.url,
+      contentType: result.image.contentType,
+      base64: Buffer.from(result.image.bytes).toString("base64"),
+    };
   });

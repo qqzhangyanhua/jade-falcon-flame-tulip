@@ -28,8 +28,6 @@ function jobInput(
   return {
     userId: world.userId,
     projectId: world.projectId,
-    action,
-    slot: action === "direction" ? null : "kv",
     prompt: "a quiet editorial board",
     aspect: "16:9",
     n: 2,

@@ -10,6 +10,7 @@ import {
 } from "./types.ts";
 import type {
   CatalogModel,
+  ImageBlobRecord,
   ImageJobErrorCode,
   ImageJobRecord,
   ImageJobStatus,
@@ -17,6 +18,7 @@ import type {
   StudioProjectRecord,
 } from "./types.ts";
 import type {
+  ImageBlobStore,
   ImageJobStore,
   ImageRevStore,
   ModelCatalogStore,
@@ -66,6 +68,16 @@ type RevRow = {
   user_id: string;
   url: string;
   action: string;
+  created_at_ms: number;
+};
+
+type BlobRow = {
+  id: string;
+  user_id: string;
+  project_id: string;
+  job_id: string;
+  content_type: string;
+  bytes: unknown;
   created_at_ms: number;
 };
 
@@ -131,6 +143,35 @@ function toJob(row: JobRow): ImageJobRecord {
     errorCode: row.error_code as ImageJobErrorCode | null,
     createdAt: Number(row.created_at_ms),
     finishedAt: row.finished_at_ms === null ? null : Number(row.finished_at_ms),
+  };
+}
+
+function toBytes(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return new Uint8Array(value);
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (typeof value === "string") {
+    return Uint8Array.from(Buffer.from(value, "base64"));
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "length" in value &&
+    typeof (value as { length: unknown }).length === "number"
+  ) {
+    return Uint8Array.from(value as ArrayLike<number>);
+  }
+  return new Uint8Array();
+}
+
+function toBlob(row: BlobRow): ImageBlobRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    projectId: row.project_id,
+    jobId: row.job_id,
+    contentType: row.content_type,
+    bytes: toBytes(row.bytes),
+    createdAt: Number(row.created_at_ms),
   };
 }
 
@@ -408,6 +449,46 @@ export function createSqlRevStore(sql: Sql): ImageRevStore {
         order by created_at
       `;
       return rows.map(toRev);
+    },
+  };
+}
+
+export function createSqlBlobStore(sql: Sql): ImageBlobStore {
+  return {
+    async put(record) {
+      const payload = Buffer.from(record.bytes);
+      const rows = await sql<BlobRow>`
+        insert into image_blobs (
+          id, user_id, project_id, job_id, content_type, bytes, created_at
+        )
+        values (
+          ${record.id},
+          ${record.userId},
+          ${record.projectId},
+          ${record.jobId},
+          ${record.contentType},
+          ${payload},
+          to_timestamp(${record.createdAt / 1000})
+        )
+        returning
+          id, user_id, project_id, job_id, content_type, bytes,
+          (extract(epoch from created_at) * 1000) as created_at_ms
+      `;
+      return rows[0] ? toBlob(rows[0]) : record;
+    },
+    async get(id) {
+      const rows = await sql<BlobRow>`
+        select
+          id, user_id, project_id, job_id, content_type, bytes,
+          (extract(epoch from created_at) * 1000) as created_at_ms
+        from image_blobs
+        where id = ${id}
+      `;
+      const row = rows[0];
+      if (!row) return null;
+      const blob = toBlob(row);
+      if (blob.bytes.byteLength === 0) return null;
+      return blob;
     },
   };
 }

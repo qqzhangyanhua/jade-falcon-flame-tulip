@@ -15,14 +15,19 @@ export {
   getImageStudioStateFn,
   getStudioAccessFn,
   listImageModelsFn,
+  listJobImagesFn,
+  openJobImageFn,
   pickProjectImageModelFn,
   setDailyImageCapFn,
   tuneImageFn,
 } from "./functions.ts";
+export { durableImageUrl, listJobImages, openJobImage } from "./durable.ts";
 export type {
   ActionAvailability,
+  DurableImageRef,
   ImageJobAction,
   ImageJobErrorCode,
+  OpenedDurableImage,
   PickerImageModel,
   StudioImageState,
   StudioQuota,

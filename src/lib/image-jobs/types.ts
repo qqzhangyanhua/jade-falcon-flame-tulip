@@ -66,10 +66,39 @@ export type ImageRevRecord = {
   jobId: string;
   projectId: string;
   userId: string;
+  /** Origin path of the durable copy. Never an upstream URL. */
   url: string;
   action: ImageJobAction;
   createdAt: number;
 };
+
+export type ImageBlobRecord = {
+  id: string;
+  userId: string;
+  projectId: string;
+  jobId: string;
+  contentType: string;
+  bytes: Uint8Array;
+  createdAt: number;
+};
+
+export type DurableImageRef = {
+  id: string;
+  jobId: string;
+  url: string;
+  contentType: string;
+};
+
+export type OpenedDurableImage = DurableImageRef & {
+  bytes: Uint8Array;
+};
+
+export type ImageBytes = {
+  bytes: Uint8Array;
+  contentType: string;
+};
+
+export type ImageBytesFetcher = (url: string) => Promise<ImageBytes | null>;
 
 export type PickerImageModel = {
   id: string;

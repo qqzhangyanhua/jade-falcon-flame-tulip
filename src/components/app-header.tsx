@@ -6,6 +6,7 @@ import { AuthSlot } from "@/components/auth-slot";
 import { JobHistoryLink } from "@/components/job-history-link";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
+
 export function AppHeader({
   extra,
   leading,
@@ -16,13 +17,18 @@ export function AppHeader({
   className?: string;
 }) {
   return (
-    <header className={cn("flex items-center justify-between px-5 py-3 md:px-8", className)}>
+    <header
+      className={cn(
+        "flex items-center justify-between border-b border-border px-5 py-3 md:px-8",
+        className,
+      )}
+    >
       {leading ?? (
-        <Link href="/">
+        <Link href="/" className="min-h-11">
           <Wordmark />
         </Link>
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 sm:gap-2">
         {extra}
         <JobHistoryLink />
         <AuthSlot />

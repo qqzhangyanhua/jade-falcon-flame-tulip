@@ -22,13 +22,17 @@ export function DirectionView() {
   const pending = project.candidates.some((c) => c.status === "pending");
 
   return (
-    <div className="min-h-dvh bg-bg">
+    <div className="page-shell">
       <AppHeader
-        className="py-4"
-        leading={<Wordmark />}
+        leading={
+          <button type="button" className="min-h-11 text-left" onClick={() => useStudio.setState({ currentId: null })}>
+            <Wordmark />
+          </button>
+        }
         extra={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <ImageModelPicker
+              className="hidden w-44 sm:block"
               state={imageGate}
               disabled={pending}
               onPick={(modelId) => {
@@ -36,35 +40,25 @@ export function DirectionView() {
                 void pick(modelId).catch((e) => toast.error(messageForImageJobError(e)));
               }}
             />
-            <QuotaMeter quota={imageGate?.quota} />
-            <DeleteProjectControl projectId={project.id} />
-            <button
-              type="button"
-              className="h-11 px-2 text-sm text-muted hover:text-fg"
-              onClick={() => useStudio.setState({ currentId: null })}
-            >
-              返回
-            </button>
+            <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
+            <DeleteProjectControl projectId={project.id} compact />
           </div>
         }
       />
-      <main className="mx-auto max-w-6xl px-5 pb-16">
-        <div className="mb-8 max-w-2xl">
-          <p className="text-xs uppercase tracking-[0.22em] text-subtle">Step 1 · 定方向</p>
-          <h1 className="mt-2 font-display text-3xl tracking-tight md:text-4xl">{project.name}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            四个正交方向，同一主题。锁定一张作为当前工作风格，其余最多保留两条备选。确认卡会同时看界面气质和品牌 KV。
+      <main className="mx-auto max-w-6xl px-5 pb-20 pt-8 md:pt-12">
+        <div className="mb-10 max-w-2xl">
+          <p className="text-xs uppercase tracking-kicker text-subtle">第一步 · 锁定方向</p>
+          <h1 className="mt-3 font-display text-4xl leading-none tracking-tight md:text-5xl">{project.name}</h1>
+          <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">
+            四个正交方向，同一主题。锁定一张作为当前工作风格，其余最多保留两条备选。
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {project.candidates.map((c) => (
-            <article
-              key={c.id}
-              className="overflow-hidden rounded-lg border border-border bg-surface"
-            >
-              <div className="relative aspect-video bg-surface-2">
+            <article key={c.id} className="overflow-hidden rounded-xl bg-surface p-2 shadow-border">
+              <div className="relative aspect-video overflow-hidden rounded-lg bg-surface-2">
                 {c.url ? (
-                  <img src={c.url} alt={c.dna.name} className="size-full object-cover" />
+                  <img src={c.url} alt={c.dna.name} className="frame size-full object-cover" />
                 ) : (
                   <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center text-subtle">
                     {c.status === "error" ? (
@@ -80,16 +74,16 @@ export function DirectionView() {
                     .map((hex) => (
                       <span
                         key={hex}
-                        className="size-3 rounded-full border border-border"
+                        className="size-3 rounded-full shadow-border"
                         style={{ background: hex }}
                       />
                     ))}
                 </div>
               </div>
-              <div className="space-y-3 p-4">
+              <div className="space-y-3 px-3 py-4">
                 <div>
-                  <h2 className="font-display text-xl text-fg">{c.dna.name}</h2>
-                  <p className="text-sm text-muted">{c.dna.oneLiner}</p>
+                  <h2 className="font-display text-2xl tracking-tight text-fg">{c.dna.name}</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-muted">{c.dna.oneLiner}</p>
                 </div>
                 <p className="text-xs text-subtle">
                   {c.dna.material} · {c.dna.light} · {c.dna.density}
@@ -110,7 +104,7 @@ export function DirectionView() {
           ))}
         </div>
         {pending ? (
-          <p className="mt-6 text-center text-sm text-muted">正在出四个方向，卡片会逐张亮起。</p>
+          <p className="mt-8 text-center text-sm text-muted">正在出四个方向，卡片会逐张亮起。</p>
         ) : null}
       </main>
     </div>

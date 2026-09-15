@@ -1,49 +1,54 @@
 import type { PickerImageModel, StudioImageState } from "@/lib/image-jobs";
+import { SelectField } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 export function ImageModelPicker({
   state,
   disabled,
   onPick,
+  className,
 }: {
   state: StudioImageState | null;
   disabled?: boolean;
   onPick: (modelId: string) => void;
+  className?: string;
 }) {
   if (!state) {
     return (
-      <span className="text-xs text-subtle">模型加载中</span>
+      <span className={cn("inline-flex h-11 items-center text-xs text-subtle", className)}>模型加载中</span>
     );
   }
 
   if (state.imagesUnavailable) {
-    return (
-      <p className="text-sm text-danger">出图暂不可用</p>
-    );
+    return <p className={cn("text-sm text-danger", className)}>出图暂不可用</p>;
   }
 
+  const items = [
+    ...(state.modelDisabled && state.currentImageModelId
+      ? [
+          {
+            value: state.currentImageModelId,
+            label: state.currentDisplayName ?? "已停用的模型",
+            disabled: true,
+          },
+        ]
+      : []),
+    ...state.picker.map((model: PickerImageModel) => ({
+      value: model.id,
+      label: model.displayName,
+    })),
+  ];
+
   return (
-    <div className="min-w-0">
-      <label className="sr-only" htmlFor="image-model-picker">
-        出图模型
-      </label>
-      <select
+    <div className={cn("min-w-0", className)}>
+      <SelectField
         id="image-model-picker"
-        className="h-9 max-w-full rounded-md border border-border bg-surface px-2 text-sm text-fg"
+        label="出图模型"
         value={state.currentImageModelId}
         disabled={disabled}
-        onChange={(event) => onPick(event.target.value)}
-      >
-        {state.modelDisabled && state.currentImageModelId ? (
-          <option value={state.currentImageModelId} disabled>
-            {state.currentDisplayName ?? "已停用的模型"}
-          </option>
-        ) : null}
-        {state.picker.map((model: PickerImageModel) => (
-          <option key={model.id} value={model.id}>
-            {model.displayName}
-          </option>
-        ))}
-      </select>
+        items={items}
+        onValueChange={onPick}
+      />
       {state.modelDisabled ? (
         <p className="mt-1 text-xs text-danger">当前模型已停用，请另选模型</p>
       ) : null}

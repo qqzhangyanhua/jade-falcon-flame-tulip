@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ImagePlus, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { parseBrief, generateCandidate } from "@/lib/ai";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { fallbackBoardSvg } from "@/lib/fallback-board";
+import { createStudioProjectFn, listImageModelsFn, messageForImageJobError } from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
 import { fileToDataUrl } from "@/lib/resize-image";
 import { useStudio } from "@/lib/store";
@@ -30,6 +30,14 @@ export function BriefView() {
   const projects = useStudio((s) => s.projects);
   const { user, isPending: authPending } = useCurrentUserState();
   const navigate = useNavigate();
+  const [imagesUnavailable, setImagesUnavailable] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    void listImageModelsFn()
+      .then((models) => setImagesUnavailable(models.length === 0))
+      .catch(() => setImagesUnavailable(false));
+  }, [user]);
 
   async function onFile(file: File) {
     try {
@@ -51,16 +59,22 @@ export function BriefView() {
       return;
     }
     setBusy(true);
-    createProject({ brief: text, prototypeDataUrl: proto });
-    const seeds = PRESETS.map((p) => ({
-      id: uid("can"),
-      presetId: p.id,
-      dna: p.dna,
-      url: null,
-      status: "pending" as const,
-    }));
-    setCandidates(seeds);
     try {
+      const created = await createStudioProjectFn({ data: { name: text.slice(0, 24) } });
+      createProject({
+        brief: text,
+        prototypeDataUrl: proto,
+        id: created.id,
+        currentImageModelId: created.currentImageModelId,
+      });
+      const seeds = PRESETS.map((p) => ({
+        id: uid("can"),
+        presetId: p.id,
+        dna: p.dna,
+        url: null,
+        status: "pending" as const,
+      }));
+      setCandidates(seeds);
       let product = text;
       try {
         const intent = await parseBrief({ data: { brief: text } });
@@ -69,23 +83,25 @@ export function BriefView() {
       } catch {
         /* keep raw brief */
       }
+      const failures: string[] = [];
       await Promise.all(
         seeds.map(async (c) => {
           try {
             const res = await generateCandidate({
-              data: { presetId: c.presetId, product },
+              data: { projectId: created.id, presetId: c.presetId, product },
             });
-            patchCandidate(c.id, { url: res.url, status: "ready" });
-          } catch {
-            patchCandidate(c.id, {
-              url: fallbackBoardSvg({ dna: c.dna, title: product, kind: "candidate" }),
-              status: "ready",
-            });
+            const url = res.urls[0];
+            if (!url) throw new Error("upstream_failed");
+            patchCandidate(c.id, { url, status: "ready" });
+          } catch (err) {
+            patchCandidate(c.id, { status: "error" });
+            failures.push(messageForImageJobError(err));
           }
         }),
       );
+      if (failures[0]) toast.error(failures[0]);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "生成失败");
+      toast.error(messageForImageJobError(e));
     } finally {
       setBusy(false);
     }
@@ -145,15 +161,24 @@ export function BriefView() {
             <img src={proto} alt="原型" className="mt-3 max-h-24 rounded-md border border-border object-contain" />
           ) : null}
 
-          <Button className="mt-4 w-full" size="lg" disabled={busy || authPending} onClick={() => void start()}>
+          <Button
+            className="mt-4 w-full"
+            size="lg"
+            disabled={busy || authPending || imagesUnavailable}
+            onClick={() => void start()}
+          >
             {busy
               ? "正在解析并出四个方向…"
-              : !user && !authPending
-                ? "登录后生成四个方向"
-                : "生成四个方向"}
-            {!busy ? <ArrowRight className="size-4" /> : null}
+              : imagesUnavailable
+                ? "出图暂不可用"
+                : !user && !authPending
+                  ? "登录后生成四个方向"
+                  : "生成四个方向"}
+            {!busy && !imagesUnavailable ? <ArrowRight className="size-4" /> : null}
           </Button>
-          <p className="mt-2 text-center text-xs text-subtle">每次出图会调用模型，请确认描述后再点。</p>
+          <p className="mt-2 text-center text-xs text-subtle">
+            {imagesUnavailable ? "出图暂不可用" : "每次出图会调用模型，请确认描述后再点。"}
+          </p>
         </div>
 
         {projects.length > 0 ? (
@@ -164,7 +189,9 @@ export function BriefView() {
                 <li key={p.id}>
                   <button
                     className="flex min-h-11 w-full items-center justify-between rounded-md border border-border bg-surface px-4 py-3 text-left hover:border-accent"
-                    onClick={() => useStudio.setState({ currentId: p.id })}
+                    onClick={() => {
+                      useStudio.setState({ currentId: p.id });
+                    }}
                   >
                     <span className="text-sm text-fg">{p.name}</span>
                     <span className="text-xs text-subtle">

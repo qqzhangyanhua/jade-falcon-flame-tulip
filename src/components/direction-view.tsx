@@ -1,13 +1,18 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { ImageModelPicker } from "@/components/image-model-picker";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
+import { messageForImageJobError } from "@/lib/image-jobs";
+import { useStudioImageGate } from "@/lib/image-jobs/use-studio-image-gate.ts";
 import { useStudio } from "@/lib/store";
 
 export function DirectionView() {
   const project = useStudio((s) => s.current());
   const lockCandidate = useStudio((s) => s.lockCandidate);
+  const setCurrentImageModel = useStudio((s) => s.setCurrentImageModel);
+  const { state: imageGate, pick } = useStudioImageGate(project?.id);
 
   if (!project) return null;
   const pending = project.candidates.some((c) => c.status === "pending");
@@ -18,13 +23,23 @@ export function DirectionView() {
         className="py-4"
         leading={<Wordmark />}
         extra={
-          <button
-            type="button"
-            className="h-11 px-2 text-sm text-muted hover:text-fg"
-            onClick={() => useStudio.setState({ currentId: null })}
-          >
-            返回
-          </button>
+          <div className="flex items-center gap-3">
+            <ImageModelPicker
+              state={imageGate}
+              disabled={pending}
+              onPick={(modelId) => {
+                setCurrentImageModel(modelId);
+                void pick(modelId).catch((e) => toast.error(messageForImageJobError(e)));
+              }}
+            />
+            <button
+              type="button"
+              className="h-11 px-2 text-sm text-muted hover:text-fg"
+              onClick={() => useStudio.setState({ currentId: null })}
+            >
+              返回
+            </button>
+          </div>
         }
       />
       <main className="mx-auto max-w-6xl px-5 pb-16">
@@ -45,8 +60,12 @@ export function DirectionView() {
                 {c.url ? (
                   <img src={c.url} alt={c.dna.name} className="size-full object-cover" />
                 ) : (
-                  <div className="flex size-full items-center justify-center text-subtle">
-                    <Loader2 className="size-6 animate-spin" />
+                  <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center text-subtle">
+                    {c.status === "error" ? (
+                      <p className="text-sm text-danger">出图失败</p>
+                    ) : (
+                      <Loader2 className="size-6 animate-spin" />
+                    )}
                   </div>
                 )}
                 <div className="absolute left-3 top-3 flex gap-1.5">

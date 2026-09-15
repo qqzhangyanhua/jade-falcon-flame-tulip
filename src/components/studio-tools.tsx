@@ -1,0 +1,163 @@
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import type { StudioImageState } from "@/lib/image-jobs";
+import { SLOTS, type Slot } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+export const TUNE_PRESETS = [
+  { id: "like", label: "更像风格卡", action: "tune" as const, instruction: "Push colors, materials, and lighting closer to the locked brand system. Keep composition." },
+  { id: "clean", label: "更干净", action: "tune" as const, instruction: "Remove clutter, increase whitespace, simplify backgrounds. Keep the same layout." },
+  { id: "compose", label: "换构图", action: "compose" as const, instruction: "Change composition and camera, keep the same subject, palette, and brand feeling." },
+];
+
+export function sliderInstruction(sliders: { brightness: number; warmth: number; contrast: number }): string {
+  const bits: string[] = [];
+  if (sliders.brightness !== 50) bits.push(sliders.brightness > 50 ? "brighter" : "darker");
+  if (sliders.warmth !== 50) bits.push(sliders.warmth > 50 ? "warmer color temperature" : "cooler color temperature");
+  if (sliders.contrast !== 50) bits.push(sliders.contrast > 50 ? "higher contrast" : "softer contrast");
+  return bits.length ? `Adjust: ${bits.join(", ")}. Keep composition.` : "Subtle polish, keep composition.";
+}
+
+export function StudioTunePanel({
+  imageGate,
+  generating,
+  hasImage,
+  sliders,
+  onSlider,
+  onTune,
+}: {
+  imageGate: StudioImageState | null;
+  generating: boolean;
+  hasImage: boolean;
+  sliders: { brightness: number; warmth: number; contrast: number };
+  onSlider: (key: "brightness" | "warmth" | "contrast", value: number) => void;
+  onTune: (instruction: string, writeback: boolean, action: "tune" | "compose") => void;
+}) {
+  const tuneBlocked = Boolean(imageGate && !imageGate.actions.tune.enabled);
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-surface p-3">
+      <div className="flex flex-wrap gap-2">
+        {TUNE_PRESETS.map((preset) => {
+          const blocked = Boolean(imageGate && !imageGate.actions[preset.action].enabled);
+          return (
+            <Button
+              key={preset.id}
+              size="sm"
+              variant="outline"
+              disabled={generating || !hasImage || blocked}
+              title={blocked ? imageGate?.actions[preset.action].reason ?? undefined : undefined}
+              onClick={() => onTune(preset.instruction, false, preset.action)}
+            >
+              {preset.label}
+            </Button>
+          );
+        })}
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        {(
+          [
+            ["brightness", "明暗"],
+            ["warmth", "冷暖"],
+            ["contrast", "对比"],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key} className="text-xs text-muted">
+            {label}
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={sliders[key]}
+              disabled={generating || !hasImage || tuneBlocked}
+              onChange={(event) => onSlider(key, Number(event.target.value))}
+              className="mt-1 w-full accent-accent"
+            />
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          disabled={generating || !hasImage || tuneBlocked}
+          onClick={() => onTune(sliderInstruction(sliders), false, "tune")}
+        >
+          只改此图
+        </Button>
+        <Button
+          variant="outline"
+          disabled={generating || !hasImage || tuneBlocked}
+          onClick={() => onTune(sliderInstruction(sliders), true, "tune")}
+        >
+          写回风格…
+        </Button>
+      </div>
+      {imageGate && !imageGate.actions.tune.enabled ? (
+        <p className="mt-2 text-xs text-danger">{imageGate.actions.tune.reason}</p>
+      ) : (
+        <p className="mt-2 text-xs text-subtle">默认只改这一张。写回才会影响以后出的新图，已采用的旧图不变脸。</p>
+      )}
+    </div>
+  );
+}
+
+export function StudioGenerateBar({
+  slot,
+  content,
+  generating,
+  generateBlocked,
+  generateReason,
+  busyLabel,
+  onSlot,
+  onContent,
+  onGenerate,
+}: {
+  slot: Slot;
+  content: string;
+  generating: boolean;
+  generateBlocked: boolean;
+  generateReason: string | null;
+  busyLabel: string | null;
+  onSlot: (slot: Slot) => void;
+  onContent: (value: string) => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <footer className="grid shrink-0 gap-2 border-t border-border p-3 md:grid-cols-[1fr_auto]">
+      <div className="flex gap-1 overflow-x-auto md:hidden">
+        {SLOTS.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onSlot(item.id)}
+            className={cn(
+              "h-10 shrink-0 rounded-md px-3 text-sm",
+              slot === item.id ? "bg-accent text-accent-fg" : "bg-surface text-muted",
+            )}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div>
+        <input
+          value={content}
+          onChange={(event) => onContent(event.target.value)}
+          placeholder="一句内容：产品名 / 卖点 / 活动名"
+          disabled={generating || generateBlocked}
+          className="h-11 w-full rounded-md border border-border bg-surface px-3 text-sm outline-none placeholder:text-subtle focus:border-accent"
+        />
+        {generateReason ? <p className="mt-1 text-xs text-danger">{generateReason}</p> : null}
+      </div>
+      <Button className="h-11" disabled={generating || generateBlocked} onClick={onGenerate}>
+        {generating ? (
+          <>
+            <Loader2 className="size-4 animate-spin" />
+            {busyLabel ?? "生成中"}
+          </>
+        ) : generateBlocked ? (
+          generateReason ?? "出图暂不可用"
+        ) : (
+          "出 2 张"
+        )}
+      </Button>
+    </footer>
+  );
+}

@@ -19,7 +19,13 @@ type State = {
   currentId: string | null;
   current: () => Project | null;
   currentStyle: () => StyleBranch | null;
-  createProject: (input: { brief: string; prototypeDataUrl: string | null }) => string;
+  createProject: (input: {
+    brief: string;
+    prototypeDataUrl: string | null;
+    id?: string;
+    currentImageModelId?: string;
+  }) => string;
+  setCurrentImageModel: (modelId: string) => void;
   setPhase: (phase: Project["phase"]) => void;
   setIntent: (intent: BriefIntent) => void;
   setCandidates: (candidates: Candidate[]) => void;
@@ -58,8 +64,8 @@ export const useStudio = create<State>()(
         if (!p?.currentStyleId) return null;
         return p.styles.find((s) => s.id === p.currentStyleId) ?? null;
       },
-      createProject: ({ brief, prototypeDataUrl }) => {
-        const id = uid("prj");
+      createProject: ({ brief, prototypeDataUrl, id: givenId, currentImageModelId }) => {
+        const id = givenId ?? uid("prj");
         const name = brief.trim().slice(0, 24) || "未命名项目";
         const project: Project = {
           id,
@@ -69,6 +75,7 @@ export const useStudio = create<State>()(
           createdAt: Date.now(),
           currentStyleId: null,
           currentSlot: "kv",
+          currentImageModelId: currentImageModelId ?? "",
           phase: "direction",
           intent: null,
           candidates: [],
@@ -77,6 +84,16 @@ export const useStudio = create<State>()(
         };
         set((s) => ({ projects: [project, ...s.projects], currentId: id }));
         return id;
+      },
+      setCurrentImageModel: (modelId) => {
+        const id = get().currentId;
+        if (!id) return;
+        set((s) => ({
+          projects: patchProject(s.projects, id, (p) => ({
+            ...p,
+            currentImageModelId: modelId,
+          })),
+        }));
       },
       setPhase: (phase) => {
         const id = get().currentId;
@@ -287,7 +304,20 @@ export const useStudio = create<State>()(
         }));
       },
     }),
-    { name: "keystone-v1" },
+    {
+      name: "keystone-v1",
+      version: 2,
+      migrate: (persisted) => {
+        const state = persisted as { projects?: Project[]; currentId?: string | null };
+        return {
+          projects: (state.projects ?? []).map((project) => ({
+            ...project,
+            currentImageModelId: project.currentImageModelId ?? "",
+          })),
+          currentId: state.currentId ?? null,
+        };
+      },
+    },
   ),
 );
 

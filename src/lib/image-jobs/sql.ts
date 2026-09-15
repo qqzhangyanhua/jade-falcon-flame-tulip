@@ -1,4 +1,6 @@
 import type { Sql } from "../db.ts";
+import { beijingCalendarDay } from "./beijing-day.ts";
+import { DEFAULT_DAILY_IMAGE_CAP } from "./quota.ts";
 import { IMAGE_JOB_ACTIONS, type ImageJobAction } from "./types.ts";
 import type {
   CatalogModel,
@@ -206,35 +208,63 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
 
 export function createSqlJobStore(sql: Sql): ImageJobStore {
   return {
-    async insert(record) {
+    async insertReserved(record) {
+      const beijingDay = beijingCalendarDay(record.createdAt);
       const rows = await sql<JobRow>`
-        insert into image_jobs (
-          id, user_id, project_id, action,
-          catalog_model_id, upstream_model_id, display_name_snapshot,
-          status, error_code, created_at, finished_at
+        with cap_row as (
+          select coalesce(
+            (
+              select case
+                when value ~ '^[0-9]+$' then value::int
+                else ${DEFAULT_DAILY_IMAGE_CAP}
+              end
+              from studio_settings
+              where key = 'daily_image_cap'
+            ),
+            ${DEFAULT_DAILY_IMAGE_CAP}
+          ) as n
+        ),
+        reserved as (
+          insert into image_quota_days (user_id, beijing_day, used)
+          select ${record.userId}, ${beijingDay}::date, 1
+          from cap_row
+          where cap_row.n > 0
+          on conflict (user_id, beijing_day) do update
+            set used = image_quota_days.used + 1
+            where image_quota_days.used < (select n from cap_row)
+          returning used
+        ),
+        inserted as (
+          insert into image_jobs (
+            id, user_id, project_id, action,
+            catalog_model_id, upstream_model_id, display_name_snapshot,
+            status, error_code, created_at, finished_at
+          )
+          select
+            ${record.id},
+            ${record.userId},
+            ${record.projectId},
+            ${record.action},
+            ${record.catalogModelId},
+            ${record.upstreamModelId},
+            ${record.displayNameSnapshot},
+            ${record.status},
+            ${record.errorCode},
+            to_timestamp(${record.createdAt / 1000}),
+            null
+          from reserved
+          returning
+            id, user_id, project_id, action,
+            catalog_model_id, upstream_model_id, display_name_snapshot,
+            status, error_code,
+            (extract(epoch from created_at) * 1000) as created_at_ms,
+            case when finished_at is null then null
+                 else extract(epoch from finished_at) * 1000 end as finished_at_ms
         )
-        values (
-          ${record.id},
-          ${record.userId},
-          ${record.projectId},
-          ${record.action},
-          ${record.catalogModelId},
-          ${record.upstreamModelId},
-          ${record.displayNameSnapshot},
-          ${record.status},
-          ${record.errorCode},
-          to_timestamp(${record.createdAt / 1000}),
-          null
-        )
-        returning
-          id, user_id, project_id, action,
-          catalog_model_id, upstream_model_id, display_name_snapshot,
-          status, error_code,
-          (extract(epoch from created_at) * 1000) as created_at_ms,
-          case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+        select * from inserted
       `;
-      return rows[0] ? toJob(rows[0]) : record;
+      if (!rows[0]) return { ok: false, code: "quota_exceeded" };
+      return { ok: true, job: toJob(rows[0]) };
     },
     async get(id) {
       const rows = await sql<JobRow>`

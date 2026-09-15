@@ -3,6 +3,7 @@ import { Download, PanelLeft } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
 import { ImageModelPicker } from "@/components/image-model-picker";
+import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
 import { StudioGenerateBar, StudioTunePanel } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export function StudioView() {
   const writebackStyle = useStudio((s) => s.writebackStyle);
   const setStyleRev = useStudio((s) => s.setStyleRev);
   const setCurrentImageModel = useStudio((s) => s.setCurrentImageModel);
-  const { state: imageGate, pick } = useStudioImageGate(project?.id);
+  const { state: imageGate, pick, refresh } = useStudioImageGate(project?.id);
 
   const [content, setContent] = useState("");
   const [tab, setTab] = useState<"image" | "style">("image");
@@ -87,6 +88,7 @@ export function StudioView() {
     } finally {
       setMode("idle");
       setBusyLabel(null);
+      void refresh();
     }
   }
 
@@ -143,6 +145,7 @@ export function StudioView() {
     } finally {
       setMode("idle");
       setBusyLabel(null);
+      void refresh();
     }
   }
 
@@ -195,6 +198,7 @@ export function StudioView() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <QuotaMeter quota={imageGate?.quota} className="hidden sm:block" />
           <a
             className={cn(
               "inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm",
@@ -274,7 +278,7 @@ export function StudioView() {
               </button>
             ))}
           </div>
-          <div className="border-b border-border px-3 py-2 md:hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-2 md:hidden">
             <ImageModelPicker
               state={imageGate}
               disabled={generating}
@@ -283,6 +287,7 @@ export function StudioView() {
                 void pick(modelId).catch((e) => toast.error(messageForImageJobError(e)));
               }}
             />
+            <QuotaMeter quota={imageGate?.quota} />
           </div>
 
           <div className={cn("min-h-0 flex-1 overflow-auto p-4", mobile !== "canvas" && "hidden md:block")}>

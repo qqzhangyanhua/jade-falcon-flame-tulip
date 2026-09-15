@@ -1,4 +1,5 @@
 import { CAPABILITY_DENIED_REASONS, IMAGE_JOB_USER_MESSAGES } from "./errors.ts";
+import { applyQuotaToStudioState, emptyQuota } from "./quota.ts";
 import type {
   ActionAvailability,
   CatalogModel,
@@ -6,6 +7,7 @@ import type {
   ImageJobErrorCode,
   PickerImageModel,
   StudioImageState,
+  StudioQuota,
 } from "./types.ts";
 import { IMAGE_JOB_ACTIONS } from "./types.ts";
 
@@ -75,6 +77,7 @@ function availabilityFromVerdict(verdict: ActionVerdict): ActionAvailability {
 export function buildStudioImageState(opts: {
   models: CatalogModel[];
   currentImageModelId: string;
+  quota?: StudioQuota;
 }): StudioImageState {
   const picker = listEnabledImagePicker(opts.models);
   const current =
@@ -92,12 +95,14 @@ export function buildStudioImageState(opts: {
     current,
     action: "generate",
   });
-  return {
+  const base: StudioImageState = {
     picker,
     currentImageModelId: opts.currentImageModelId,
     currentDisplayName: current?.displayName ?? null,
     imagesUnavailable: picker.length === 0,
     modelDisabled: !sample.ok && sample.code === "model_disabled",
     actions,
+    quota: opts.quota ?? emptyQuota(0, ""),
   };
+  return opts.quota ? applyQuotaToStudioState(base, opts.quota) : base;
 }

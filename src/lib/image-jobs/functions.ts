@@ -14,6 +14,8 @@ import {
   pickProjectImageModel,
   unwrapProjectOp,
 } from "./projects.ts";
+import { createSqlQuotaStore, createSqlRoleStore } from "./quota-sql.ts";
+import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "./quota.ts";
 import {
   createSqlCatalogStore,
   createSqlJobStore,
@@ -22,7 +24,13 @@ import {
 } from "./sql.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
 import { createXaiImageUpstream } from "./upstream.ts";
-import type { ImageJobAction, PickerImageModel, StudioImageState } from "./types.ts";
+import type {
+  ImageJobAction,
+  PickerImageModel,
+  StudioImageState,
+  StudioQuota,
+  StudioRole,
+} from "./types.ts";
 
 async function createSqlGatewayDeps(): Promise<ImageJobGatewayDeps> {
   const sql = await getSql();
@@ -31,6 +39,8 @@ async function createSqlGatewayDeps(): Promise<ImageJobGatewayDeps> {
     projects: createSqlProjectStore(sql),
     jobs: createSqlJobStore(sql),
     revs: createSqlRevStore(sql),
+    quota: createSqlQuotaStore(sql),
+    roles: createSqlRoleStore(sql),
     upstream: createXaiImageUpstream(),
   };
 }
@@ -108,11 +118,48 @@ export const getImageStudioStateFn = createServerFn({ method: "POST" })
   .handler(async ({ context, data }): Promise<StudioImageState> => {
     const deps = await createSqlGatewayDeps();
     return unwrapProjectOp(
-      await getStudioImageState(deps.catalog, deps.projects, {
+      await getStudioImageState(deps.catalog, deps.projects, deps.quota, {
         userId: context.userId,
         projectId: data.projectId,
+        now: deps.now?.() ?? Date.now(),
       }),
     );
+  });
+
+export const getDailyQuotaFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<StudioQuota> => {
+    const deps = await createSqlGatewayDeps();
+    return deps.quota.snapshot(context.userId, deps.now?.() ?? Date.now());
+  });
+
+export const getStudioAccessFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<{ role: StudioRole; quota: StudioQuota }> => {
+    const deps = await createSqlGatewayDeps();
+    const now = deps.now?.() ?? Date.now();
+    const [role, quota] = await Promise.all([
+      resolveStudioRole(deps.roles, context.userId),
+      deps.quota.snapshot(context.userId, now),
+    ]);
+    return { role, quota };
+  });
+
+export const setDailyImageCapFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { cap: number }) => {
+    const cap = normalizeDailyCap(input.cap);
+    if (cap === null) throw new Error("额度须为 0–9999 的整数");
+    return { cap };
+  })
+  .handler(async ({ context, data }): Promise<{ cap: number }> => {
+    const deps = await createSqlGatewayDeps();
+    const result = await setGlobalDailyCap(deps.roles, deps.quota, {
+      userId: context.userId,
+      cap: data.cap,
+    });
+    if (!result.ok) throw new ImageJobError(result.code);
+    return { cap: result.cap };
   });
 
 type ImageJobFnResult = {

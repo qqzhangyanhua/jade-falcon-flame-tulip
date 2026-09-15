@@ -14,6 +14,7 @@ export const IMAGE_JOB_ERROR_CODES = [
   "model_disabled",
   "images_unavailable",
   "capability_denied",
+  "quota_exceeded",
   "upstream_failed",
 ] as const;
 
@@ -75,6 +76,15 @@ export type ActionAvailability = {
   reason: string | null;
 };
 
+export type StudioQuota = {
+  cap: number;
+  used: number;
+  remaining: number;
+  beijingDay: string;
+};
+
+export type StudioRole = "user" | "admin";
+
 export type StudioImageState = {
   picker: PickerImageModel[];
   currentImageModelId: string;
@@ -82,6 +92,7 @@ export type StudioImageState = {
   imagesUnavailable: boolean;
   modelDisabled: boolean;
   actions: Record<ImageJobAction, ActionAvailability>;
+  quota: StudioQuota;
 };
 
 export type RunImageJobInput = {

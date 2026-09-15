@@ -2,6 +2,7 @@ import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { ImageModelPicker } from "@/components/image-model-picker";
+import { QuotaMeter } from "@/components/quota-meter";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { messageForImageJobError } from "@/lib/image-jobs";
@@ -32,6 +33,7 @@ export function DirectionView() {
                 void pick(modelId).catch((e) => toast.error(messageForImageJobError(e)));
               }}
             />
+            <QuotaMeter quota={imageGate?.quota} />
             <button
               type="button"
               className="h-11 px-2 text-sm text-muted hover:text-fg"

@@ -11,9 +11,12 @@ export {
   ensureStudioProjectFn,
   generateCandidate,
   generateSlotFn,
+  getDailyQuotaFn,
   getImageStudioStateFn,
+  getStudioAccessFn,
   listImageModelsFn,
   pickProjectImageModelFn,
+  setDailyImageCapFn,
   tuneImageFn,
 } from "./functions.ts";
 export type {
@@ -22,4 +25,6 @@ export type {
   ImageJobErrorCode,
   PickerImageModel,
   StudioImageState,
+  StudioQuota,
+  StudioRole,
 } from "./types.ts";

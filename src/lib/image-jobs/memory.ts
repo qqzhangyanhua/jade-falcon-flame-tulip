@@ -1,5 +1,7 @@
+import { beijingCalendarDay } from "./beijing-day.ts";
 import { newEntityId } from "./ids.ts";
 import { cloneModel } from "./availability.ts";
+import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
 import type {
   CatalogModel,
   ImageJobErrorCode,
@@ -8,12 +10,15 @@ import type {
   ImageUpstream,
   ImageUpstreamRequest,
   StudioProjectRecord,
+  StudioRole,
 } from "./types.ts";
 import type {
   ImageJobGatewayDeps,
   ImageJobStore,
   ImageRevStore,
   ModelCatalogStore,
+  QuotaStore,
+  RoleStore,
   StudioProjectStore,
 } from "./stores.ts";
 
@@ -77,13 +82,61 @@ export function createMemoryProjects(
   };
 }
 
-export function createMemoryJobs(): ImageJobStore {
+export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaStore & {
+  tryReserve: (userId: string, atMs: number) => boolean;
+} {
+  let cap = initialCap;
+  const used = new Map<string, number>();
+  return {
+    async getCap() {
+      return cap;
+    },
+    async setCap(next) {
+      cap = next;
+      return cap;
+    },
+    async snapshot(userId, atMs) {
+      const day = beijingCalendarDay(atMs);
+      return quotaFromParts(cap, used.get(`${userId}:${day}`) ?? 0, day);
+    },
+    tryReserve(userId, atMs) {
+      const day = beijingCalendarDay(atMs);
+      const key = `${userId}:${day}`;
+      const current = used.get(key) ?? 0;
+      if (current >= cap) return false;
+      used.set(key, current + 1);
+      return true;
+    },
+  };
+}
+
+export function createMemoryRoles(
+  seed: Record<string, StudioRole> = {},
+): RoleStore {
+  const roles = new Map<string, StudioRole>(Object.entries(seed));
+  return {
+    async getRole(userId) {
+      return roles.get(userId) ?? "user";
+    },
+    async setRole(userId, role) {
+      roles.set(userId, role);
+    },
+    async hasAdmin() {
+      return [...roles.values()].includes("admin");
+    },
+  };
+}
+
+export function createMemoryJobs(
+  reserve: (record: ImageJobRecord) => boolean,
+): ImageJobStore {
   const jobs = new Map<string, ImageJobRecord>();
   return {
-    async insert(record) {
+    async insertReserved(record) {
+      if (!reserve(record)) return { ok: false, code: "quota_exceeded" };
       const next = cloneJob(record);
       jobs.set(next.id, next);
-      return cloneJob(next);
+      return { ok: true, job: cloneJob(next) };
     },
     async get(id) {
       const job = jobs.get(id);
@@ -162,6 +215,9 @@ export function createMemoryGatewayWorld(opts?: {
   userId?: string;
   projectId?: string;
   upstream?: ImageUpstream["run"];
+  cap?: number;
+  now?: () => number;
+  roles?: Record<string, StudioRole>;
 }): ImageJobGatewayDeps & {
   userId: string;
   projectId: string;
@@ -170,6 +226,8 @@ export function createMemoryGatewayWorld(opts?: {
   projects: StudioProjectStore;
   jobs: ImageJobStore;
   revs: ImageRevStore;
+  quota: QuotaStore;
+  roles: RoleStore;
 } {
   const userId = opts?.userId ?? "user-1";
   const projectId = opts?.projectId ?? "prj_test";
@@ -184,13 +242,16 @@ export function createMemoryGatewayWorld(opts?: {
       ...opts?.project,
     },
   ]);
+  const quota = createMemoryQuota(opts?.cap ?? DEFAULT_DAILY_IMAGE_CAP);
   return {
     catalog,
     projects,
-    jobs: createMemoryJobs(),
+    jobs: createMemoryJobs((record) => quota.tryReserve(record.userId, record.createdAt)),
     revs: createMemoryRevs(),
+    quota,
+    roles: createMemoryRoles(opts?.roles),
     upstream,
-    now: () => 1_700_000_000_000,
+    now: opts?.now ?? (() => 1_700_000_000_000),
     newId: (prefix) => newEntityId(prefix),
     userId,
     projectId,

@@ -4,6 +4,8 @@ import type {
   ImageJobRecord,
   ImageRevRecord,
   StudioProjectRecord,
+  StudioQuota,
+  StudioRole,
 } from "./types.ts";
 
 export type ModelCatalogStore = {
@@ -19,8 +21,13 @@ export type StudioProjectStore = {
   updateCurrentModel: (id: string, modelId: string) => Promise<StudioProjectRecord | null>;
 };
 
+export type ReservedJobInsert =
+  | { ok: true; job: ImageJobRecord }
+  | { ok: false; code: "quota_exceeded" };
+
 export type ImageJobStore = {
-  insert: (record: ImageJobRecord) => Promise<ImageJobRecord>;
+  /** Insert a running job and reserve today's cap in one atomic step. */
+  insertReserved: (record: ImageJobRecord) => Promise<ReservedJobInsert>;
   get: (id: string) => Promise<ImageJobRecord | null>;
   finish: (
     id: string,
@@ -28,6 +35,18 @@ export type ImageJobStore = {
     errorCode: ImageJobErrorCode | null,
     finishedAt: number,
   ) => Promise<ImageJobRecord | null>;
+};
+
+export type QuotaStore = {
+  getCap: () => Promise<number>;
+  setCap: (cap: number) => Promise<number>;
+  snapshot: (userId: string, atMs: number) => Promise<StudioQuota>;
+};
+
+export type RoleStore = {
+  getRole: (userId: string) => Promise<StudioRole>;
+  setRole: (userId: string, role: StudioRole) => Promise<void>;
+  hasAdmin: () => Promise<boolean>;
 };
 
 export type ImageRevStore = {
@@ -40,6 +59,8 @@ export type ImageJobGatewayDeps = {
   projects: StudioProjectStore;
   jobs: ImageJobStore;
   revs: ImageRevStore;
+  quota: QuotaStore;
+  roles: RoleStore;
   upstream: ImageUpstreamLike;
   now?: () => number;
   newId?: (prefix: string) => string;

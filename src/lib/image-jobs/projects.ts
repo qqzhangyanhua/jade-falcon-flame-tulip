@@ -5,7 +5,7 @@ import {
   resolveNewProjectModelId,
 } from "./availability.ts";
 import { ImageJobError } from "./errors.ts";
-import type { ModelCatalogStore, StudioProjectStore } from "./stores.ts";
+import type { ModelCatalogStore, QuotaStore, StudioProjectStore } from "./stores.ts";
 import type {
   ImageJobErrorCode,
   PickerImageModel,
@@ -96,7 +96,8 @@ export async function listImageModelPicker(
 export async function getStudioImageState(
   catalog: ModelCatalogStore,
   projects: StudioProjectStore,
-  input: { userId: string; projectId: string },
+  quota: QuotaStore,
+  input: { userId: string; projectId: string; now: number },
 ): Promise<ProjectOpResult<StudioImageState>> {
   const authError = await requireUser(input.userId);
   if (authError) return { ok: false, code: authError };
@@ -106,11 +107,13 @@ export async function getStudioImageState(
   if (project.userId !== input.userId) return { ok: false, code: "forbidden" };
 
   const models = await catalog.list();
+  const snapshot = await quota.snapshot(input.userId, input.now);
   return {
     ok: true,
     value: buildStudioImageState({
       models,
       currentImageModelId: project.currentImageModelId,
+      quota: snapshot,
     }),
   };
 }

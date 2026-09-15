@@ -38,7 +38,7 @@ export async function runImageJob(
 
   const now = deps.now?.() ?? Date.now();
   const newId = deps.newId ?? newEntityId;
-  const job = await deps.jobs.insert({
+  const reserved = await deps.jobs.insertReserved({
     id: newId("job"),
     userId: input.userId,
     projectId: input.projectId,
@@ -51,6 +51,8 @@ export async function runImageJob(
     createdAt: now,
     finishedAt: null,
   });
+  if (!reserved.ok) return fail(reserved.code);
+  const job = reserved.job;
 
   let upstreamResult: ImageUpstreamResult;
   try {

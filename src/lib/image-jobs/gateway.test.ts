@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { evaluateImageAction, listEnabledImagePicker } from "./availability.ts";
+import { beijingCalendarDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES, messageForImageJobError } from "./errors.ts";
 import { runImageJob } from "./gateway.ts";
 import {
@@ -11,11 +12,13 @@ import {
 } from "./memory.ts";
 import {
   createStudioProject,
+  getStudioImageState,
   listImageModelPicker,
   pickProjectImageModel,
 } from "./projects.ts";
+import { DEFAULT_DAILY_IMAGE_CAP, resolveStudioRole, setGlobalDailyCap } from "./quota.ts";
 import type { CatalogModel, ImageJobAction, RunImageJobInput } from "./types.ts";
-import { IMAGE_JOB_ACTIONS } from "./types.ts";
+import { IMAGE_JOB_ACTIONS, IMAGE_JOB_ERROR_CODES } from "./types.ts";
 
 function jobInput(
   world: ReturnType<typeof createMemoryGatewayWorld>,
@@ -269,6 +272,201 @@ describe("image job gateway", () => {
     assert.equal(missing.ok, false);
     if (!missing.ok) assert.equal(missing.code, "not_found");
     assert.equal(world.calls.length, 0);
+  });
+
+  it("includes quota_exceeded in the closed client error set", () => {
+    assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("quota_exceeded"));
+    assert.equal(IMAGE_JOB_USER_MESSAGES.quota_exceeded, "今日额度已用完");
+    assert.equal(
+      (IMAGE_JOB_ACTIONS as readonly string[]).includes("parse"),
+      false,
+    );
+  });
+});
+
+describe("daily quota (Beijing time)", () => {
+  it("defaults to 30 and counts one accepted job even when two variants return", async () => {
+    const world = createMemoryGatewayWorld({
+      cap: DEFAULT_DAILY_IMAGE_CAP,
+      upstream: async () => ({
+        ok: true,
+        urls: ["https://img.example/a.png", "https://img.example/b.png"],
+      }),
+    });
+    const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(before.cap, 30);
+    assert.equal(before.remaining, 30);
+    const result = await runImageJob(world, jobInput(world, { n: 2 }));
+    assert.equal(result.ok, true);
+    const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(after.used, 1);
+    assert.equal(after.remaining, 29);
+  });
+
+  it("reserves then keeps the count when upstream fails", async () => {
+    const world = createMemoryGatewayWorld({
+      cap: 2,
+      upstream: async () => {
+        throw new Error("upstream down");
+      },
+    });
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.code, "upstream_failed");
+    assert.equal(result.job?.status, "failed");
+    assert.equal(world.calls.length, 1);
+    const snap = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(snap.used, 1);
+    assert.equal(snap.remaining, 1);
+  });
+
+  it("returns quota_exceeded without inserting a job or calling upstream", async () => {
+    const world = createMemoryGatewayWorld({ cap: 1 });
+    const first = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(first.ok, true);
+    world.calls.length = 0;
+    const blocked = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(blocked.ok, false);
+    if (blocked.ok) return;
+    assert.equal(blocked.code, "quota_exceeded");
+    assert.equal(blocked.job, undefined);
+    assert.equal(world.calls.length, 0);
+    assert.equal(messageForImageJobError(new Error("quota_exceeded")), "今日额度已用完");
+  });
+
+  it("does not consume quota for capability denial or brief-style non-jobs", async () => {
+    const models = defaultCatalogSeed().map((model) =>
+      model.id === DEFAULT_IMAGE_MODEL_ID
+        ? { ...model, capabilities: ["generate"] as ImageJobAction[] }
+        : model,
+    );
+    const world = createMemoryGatewayWorld({ models, cap: 1 });
+    const denied = await runImageJob(
+      world,
+      jobInput(world, { action: "tune", imageUrl: "https://img.example/src.png", n: 1 }),
+    );
+    assert.equal(denied.ok, false);
+    if (!denied.ok) assert.equal(denied.code, "capability_denied");
+    assert.equal(world.calls.length, 0);
+    const snap = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(snap.used, 0);
+    assert.equal(snap.remaining, 1);
+  });
+
+  it("uses the injectable clock and rolls over at Beijing midnight, not UTC", async () => {
+    const beforeBeijingMidnight = Date.parse("2026-01-01T15:59:59.999Z");
+    const atBeijingMidnight = Date.parse("2026-01-01T16:00:00.000Z");
+    assert.equal(beijingCalendarDay(beforeBeijingMidnight), "2026-01-01");
+    assert.equal(beijingCalendarDay(atBeijingMidnight), "2026-01-02");
+    assert.notEqual(
+      beijingCalendarDay(atBeijingMidnight),
+      new Date(atBeijingMidnight).toISOString().slice(0, 10),
+    );
+
+    let now = beforeBeijingMidnight;
+    const world = createMemoryGatewayWorld({
+      cap: 1,
+      now: () => now,
+    });
+    const first = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(first.ok, true);
+    const sameDay = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(sameDay.ok, false);
+    if (!sameDay.ok) assert.equal(sameDay.code, "quota_exceeded");
+    assert.equal((await world.quota.snapshot(world.userId, now)).remaining, 0);
+
+    now = atBeijingMidnight;
+    const rolled = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(rolled.ok, true);
+    assert.equal((await world.quota.snapshot(world.userId, now)).used, 1);
+    assert.equal((await world.quota.snapshot(world.userId, now)).beijingDay, "2026-01-02");
+    assert.equal((await world.quota.snapshot(world.userId, beforeBeijingMidnight)).used, 1);
+  });
+
+  it("applies the global cap to every user, including administrators", async () => {
+    const world = createMemoryGatewayWorld({
+      cap: 30,
+      roles: { "user-1": "admin" },
+    });
+    const changed = await setGlobalDailyCap(world.roles, world.quota, {
+      userId: world.userId,
+      cap: 1,
+    });
+    assert.equal(changed.ok, true);
+    if (changed.ok) assert.equal(changed.cap, 1);
+
+    const adminJob = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(adminJob.ok, true);
+    const adminBlocked = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(adminBlocked.ok, false);
+    if (!adminBlocked.ok) assert.equal(adminBlocked.code, "quota_exceeded");
+
+    await world.projects.create({
+      id: "prj_other",
+      userId: "user-2",
+      currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
+      createdAt: 1,
+    });
+    const otherJob = await runImageJob(
+      world,
+      jobInput(world, { userId: "user-2", projectId: "prj_other", n: 1 }),
+    );
+    assert.equal(otherJob.ok, true);
+    const otherBlocked = await runImageJob(
+      world,
+      jobInput(world, { userId: "user-2", projectId: "prj_other", n: 1 }),
+    );
+    assert.equal(otherBlocked.ok, false);
+    if (!otherBlocked.ok) assert.equal(otherBlocked.code, "quota_exceeded");
+  });
+
+  it("promotes only the first user to administrator", async () => {
+    const world = createMemoryGatewayWorld();
+    assert.equal(await resolveStudioRole(world.roles, world.userId), "admin");
+    assert.equal(await resolveStudioRole(world.roles, "user-2"), "user");
+    assert.equal(await world.roles.getRole("user-2"), "user");
+  });
+
+  it("rejects a non-admin changing the global cap", async () => {
+    const world = createMemoryGatewayWorld({ cap: 30 });
+    const denied = await setGlobalDailyCap(world.roles, world.quota, {
+      userId: world.userId,
+      cap: 5,
+    });
+    assert.equal(denied.ok, false);
+    if (!denied.ok) assert.equal(denied.code, "forbidden");
+    assert.equal(await world.quota.getCap(), 30);
+  });
+
+  it("shows remaining count for today on the studio state", async () => {
+    let now = Date.parse("2026-01-01T16:00:00.000Z");
+    const world = createMemoryGatewayWorld({ cap: 3, now: () => now });
+    const before = await getStudioImageState(world.catalog, world.projects, world.quota, {
+      userId: world.userId,
+      projectId: world.projectId,
+      now,
+    });
+    assert.equal(before.ok, true);
+    if (!before.ok) return;
+    assert.equal(before.value.quota.remaining, 3);
+    assert.equal(before.value.quota.beijingDay, "2026-01-02");
+    assert.equal(before.value.actions.generate.enabled, true);
+
+    await runImageJob(world, jobInput(world, { n: 1 }));
+    await runImageJob(world, jobInput(world, { n: 1 }));
+    await runImageJob(world, jobInput(world, { n: 1 }));
+    const after = await getStudioImageState(world.catalog, world.projects, world.quota, {
+      userId: world.userId,
+      projectId: world.projectId,
+      now,
+    });
+    assert.equal(after.ok, true);
+    if (!after.ok) return;
+    assert.equal(after.value.quota.remaining, 0);
+    assert.equal(after.value.actions.generate.enabled, false);
+    assert.equal(after.value.actions.generate.code, "quota_exceeded");
+    assert.equal(after.value.actions.generate.reason, "今日额度已用完");
   });
 });
 

@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import {
+  getStudioAccessFn,
+  messageForImageJobError,
+  setDailyImageCapFn,
+  type StudioQuota,
+  type StudioRole,
+} from "@/lib/image-jobs";
 import { getProfile, saveProfile } from "@/lib/profile";
 import type { ProfileRecord } from "@/lib/types";
 
@@ -21,18 +28,25 @@ function Account() {
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [role, setRole] = useState<StudioRole>("user");
+  const [quota, setQuota] = useState<StudioQuota | null>(null);
+  const [capDraft, setCapDraft] = useState("30");
+  const [savingCap, setSavingCap] = useState(false);
 
   useEffect(() => {
     if (isPending || !userId) return;
     let cancelled = false;
     setLoading(true);
-    void getProfile()
-      .then((row) => {
+    void Promise.all([getProfile(), getStudioAccessFn()])
+      .then(([row, access]) => {
         if (cancelled) return;
         setProfile(row);
         setDisplayName(row.displayName || sessionName);
         setTitle(row.title);
         setBio(row.bio);
+        setRole(access.role);
+        setQuota(access.quota);
+        setCapDraft(String(access.quota.cap));
       })
       .catch((e) => {
         if (cancelled) return;
@@ -166,6 +180,57 @@ function Account() {
             {saving ? "保存中…" : "保存资料"}
           </Button>
         </form>
+
+        <section className="rounded-xl border border-border bg-surface p-5">
+          <h2 className="font-display text-xl tracking-tight">今日出图额度</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            按北京时间自然日计算。方向候选、槽位出图、微调和换构图各计 1 次；解析描述不计。失败仍占用。
+          </p>
+          <p className="mt-4 text-sm text-fg">
+            {quota
+              ? quota.remaining <= 0
+                ? "今日额度已用完"
+                : `今日剩余 ${quota.remaining}/${quota.cap}（${quota.beijingDay}）`
+              : "读取中…"}
+          </p>
+          {role === "admin" ? (
+            <form
+              className="mt-5 space-y-3 border-t border-border pt-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setSavingCap(true);
+                void setDailyImageCapFn({ data: { cap: Number(capDraft) } })
+                  .then(async (saved) => {
+                    setCapDraft(String(saved.cap));
+                    const access = await getStudioAccessFn();
+                    setQuota(access.quota);
+                    toast.success("全站每日额度已更新");
+                  })
+                  .catch((e) => {
+                    toast.error(e instanceof Error ? e.message : messageForImageJobError(e));
+                  })
+                  .finally(() => setSavingCap(false));
+              }}
+            >
+              <p className="text-sm text-muted">管理员：修改全站每日上限（含管理员自己）</p>
+              <label className="block space-y-1.5">
+                <span className="text-sm text-muted">每日额度</span>
+                <Input
+                  type="number"
+                  min={0}
+                  max={9999}
+                  step={1}
+                  value={capDraft}
+                  onChange={(e) => setCapDraft(e.target.value)}
+                  disabled={savingCap}
+                />
+              </label>
+              <Button type="submit" disabled={savingCap || loading}>
+                {savingCap ? "保存中…" : "保存全站额度"}
+              </Button>
+            </form>
+          ) : null}
+        </section>
       </main>
     </div>
   );

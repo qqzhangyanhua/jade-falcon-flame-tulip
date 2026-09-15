@@ -5,9 +5,16 @@ import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
+import { QuotaMeter } from "@/components/quota-meter";
 import { parseBrief, generateCandidate } from "@/lib/ai";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { createStudioProjectFn, listImageModelsFn, messageForImageJobError } from "@/lib/image-jobs";
+import {
+  createStudioProjectFn,
+  getDailyQuotaFn,
+  listImageModelsFn,
+  messageForImageJobError,
+  type StudioQuota,
+} from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
 import { fileToDataUrl } from "@/lib/resize-image";
 import { useStudio } from "@/lib/store";
@@ -31,12 +38,16 @@ export function BriefView() {
   const { user, isPending: authPending } = useCurrentUserState();
   const navigate = useNavigate();
   const [imagesUnavailable, setImagesUnavailable] = useState(false);
+  const [quota, setQuota] = useState<StudioQuota | null>(null);
 
   useEffect(() => {
     if (!user) return;
     void listImageModelsFn()
       .then((models) => setImagesUnavailable(models.length === 0))
       .catch(() => setImagesUnavailable(false));
+    void getDailyQuotaFn()
+      .then(setQuota)
+      .catch(() => setQuota(null));
   }, [user]);
 
   async function onFile(file: File) {
@@ -56,6 +67,10 @@ export function BriefView() {
     const text = brief.trim();
     if (!text) {
       toast.error("先写一句产品描述");
+      return;
+    }
+    if (quota && quota.remaining <= 0) {
+      toast.error("今日额度已用完");
       return;
     }
     setBusy(true);
@@ -100,6 +115,8 @@ export function BriefView() {
         }),
       );
       if (failures[0]) toast.error(failures[0]);
+      const nextQuota = await getDailyQuotaFn().catch(() => null);
+      if (nextQuota) setQuota(nextQuota);
     } catch (e) {
       toast.error(messageForImageJobError(e));
     } finally {
@@ -164,21 +181,32 @@ export function BriefView() {
           <Button
             className="mt-4 w-full"
             size="lg"
-            disabled={busy || authPending || imagesUnavailable}
+            disabled={
+              busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0)
+            }
             onClick={() => void start()}
           >
             {busy
               ? "正在解析并出四个方向…"
               : imagesUnavailable
                 ? "出图暂不可用"
-                : !user && !authPending
-                  ? "登录后生成四个方向"
-                  : "生成四个方向"}
-            {!busy && !imagesUnavailable ? <ArrowRight className="size-4" /> : null}
+                : quota && quota.remaining <= 0
+                  ? "今日额度已用完"
+                  : !user && !authPending
+                    ? "登录后生成四个方向"
+                    : "生成四个方向"}
+            {!busy && !imagesUnavailable && !(quota && quota.remaining <= 0) ? (
+              <ArrowRight className="size-4" />
+            ) : null}
           </Button>
-          <p className="mt-2 text-center text-xs text-subtle">
-            {imagesUnavailable ? "出图暂不可用" : "每次出图会调用模型，请确认描述后再点。"}
-          </p>
+          <div className="mt-2 flex flex-col items-center gap-1">
+            {user ? <QuotaMeter quota={quota} /> : null}
+            <p className="text-center text-xs text-subtle">
+              {imagesUnavailable
+                ? "出图暂不可用"
+                : "解析描述不扣额度；每个方向候选会占用 1 次今日额度。"}
+            </p>
+          </div>
         </div>
 
         {projects.length > 0 ? (

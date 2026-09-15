@@ -1,0 +1,154 @@
+.gitignore
+  h_4132837b09b7e7 2-3
+eslint.config.mjs
+  h_4132837b09b7e7 7,12
+next-env.d.ts
+  h_4132837b09b7e7 1-6
+next.config.ts
+  h_4132837b09b7e7 1-21
+package-lock.json
+  h_4132837b09b7e7 2,7,32,43,73-85,93-94,109-110,120-121,152-153,170-171,188-189,199-200,214-215,233-234,244-245,255-256,266-267,281-282,307-308,323-324,343-344,498-507,615-631,645-651,837-1208,1210-1213,1215-1221,1224-1230,1232-1240,1242-1257,1259-1265,1268-1274,1276-1279,1281-1287,1290-1296,1298-1301,1303,1306-1309,1312-1334,1336-1339,1341,1344-1401,1449-1582,1612-1613,1628-1629,1642-1643,1657-1658,1677-1678,2859,2876,2893,2910,2927,2944,2961,2978,2995,3012,3029,3046,3063,3080,3097,3114-3122,3624,3626-3627,3630,3633,3642-3643,3683-3684,3708-3709,3751-3752,3775-3776,3818-3819,3842-3843,3882-3883,3903-3904,3928-3929,3978-3979,4003-4004,4024-4025,4039-4040,4089-4090,4105-4106,4129-4130,4147-4148,4172-4173,4620-4622,4624-4625,4627-4630,4658-4659,4668,4688-4689,4709-4710,4882-4883,4950-4951,4974-4979,5036-5038,5044-5046,5068-5069,5226,5279-5280,5299-5301,5321-5322,5491-5514,5589-5591,5620,5630-5647,5652,5670-5672,5735,5745-5746,5798-5799,5823-5825,5911-5912,5952,5976-5977,5993-5998,6012-6013,6059-6060,6097,6118,6139,6160,6181,6202,6223,6244,6265,6286,6307,6362-6363,6403,6446-6449,6452-6456,6459,6462-6473,6476-6481,6484,6487,6490,6493,6498-6505,6507-6509,6511-6513,6515-6523,6531-6532,6633-6635,6736,6855,6901,7087-7088,7130-7140,7156-7157,7190-7192,7211-7212,7222-7223,7233-7234,7248-7310,7355-7356,7384-7385,7406-7428,7497,7593-7595,7609-7610,7679-7680,7696,7750-7751,7796-7797,7875-7876,7895-7897,7930-7931,7955-7957
+package.json
+  h_4132837b09b7e7 2,10-12,14,47,50,55-56,58-59,88
+postcss.config.mjs
+  h_4132837b09b7e7 1-8
+scripts/grok-pwa-plugin.test.mjs
+  h_4132837b09b7e7 483
+scripts/preview.mjs
+  h_4132837b09b7e7 90,320-321
+src/app/account/page.tsx
+  h_4132837b09b7e7 1,3-4
+src/app/actions/brief.ts
+  h_4132837b09b7e7 1-3,41-53
+src/app/actions/profile.ts
+  h_4132837b09b7e7 1-3,41-44,47,49-50,52-58,60,68-69
+src/app/actions/studio.ts
+  h_4132837b09b7e7 1-3,5-8,17-19,26-27,35-39,62-66,68-80,82-96,98-115,117-130,132-136,138-147,149-156,158-160,202-214,216,218-242,244,246-264,266,268-286,288,290-304,306-312,314-321,323-325,327-334,336-344
+src/app/api/auth/[...all]/route.ts
+  h_4132837b09b7e7 1,4
+src/app/api/images/[id]/route.ts
+  h_4132837b09b7e7 2,4-18,20-21
+src/app/auth/popup/route.ts
+  h_4132837b09b7e7 1-5
+src/app/error.tsx
+  h_4132837b09b7e7 1-2,13,15
+src/app/history/page.tsx
+  h_4132837b09b7e7 3-5
+src/app/layout.tsx
+  h_4132837b09b7e7 1-5,9-24,27-28,31-32
+src/app/login/page.tsx
+  h_4132837b09b7e7 1-5
+src/app/not-found.tsx
+  h_4132837b09b7e7 1-16
+src/app/page.tsx
+  h_4132837b09b7e7 1-5
+src/app/providers.tsx
+  h_4132837b09b7e7 1-18
+src/components/account-screen.tsx
+  h_4132837b09b7e7 1-2,10-12,15
+src/components/app-header.tsx
+  h_4132837b09b7e7 1-2,4,21
+src/components/auth-slot.tsx
+  h_4132837b09b7e7 1-2,4,38,54
+src/components/brief-view.tsx
+  h_4132837b09b7e7 1-2,4,12,15,18-20,42,67
+src/components/delete-project-control.tsx
+  h_4132837b09b7e7 1-2,7-8
+src/components/direction-view.tsx
+  h_4132837b09b7e7 1-2,12
+src/components/home-screen.tsx
+  h_4132837b09b7e7 1-2,9
+src/components/job-history-link.tsx
+  h_4132837b09b7e7 1-3,14
+src/components/job-history-view.tsx
+  h_4132837b09b7e7 1-2,4,9-10,24,69
+src/components/login-screen.tsx
+  h_4132837b09b7e7 1-2,4-5,26-27,43-50,92
+src/components/preview-host-bridge.tsx
+  h_4132837b09b7e7 1-2,4-5,9-12,20,22
+src/components/studio-view.tsx
+  h_4132837b09b7e7 1-2,15-19,21
+src/hooks/use-studio-image-gate.ts
+  h_4132837b09b7e7 1-2,8-10
+src/instrumentation.ts
+  h_4132837b09b7e7 1-7
+src/lib/app-data/client.server.ts
+  h_4132837b09b7e7 5-7,15,51,79,241,243,325,334,414,420-421
+src/lib/app-data/errors.ts
+  h_4132837b09b7e7 1-2
+src/lib/app-data/index.ts
+  h_4132837b09b7e7 6,12,17-21
+src/lib/app-data/login.ts
+  h_4132837b09b7e7 1
+src/lib/app-data/readiness.ts
+  h_4132837b09b7e7 1,5-8
+src/lib/app-data/server-only.ts
+  h_4132837b09b7e7 6
+src/lib/app-data/use-connector-readiness.ts
+  h_4132837b09b7e7 2-3,8-9
+src/lib/auth/client.ts
+  h_4132837b09b7e7 38
+src/lib/auth/gate-identity.server.ts
+  h_4132837b09b7e7 7
+src/lib/auth/gate-session.server.ts
+  h_4132837b09b7e7 9,23-41,88-96,98,126-132,164-170
+src/lib/auth/gates.tsx
+  h_4132837b09b7e7 1-4,43,46-54
+src/lib/auth/isolation.server.ts
+  h_4132837b09b7e7 1-2,5,10,13-15,26-32
+src/lib/auth/popup.server.ts
+  h_4132837b09b7e7 19
+src/lib/auth/server.ts
+  h_4132837b09b7e7 32,34,36,250-252,256-261
+src/lib/auth/session.ts
+  h_4132837b09b7e7 1-17
+src/lib/auth/use-current-user.ts
+  h_4132837b09b7e7 1-2
+src/lib/auth/verify.server.ts
+  h_4132837b09b7e7 1-2,62-67,69,71
+src/lib/db.ts
+  h_4132837b09b7e7 1-3,134-137,139-146,175-176
+src/lib/image-jobs/availability.ts
+  h_4132837b09b7e7 1-2,11-12
+src/lib/image-jobs/concurrency.ts
+  h_4132837b09b7e7 1-2
+src/lib/image-jobs/durable.ts
+  h_4132837b09b7e7 1-3,13
+src/lib/image-jobs/errors.ts
+  h_4132837b09b7e7 4
+src/lib/image-jobs/gateway.ts
+  h_4132837b09b7e7 1-6,14
+src/lib/image-jobs/index.ts
+  h_4132837b09b7e7 7-9,21
+src/lib/image-jobs/list-jobs.ts
+  h_4132837b09b7e7 1-2,6
+src/lib/image-jobs/memory.ts
+  h_4132837b09b7e7 1-6,19,29
+src/lib/image-jobs/projects.ts
+  h_4132837b09b7e7 1,6-7,13,19
+src/lib/image-jobs/quota-sql.ts
+  h_4132837b09b7e7 1-2,7-9
+src/lib/image-jobs/quota.ts
+  h_4132837b09b7e7 1,9-11
+src/lib/image-jobs/sql.ts
+  h_4132837b09b7e7 1-4,10,19,26
+src/lib/image-jobs/stores.ts
+  h_4132837b09b7e7 11
+src/lib/image-jobs/upstream.ts
+  h_4132837b09b7e7 5
+src/lib/multiplayer/p2p.ts
+  h_4132837b09b7e7 85
+tsconfig.json
+  h_4132837b09b7e7 4,7-8,10-17,20-21,23-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "aed52ca6a27390c6fdcec7bc2731cddc60ea3d5f",
+  "prompts": {},
+  "humans": {
+    "h_4132837b09b7e7": {
+      "author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

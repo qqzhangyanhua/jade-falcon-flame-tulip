@@ -1,0 +1,19 @@
+.gitignore
+  s_73ecbf2b545e30::t_174c42256e4b72 6-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "f6136fcfb1411d3f70d70bb898fe45652f930105",
+  "prompts": {},
+  "sessions": {
+    "s_73ecbf2b545e30": {
+      "agent_id": {
+        "tool": "grok",
+        "id": "01a0a2b7-5ede-76a0-8b27-201fe804ff2f",
+        "model": "grok-4.6"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

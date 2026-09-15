@@ -1,0 +1,42 @@
+public/favicon.svg
+  h_4132837b09b7e7 3
+src/app/globals.css
+  h_4132837b09b7e7 22-37,65-76
+src/components/app-header.tsx
+  h_4132837b09b7e7 9,20-25,27,31
+src/components/atmosphere-grid.tsx
+  h_4132837b09b7e7 1-39
+src/components/brief-view.tsx
+  h_4132837b09b7e7 5,8,10,25,34-60,159-170,172,175-186,188-270,274-309,311,313-316
+src/components/direction-view.tsx
+  h_4132837b09b7e7 25,27-31,33,35,43-44,48-53,58-59,61,77,83,85-86,107
+src/components/image-model-picker.tsx
+  h_4132837b09b7e7 2-3,9,14,18,23,26-41,43-44,46,49-51
+src/components/quota-meter.tsx
+  h_4132837b09b7e7 13-15,18,20-21,23,25,30-39
+src/components/studio-panels.tsx
+  h_4132837b09b7e7 6-9,11,14-17,41-62,65,71-76,89-91,94,100-104
+src/components/studio-tools.tsx
+  h_4132837b09b7e7 3,9-26,54-55,64,71,79-82,85,90,92,99,106-110,138,143,146-147,160,164
+src/components/studio-view.tsx
+  h_4132837b09b7e7 4,14,164,168-169,173-176,179-188,190-195,197,206-207,210,216-217,219,227-242,244,248,253,256,260,270,275,279-280,283-284,291-298,300,310,312-318,321,323,325-327,331-333,338-342,347-349,354-361,364-376,378,382-395,400-401,417-420,423
+src/components/ui/button.tsx
+  h_4132837b09b7e7 5-8,15,30
+src/components/ui/select.tsx
+  h_4132837b09b7e7 1-75
+src/components/ui/slider.tsx
+  h_4132837b09b7e7 1-35
+src/components/wordmark.tsx
+  h_4132837b09b7e7 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "51eeb947c0af619a9c5cec0439bc77ef893ff76d",
+  "prompts": {},
+  "humans": {
+    "h_4132837b09b7e7": {
+      "author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

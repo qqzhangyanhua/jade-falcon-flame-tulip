@@ -21,6 +21,7 @@ export type StudioProjectStore = {
   create: (record: StudioProjectRecord) => Promise<StudioProjectRecord>;
   get: (id: string) => Promise<StudioProjectRecord | null>;
   updateCurrentModel: (id: string, modelId: string) => Promise<StudioProjectRecord | null>;
+  markDeleted: (id: string, deletedAt: number) => Promise<StudioProjectRecord | null>;
 };
 
 export type ReservedJobInsert =
@@ -56,11 +57,13 @@ export type RoleStore = {
 export type ImageRevStore = {
   append: (record: ImageRevRecord) => Promise<ImageRevRecord>;
   listByJob: (jobId: string) => Promise<ImageRevRecord[]>;
+  deleteByProject: (projectId: string) => Promise<void>;
 };
 
 export type ImageBlobStore = {
   put: (record: ImageBlobRecord) => Promise<ImageBlobRecord>;
   get: (id: string) => Promise<ImageBlobRecord | null>;
+  deleteByProject: (projectId: string) => Promise<void>;
 };
 
 export type ImageJobGatewayDeps = {

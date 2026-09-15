@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ImagePlus, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { DeleteProjectControl } from "@/components/delete-project-control";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -214,18 +215,22 @@ export function BriefView() {
             <p className="mb-3 text-xs uppercase tracking-[0.18em] text-subtle">已有项目</p>
             <ul className="space-y-2">
               {projects.map((p) => (
-                <li key={p.id}>
+                <li
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-md border border-border bg-surface px-2 py-1"
+                >
                   <button
-                    className="flex min-h-11 w-full items-center justify-between rounded-md border border-border bg-surface px-4 py-3 text-left hover:border-accent"
+                    className="flex min-h-11 min-w-0 flex-1 items-center justify-between px-2 py-2 text-left hover:text-accent"
                     onClick={() => {
                       useStudio.setState({ currentId: p.id });
                     }}
                   >
-                    <span className="text-sm text-fg">{p.name}</span>
-                    <span className="text-xs text-subtle">
+                    <span className="truncate text-sm text-fg">{p.name}</span>
+                    <span className="ml-3 shrink-0 text-xs text-subtle">
                       {p.phase === "studio" ? "出图工作台" : p.phase === "direction" ? "选方向" : "草稿"}
                     </span>
                   </button>
+                  <DeleteProjectControl projectId={p.id} compact />
                 </li>
               ))}
             </ul>

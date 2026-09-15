@@ -13,6 +13,7 @@ export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   in_flight: "当前有进行中的出图",
   not_found: "项目不存在",
   upstream_failed: "出图失败",
+  project_deleted: "项目已删除",
 };
 
 export const CAPABILITY_DENIED_REASONS: Record<

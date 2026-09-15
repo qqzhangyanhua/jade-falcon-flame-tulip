@@ -8,6 +8,7 @@ export {
 export {
   composeImageFn,
   createStudioProjectFn,
+  deleteStudioProjectFn,
   ensureStudioProjectFn,
   generateCandidate,
   generateSlotFn,

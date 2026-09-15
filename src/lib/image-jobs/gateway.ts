@@ -26,6 +26,7 @@ export async function runImageJob(
   const project = await deps.projects.get(input.projectId);
   if (!project) return fail("not_found");
   if (project.userId !== input.userId) return fail("forbidden");
+  if (project.deletedAt !== null) return fail("project_deleted");
 
   const models = await deps.catalog.list();
   const current = project.currentImageModelId
@@ -84,6 +85,14 @@ export async function runImageJob(
       (await deps.jobs.finish(job.id, "failed", "upstream_failed", finishedAt)) ??
       { ...job, status: "failed" as const, errorCode: "upstream_failed" as const, finishedAt };
     return fail("upstream_failed", failed);
+  }
+
+  const still = await deps.projects.get(input.projectId);
+  if (still?.deletedAt !== null) {
+    const succeeded =
+      (await deps.jobs.finish(job.id, "succeeded", null, finishedAt)) ??
+      { ...job, status: "succeeded" as const, finishedAt };
+    return { ok: true, job: succeeded, revs: [] };
   }
 
   let revs: ImageRevRecord[] | null;

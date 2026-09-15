@@ -57,13 +57,14 @@ export function JobHistoryView() {
   if (!user) return <RedirectToSignIn />;
 
   function openJob(job: ImageJobHistoryItem) {
-    if (!isLivingStudioProject(job.projectId)) return;
+    if (!job.projectAlive || !isLivingStudioProject(job.projectId)) return;
     const opened = openStudioFromJob({
       projectId: job.projectId,
       slot: job.slot,
       jobId: job.id,
       imageUrls: job.imageUrls,
       action: job.action,
+      projectAlive: job.projectAlive,
     });
     if (opened) {
       void navigate({ to: "/" });
@@ -93,37 +94,58 @@ export function JobHistoryView() {
         ) : (
           <ul className="space-y-2">
             {jobs.map((job) => {
-              const living = projects.some((project) => project.id === job.projectId);
-              const projectName =
-                projects.find((project) => project.id === job.projectId)?.name ?? "项目已不在本地";
+              const living =
+                job.projectAlive && projects.some((project) => project.id === job.projectId);
+              const projectName = job.projectAlive
+                ? (projects.find((project) => project.id === job.projectId)?.name ?? "未命名项目")
+                : "已删除";
+              const thumb = job.projectAlive ? job.imageUrls[0] : undefined;
               const body = (
-                <>
-                  <span className="flex items-center justify-between gap-3">
-                    <span className="truncate font-medium text-fg">{projectName}</span>
-                    <time className="shrink-0 text-xs text-subtle">{formatJobTime(job.createdAt)}</time>
-                  </span>
-                  <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                    <span>{slotLabel(job.slot)}</span>
-                    <span>·</span>
-                    <span>{actionLabel(job.action)}</span>
-                    <span>·</span>
-                    <span>{job.displayNameSnapshot}</span>
-                    {job.modelDisabled ? (
-                      <span className="rounded-sm border border-border px-1.5 py-0.5 text-subtle">
-                        已停用
+                <span className="flex items-start gap-3">
+                  {thumb ? (
+                    <img
+                      src={thumb}
+                      alt=""
+                      className="h-12 w-16 shrink-0 rounded-md border border-border object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-[10px] text-subtle">
+                      {job.projectAlive ? "无图" : "已删除"}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="truncate font-medium text-fg">{projectName}</span>
+                      <time className="shrink-0 text-xs text-subtle">{formatJobTime(job.createdAt)}</time>
+                    </span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <span>{slotLabel(job.slot)}</span>
+                      <span>·</span>
+                      <span>{actionLabel(job.action)}</span>
+                      <span>·</span>
+                      <span>{job.displayNameSnapshot}</span>
+                      {job.modelDisabled ? (
+                        <span className="rounded-sm border border-border px-1.5 py-0.5 text-subtle">
+                          已停用
+                        </span>
+                      ) : null}
+                      {!job.projectAlive ? (
+                        <span className="rounded-sm border border-border px-1.5 py-0.5 text-subtle">
+                          已删除
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          "ml-auto",
+                          job.status === "failed" && "text-danger",
+                          job.status === "succeeded" && "text-fg",
+                        )}
+                      >
+                        {statusLabel(job.status)}
                       </span>
-                    ) : null}
-                    <span
-                      className={cn(
-                        "ml-auto",
-                        job.status === "failed" && "text-danger",
-                        job.status === "succeeded" && "text-fg",
-                      )}
-                    >
-                      {statusLabel(job.status)}
                     </span>
                   </span>
-                </>
+                </span>
               );
 
               return (

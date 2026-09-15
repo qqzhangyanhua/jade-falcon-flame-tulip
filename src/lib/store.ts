@@ -48,6 +48,7 @@ type State = {
   writebackStyle: (opts: { styleId: string; changeLog: string; dna: StyleDna }) => void;
   setStyleRev: (styleId: string, rev: number) => void;
   archiveStyle: (styleId: string) => void;
+  removeProject: (id: string) => void;
 };
 
 function patchProject(projects: Project[], id: string, fn: (p: Project) => Project): Project[] {
@@ -285,6 +286,12 @@ export const useStudio = create<State>()(
             ...p,
             styles: p.styles.map((st) => (st.id === styleId ? { ...st, currentRev: rev } : st)),
           })),
+        }));
+      },
+      removeProject: (id) => {
+        set((s) => ({
+          projects: s.projects.filter((project) => project.id !== id),
+          currentId: s.currentId === id ? null : s.currentId,
         }));
       },
       archiveStyle: (styleId) => {

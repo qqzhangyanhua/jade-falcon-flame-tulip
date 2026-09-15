@@ -1,4 +1,5 @@
 import { newEntityId } from "./ids.ts";
+import { isProjectAlive } from "./projects.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
 import type {
   DurableImageRef,
@@ -201,6 +202,8 @@ export async function listJobImages(
   const job = await deps.jobs.get(input.jobId);
   if (!job) return { ok: false, code: "not_found" };
   if (job.userId !== input.userId) return { ok: false, code: "forbidden" };
+  const project = await deps.projects.get(job.projectId);
+  if (!isProjectAlive(project)) return { ok: true, images: [] };
 
   const revs = await deps.revs.listByJob(input.jobId);
   const images: DurableImageRef[] = [];
@@ -225,6 +228,8 @@ export async function openJobImage(
   const blob = await deps.blobs.get(input.imageId);
   if (!blob) return { ok: false, code: "not_found" };
   if (blob.userId !== input.userId) return { ok: false, code: "forbidden" };
+  const project = await deps.projects.get(blob.projectId);
+  if (!isProjectAlive(project)) return { ok: false, code: "not_found" };
   return {
     ok: true,
     image: {

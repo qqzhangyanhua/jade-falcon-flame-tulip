@@ -10,6 +10,7 @@ import { runImageJob, unwrapImageJob } from "./gateway.ts";
 import { listUserJobs } from "./list-jobs.ts";
 import {
   createStudioProject,
+  deleteStudioProject,
   ensureStudioProject,
   getStudioImageState,
   listImageModelPicker,
@@ -296,6 +297,23 @@ export const composeImageFn = createServerFn({ method: "POST" })
       n: 1,
       imageUrl: data.imageUrl,
     });
+  });
+
+export const deleteStudioProjectFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(parseProjectId)
+  .handler(async ({ context, data }) => {
+    const deps = await createSqlGatewayDeps();
+    const project = unwrapProjectOp(
+      await deleteStudioProject(deps, {
+        userId: context.userId,
+        projectId: data.projectId,
+      }),
+    );
+    return {
+      id: project.id,
+      deletedAt: project.deletedAt,
+    };
   });
 
 export const listMyJobsFn = createServerFn({ method: "POST" })

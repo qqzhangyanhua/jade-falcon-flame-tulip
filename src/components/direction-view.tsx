@@ -1,6 +1,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { DeleteProjectControl } from "@/components/delete-project-control";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export function DirectionView() {
               }}
             />
             <QuotaMeter quota={imageGate?.quota} />
+            <DeleteProjectControl projectId={project.id} />
             <button
               type="button"
               className="h-11 px-2 text-sm text-muted hover:text-fg"

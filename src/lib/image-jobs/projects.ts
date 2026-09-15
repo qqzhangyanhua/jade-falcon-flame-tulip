@@ -5,7 +5,12 @@ import {
   resolveNewProjectModelId,
 } from "./availability.ts";
 import { ImageJobError } from "./errors.ts";
-import type { ModelCatalogStore, QuotaStore, StudioProjectStore } from "./stores.ts";
+import type {
+  ImageJobGatewayDeps,
+  ModelCatalogStore,
+  QuotaStore,
+  StudioProjectStore,
+} from "./stores.ts";
 import type {
   ImageJobErrorCode,
   PickerImageModel,
@@ -21,6 +26,27 @@ async function requireUser(userId: string): Promise<ImageJobErrorCode | null> {
   return userId ? null : "unauthorized";
 }
 
+export async function loadOwnedProject(
+  projects: StudioProjectStore,
+  input: { userId: string; projectId: string },
+  opts?: { allowDeleted?: boolean },
+): Promise<ProjectOpResult<StudioProjectRecord>> {
+  const authError = await requireUser(input.userId);
+  if (authError) return { ok: false, code: authError };
+
+  const project = await projects.get(input.projectId);
+  if (!project) return { ok: false, code: "not_found" };
+  if (project.userId !== input.userId) return { ok: false, code: "forbidden" };
+  if (project.deletedAt !== null && !opts?.allowDeleted) {
+    return { ok: false, code: "project_deleted" };
+  }
+  return { ok: true, value: project };
+}
+
+export function isProjectAlive(project: StudioProjectRecord | null): boolean {
+  return Boolean(project && project.deletedAt === null);
+}
+
 export async function createStudioProject(
   catalog: ModelCatalogStore,
   projects: StudioProjectStore,
@@ -33,6 +59,7 @@ export async function createStudioProject(
   const existing = await projects.get(id);
   if (existing) {
     if (existing.userId !== input.userId) return { ok: false, code: "forbidden" };
+    if (existing.deletedAt !== null) return { ok: false, code: "project_deleted" };
     return { ok: true, value: existing };
   }
 
@@ -43,6 +70,7 @@ export async function createStudioProject(
     userId: input.userId,
     currentImageModelId,
     createdAt: Date.now(),
+    deletedAt: null,
   });
   return { ok: true, value: created };
 }
@@ -63,12 +91,9 @@ export async function pickProjectImageModel(
   projects: StudioProjectStore,
   input: { userId: string; projectId: string; modelId: string },
 ): Promise<ProjectOpResult<StudioProjectRecord>> {
-  const authError = await requireUser(input.userId);
-  if (authError) return { ok: false, code: authError };
-
-  const project = await projects.get(input.projectId);
-  if (!project) return { ok: false, code: "not_found" };
-  if (project.userId !== input.userId) return { ok: false, code: "forbidden" };
+  const loaded = await loadOwnedProject(projects, input);
+  if (!loaded.ok) return loaded;
+  const project = loaded.value;
 
   const picker = listEnabledImagePicker(await catalog.list());
   if (picker.length === 0) return { ok: false, code: "images_unavailable" };
@@ -99,12 +124,9 @@ export async function getStudioImageState(
   quota: QuotaStore,
   input: { userId: string; projectId: string; now: number },
 ): Promise<ProjectOpResult<StudioImageState>> {
-  const authError = await requireUser(input.userId);
-  if (authError) return { ok: false, code: authError };
-
-  const project = await projects.get(input.projectId);
-  if (!project) return { ok: false, code: "not_found" };
-  if (project.userId !== input.userId) return { ok: false, code: "forbidden" };
+  const loaded = await loadOwnedProject(projects, input);
+  if (!loaded.ok) return loaded;
+  const project = loaded.value;
 
   const models = await catalog.list();
   const snapshot = await quota.snapshot(input.userId, input.now);
@@ -116,6 +138,22 @@ export async function getStudioImageState(
       quota: snapshot,
     }),
   };
+}
+
+export async function deleteStudioProject(
+  deps: ImageJobGatewayDeps,
+  input: { userId: string; projectId: string },
+): Promise<ProjectOpResult<StudioProjectRecord>> {
+  const loaded = await loadOwnedProject(deps.projects, input, { allowDeleted: true });
+  if (!loaded.ok) return loaded;
+
+  const now = deps.now?.() ?? Date.now();
+  const marked = await deps.projects.markDeleted(loaded.value.id, now);
+  if (!marked) return { ok: false, code: "not_found" };
+
+  await deps.blobs.deleteByProject(marked.id);
+  await deps.revs.deleteByProject(marked.id);
+  return { ok: true, value: marked };
 }
 
 export function unwrapProjectOp<T>(result: ProjectOpResult<T>): T {

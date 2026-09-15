@@ -1,5 +1,6 @@
 import { newEntityId } from "./ids.ts";
 import { evaluateImageAction } from "./availability.ts";
+import { resolveJobSlot } from "./concurrency.ts";
 import { ImageJobError } from "./errors.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
 import type {
@@ -43,6 +44,7 @@ export async function runImageJob(
     userId: input.userId,
     projectId: input.projectId,
     action: input.action,
+    slot: resolveJobSlot(input.action, input.slot),
     catalogModelId: verdict.model.id,
     upstreamModelId: verdict.model.upstreamId,
     displayNameSnapshot: verdict.model.displayName,

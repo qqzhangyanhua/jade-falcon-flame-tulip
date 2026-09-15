@@ -18,20 +18,57 @@ import {
 } from "./projects.ts";
 import { DEFAULT_DAILY_IMAGE_CAP, resolveStudioRole, setGlobalDailyCap } from "./quota.ts";
 import type { CatalogModel, ImageJobAction, RunImageJobInput } from "./types.ts";
-import { IMAGE_JOB_ACTIONS, IMAGE_JOB_ERROR_CODES } from "./types.ts";
+import { IMAGE_JOB_ACTIONS, IMAGE_JOB_ERROR_CODES, IMAGE_JOB_SLOTS } from "./types.ts";
 
 function jobInput(
   world: ReturnType<typeof createMemoryGatewayWorld>,
   patch: Partial<RunImageJobInput> = {},
 ): RunImageJobInput {
+  const action = patch.action ?? "generate";
   return {
     userId: world.userId,
     projectId: world.projectId,
-    action: "generate",
+    action,
+    slot: action === "direction" ? null : "kv",
     prompt: "a quiet editorial board",
     aspect: "16:9",
     n: 2,
     ...patch,
+    action,
+    slot: patch.slot !== undefined ? patch.slot : action === "direction" ? null : "kv",
+  };
+}
+
+function holdUpstream() {
+  let releaseHeld = (): void => {};
+  let startedCount = 0;
+  const waiters: Array<() => void> = [];
+  const held = new Promise<void>((resolve) => {
+    releaseHeld = resolve;
+  });
+  return {
+    release(): void {
+      releaseHeld();
+    },
+    started(): number {
+      return startedCount;
+    },
+    waitForStarts(n: number): Promise<void> {
+      return new Promise((resolve) => {
+        const check = (): void => {
+          if (startedCount >= n) resolve();
+          else waiters.push(check);
+        };
+        check();
+      });
+    },
+    async run() {
+      startedCount += 1;
+      const queued = waiters.splice(0);
+      for (const notify of queued) notify();
+      await held;
+      return { ok: true as const, urls: ["https://img.example/held.png"] };
+    },
   };
 }
 
@@ -274,9 +311,11 @@ describe("image job gateway", () => {
     assert.equal(world.calls.length, 0);
   });
 
-  it("includes quota_exceeded in the closed client error set", () => {
+  it("includes quota_exceeded and in_flight in the closed client error set", () => {
     assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("quota_exceeded"));
+    assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("in_flight"));
     assert.equal(IMAGE_JOB_USER_MESSAGES.quota_exceeded, "今日额度已用完");
+    assert.equal(IMAGE_JOB_USER_MESSAGES.in_flight, "当前有进行中的出图");
     assert.equal(
       (IMAGE_JOB_ACTIONS as readonly string[]).includes("parse"),
       false,
@@ -467,6 +506,200 @@ describe("daily quota (Beijing time)", () => {
     assert.equal(after.value.actions.generate.enabled, false);
     assert.equal(after.value.actions.generate.code, "quota_exceeded");
     assert.equal(after.value.actions.generate.reason, "今日额度已用完");
+  });
+});
+
+describe("parallel limits", () => {
+  it("lets three slots of one project run together", async () => {
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      cap: 10,
+      upstream: () => hold.run(),
+    });
+    const pending = IMAGE_JOB_SLOTS.map((slot) =>
+      runImageJob(world, jobInput(world, { slot, n: 1 })),
+    );
+    await hold.waitForStarts(3);
+    assert.equal(world.calls.length, 3);
+    const used = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(used.used, 3);
+
+    hold.release();
+    const results = await Promise.all(pending);
+    assert.ok(results.every((result) => result.ok));
+    const slots = results.flatMap((result) => (result.ok ? [result.job.slot] : []));
+    assert.deepEqual(new Set(slots), new Set(IMAGE_JOB_SLOTS));
+    assert.ok(results.every((result) => result.ok && result.job.status === "succeeded"));
+  });
+
+  it("rejects a second job on the same running slot without reserve or upstream", async () => {
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      cap: 5,
+      upstream: () => hold.run(),
+    });
+    const first = runImageJob(world, jobInput(world, { slot: "kv", n: 1 }));
+    await hold.waitForStarts(1);
+    assert.equal(world.calls.length, 1);
+
+    const blocked = await runImageJob(
+      world,
+      jobInput(world, { action: "tune", slot: "kv", n: 1, imageUrl: "https://img.example/src.png" }),
+    );
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.equal(blocked.code, "in_flight");
+    assert.equal(blocked.job, undefined);
+    assert.equal(world.calls.length, 1);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 1);
+    assert.equal(messageForImageJobError(new Error("in_flight")), "当前有进行中的出图");
+
+    hold.release();
+    const finished = await first;
+    assert.equal(finished.ok, true);
+    assert.equal(world.calls.length, 1);
+
+    const retry = await runImageJob(world, jobInput(world, { slot: "kv", n: 1 }));
+    assert.equal(retry.ok, true);
+    assert.equal(world.calls.length, 2);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 2);
+  });
+
+  it("rejects a second project while the first has running jobs", async () => {
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      cap: 5,
+      upstream: () => hold.run(),
+    });
+    await world.projects.create({
+      id: "prj_b",
+      userId: world.userId,
+      currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
+      createdAt: 1,
+    });
+
+    const first = runImageJob(world, jobInput(world, { slot: "ui_hero", n: 1 }));
+    await hold.waitForStarts(1);
+
+    const blocked = await runImageJob(
+      world,
+      jobInput(world, { projectId: "prj_b", slot: "kv", n: 1 }),
+    );
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.equal(blocked.code, "in_flight");
+    assert.equal(world.calls.length, 1);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 1);
+
+    hold.release();
+    assert.equal((await first).ok, true);
+
+    const later = await runImageJob(
+      world,
+      jobInput(world, { projectId: "prj_b", slot: "kv", n: 1 }),
+    );
+    assert.equal(later.ok, true);
+    assert.equal(world.calls.length, 2);
+  });
+
+  it("lets four direction candidates run together and lock that project", async () => {
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      cap: 10,
+      upstream: () => hold.run(),
+    });
+    await world.projects.create({
+      id: "prj_b",
+      userId: world.userId,
+      currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
+      createdAt: 1,
+    });
+
+    const pending = [0, 1, 2, 3].map(() =>
+      runImageJob(world, jobInput(world, { action: "direction", n: 1 })),
+    );
+    await hold.waitForStarts(4);
+    assert.equal(world.calls.length, 4);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 4);
+
+    const fifth = await runImageJob(world, jobInput(world, { action: "direction", n: 1 }));
+    assert.equal(fifth.ok, false);
+    if (!fifth.ok) assert.equal(fifth.code, "in_flight");
+    assert.equal(world.calls.length, 4);
+
+    const otherProject = await runImageJob(
+      world,
+      jobInput(world, { projectId: "prj_b", action: "direction", n: 1 }),
+    );
+    assert.equal(otherProject.ok, false);
+    if (!otherProject.ok) assert.equal(otherProject.code, "in_flight");
+    assert.equal(world.calls.length, 4);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 4);
+
+    hold.release();
+    const results = await Promise.all(pending);
+    assert.ok(results.every((result) => result.ok && result.job.slot === null));
+    assert.ok(results.every((result) => result.ok && result.job.status === "succeeded"));
+  });
+
+  it("does not start a queued follow-up after a running job finishes", async () => {
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      cap: 5,
+      upstream: () => hold.run(),
+    });
+    const first = runImageJob(world, jobInput(world, { slot: "web_home", n: 1 }));
+    await hold.waitForStarts(1);
+
+    const rejected = await runImageJob(world, jobInput(world, { slot: "web_home", n: 1 }));
+    assert.equal(rejected.ok, false);
+    if (!rejected.ok) assert.equal(rejected.code, "in_flight");
+
+    hold.release();
+    assert.equal((await first).ok, true);
+    assert.equal(world.calls.length, 1);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 1);
+  });
+
+  it("keeps the accepted model frozen when the project current model changes", async () => {
+    const extra: CatalogModel = {
+      id: "mdl-other",
+      kind: "image",
+      displayName: "Aurora Imagine",
+      upstreamId: "aurora-upstream",
+      enabled: true,
+      capabilities: ["generate"],
+      isAdminDefault: false,
+    };
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      models: [...defaultCatalogSeed(), extra],
+      upstream: () => hold.run(),
+    });
+
+    const pending = runImageJob(world, jobInput(world, { slot: "kv", n: 1 }));
+    await hold.waitForStarts(1);
+
+    const picked = await pickProjectImageModel(world.catalog, world.projects, {
+      userId: world.userId,
+      projectId: world.projectId,
+      modelId: extra.id,
+    });
+    assert.equal(picked.ok, true);
+    if (picked.ok) assert.equal(picked.value.currentImageModelId, extra.id);
+
+    hold.release();
+    const result = await pending;
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.catalogModelId, DEFAULT_IMAGE_MODEL_ID);
+    assert.equal(result.job.upstreamModelId, "grok-imagine-image-2.0");
+    assert.equal(result.job.displayNameSnapshot, "Grok Imagine 2.0");
+    assert.equal(world.calls[0]?.upstreamModelId, "grok-imagine-image-2.0");
+
+    const next = await runImageJob(world, jobInput(world, { slot: "kv", n: 1 }));
+    assert.equal(next.ok, true);
+    if (!next.ok) return;
+    assert.equal(next.job.catalogModelId, extra.id);
+    assert.equal(world.calls[1]?.upstreamModelId, "aurora-upstream");
   });
 });
 

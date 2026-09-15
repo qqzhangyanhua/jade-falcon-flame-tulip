@@ -7,6 +7,10 @@ export const IMAGE_JOB_ACTIONS = [
 
 export type ImageJobAction = (typeof IMAGE_JOB_ACTIONS)[number];
 
+export const IMAGE_JOB_SLOTS = ["ui_hero", "kv", "web_home"] as const;
+
+export type ImageJobSlot = (typeof IMAGE_JOB_SLOTS)[number];
+
 export const IMAGE_JOB_ERROR_CODES = [
   "unauthorized",
   "forbidden",
@@ -15,6 +19,7 @@ export const IMAGE_JOB_ERROR_CODES = [
   "images_unavailable",
   "capability_denied",
   "quota_exceeded",
+  "in_flight",
   "upstream_failed",
 ] as const;
 
@@ -46,6 +51,7 @@ export type ImageJobRecord = {
   userId: string;
   projectId: string;
   action: ImageJobAction;
+  slot: ImageJobSlot | null;
   catalogModelId: string;
   upstreamModelId: string;
   displayNameSnapshot: string;
@@ -99,6 +105,8 @@ export type RunImageJobInput = {
   userId: string;
   projectId: string;
   action: ImageJobAction;
+  /** Named material slot; direction candidates always persist as null. */
+  slot?: ImageJobSlot | null;
   prompt: string;
   aspect?: string;
   n?: number;

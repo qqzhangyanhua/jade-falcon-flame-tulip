@@ -23,7 +23,7 @@ export type StudioProjectStore = {
 
 export type ReservedJobInsert =
   | { ok: true; job: ImageJobRecord }
-  | { ok: false; code: "quota_exceeded" };
+  | { ok: false; code: "quota_exceeded" | "in_flight" };
 
 export type ImageJobStore = {
   /** Insert a running job and reserve today's cap in one atomic step. */

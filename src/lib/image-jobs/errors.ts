@@ -10,6 +10,7 @@ export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   model_disabled: "当前模型已停用，请另选模型",
   capability_denied: "当前模型不支持该操作",
   quota_exceeded: "今日额度已用完",
+  in_flight: "当前有进行中的出图",
   not_found: "项目不存在",
   upstream_failed: "出图失败",
 };

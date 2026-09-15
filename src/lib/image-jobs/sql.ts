@@ -1,7 +1,13 @@
 import type { Sql } from "../db.ts";
 import { beijingCalendarDay } from "./beijing-day.ts";
+import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency.ts";
 import { DEFAULT_DAILY_IMAGE_CAP } from "./quota.ts";
-import { IMAGE_JOB_ACTIONS, type ImageJobAction } from "./types.ts";
+import {
+  IMAGE_JOB_ACTIONS,
+  IMAGE_JOB_SLOTS,
+  type ImageJobAction,
+  type ImageJobSlot,
+} from "./types.ts";
 import type {
   CatalogModel,
   ImageJobErrorCode,
@@ -39,6 +45,7 @@ type JobRow = {
   user_id: string;
   project_id: string;
   action: string;
+  slot: string | null;
   catalog_model_id: string;
   upstream_model_id: string;
   display_name_snapshot: string;
@@ -46,6 +53,10 @@ type JobRow = {
   error_code: string | null;
   created_at_ms: number;
   finished_at_ms: number | null;
+};
+
+type ReserveRow = JobRow & {
+  reject_code: string | null;
 };
 
 type RevRow = {
@@ -57,6 +68,19 @@ type RevRow = {
   action: string;
   created_at_ms: number;
 };
+
+function parseSlot(raw: string | null): ImageJobSlot | null {
+  if (raw && (IMAGE_JOB_SLOTS as readonly string[]).includes(raw)) {
+    return raw as ImageJobSlot;
+  }
+  return null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const code = "code" in err ? err.code : undefined;
+  return code === "23505";
+}
 
 function parseCapabilities(raw: string): ImageJobAction[] {
   return raw
@@ -99,6 +123,7 @@ function toJob(row: JobRow): ImageJobRecord {
     userId: row.user_id,
     projectId: row.project_id,
     action,
+    slot: parseSlot(row.slot),
     catalogModelId: row.catalog_model_id,
     upstreamModelId: row.upstream_model_id,
     displayNameSnapshot: row.display_name_snapshot,
@@ -210,66 +235,118 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
   return {
     async insertReserved(record) {
       const beijingDay = beijingCalendarDay(record.createdAt);
-      const rows = await sql<JobRow>`
-        with cap_row as (
-          select coalesce(
-            (
-              select case
-                when value ~ '^[0-9]+$' then value::int
-                else ${DEFAULT_DAILY_IMAGE_CAP}
-              end
-              from studio_settings
-              where key = 'daily_image_cap'
-            ),
-            ${DEFAULT_DAILY_IMAGE_CAP}
-          ) as n
-        ),
-        reserved as (
-          insert into image_quota_days (user_id, beijing_day, used)
-          select ${record.userId}, ${beijingDay}::date, 1
-          from cap_row
-          where cap_row.n > 0
-          on conflict (user_id, beijing_day) do update
-            set used = image_quota_days.used + 1
-            where image_quota_days.used < (select n from cap_row)
-          returning used
-        ),
-        inserted as (
-          insert into image_jobs (
-            id, user_id, project_id, action,
-            catalog_model_id, upstream_model_id, display_name_snapshot,
-            status, error_code, created_at, finished_at
+      try {
+        const rows = await sql<ReserveRow>`
+          with gate as (
+            select
+              case
+                when exists (
+                  select 1 from image_jobs
+                  where user_id = ${record.userId}
+                    and status = 'running'
+                    and project_id <> ${record.projectId}
+                ) then 'in_flight'
+                when ${record.slot}::text is not null and exists (
+                  select 1 from image_jobs
+                  where user_id = ${record.userId}
+                    and status = 'running'
+                    and project_id = ${record.projectId}
+                    and slot is not distinct from ${record.slot}
+                ) then 'in_flight'
+                when ${record.slot}::text is null and (
+                  select count(*)::int from image_jobs
+                  where user_id = ${record.userId}
+                    and status = 'running'
+                    and project_id = ${record.projectId}
+                    and slot is null
+                ) >= ${MAX_PARALLEL_DIRECTION_JOBS} then 'in_flight'
+                else null
+              end as code
+          ),
+          cap_row as (
+            select coalesce(
+              (
+                select case
+                  when value ~ '^[0-9]+$' then value::int
+                  else ${DEFAULT_DAILY_IMAGE_CAP}
+                end
+                from studio_settings
+                where key = 'daily_image_cap'
+              ),
+              ${DEFAULT_DAILY_IMAGE_CAP}
+            ) as n
+          ),
+          reserved as (
+            insert into image_quota_days (user_id, beijing_day, used)
+            select ${record.userId}, ${beijingDay}::date, 1
+            from cap_row
+            where cap_row.n > 0
+              and (select code from gate) is null
+            on conflict (user_id, beijing_day) do update
+              set used = image_quota_days.used + 1
+              where image_quota_days.used < (select n from cap_row)
+                and (select code from gate) is null
+            returning used
+          ),
+          inserted as (
+            insert into image_jobs (
+              id, user_id, project_id, action, slot,
+              catalog_model_id, upstream_model_id, display_name_snapshot,
+              status, error_code, created_at, finished_at
+            )
+            select
+              ${record.id},
+              ${record.userId},
+              ${record.projectId},
+              ${record.action},
+              ${record.slot},
+              ${record.catalogModelId},
+              ${record.upstreamModelId},
+              ${record.displayNameSnapshot},
+              ${record.status},
+              ${record.errorCode},
+              to_timestamp(${record.createdAt / 1000}),
+              null
+            from reserved
+            returning
+              id, user_id, project_id, action, slot,
+              catalog_model_id, upstream_model_id, display_name_snapshot,
+              status, error_code,
+              (extract(epoch from created_at) * 1000) as created_at_ms,
+              case when finished_at is null then null
+                   else extract(epoch from finished_at) * 1000 end as finished_at_ms
           )
           select
-            ${record.id},
-            ${record.userId},
-            ${record.projectId},
-            ${record.action},
-            ${record.catalogModelId},
-            ${record.upstreamModelId},
-            ${record.displayNameSnapshot},
-            ${record.status},
-            ${record.errorCode},
-            to_timestamp(${record.createdAt / 1000}),
-            null
-          from reserved
-          returning
-            id, user_id, project_id, action,
-            catalog_model_id, upstream_model_id, display_name_snapshot,
-            status, error_code,
-            (extract(epoch from created_at) * 1000) as created_at_ms,
-            case when finished_at is null then null
-                 else extract(epoch from finished_at) * 1000 end as finished_at_ms
-        )
-        select * from inserted
-      `;
-      if (!rows[0]) return { ok: false, code: "quota_exceeded" };
-      return { ok: true, job: toJob(rows[0]) };
+            gate.code as reject_code,
+            inserted.id,
+            inserted.user_id,
+            inserted.project_id,
+            inserted.action,
+            inserted.slot,
+            inserted.catalog_model_id,
+            inserted.upstream_model_id,
+            inserted.display_name_snapshot,
+            inserted.status,
+            inserted.error_code,
+            inserted.created_at_ms,
+            inserted.finished_at_ms
+          from gate
+          left join inserted on true
+        `;
+        const row = rows[0];
+        if (!row) return { ok: false, code: "quota_exceeded" };
+        if (row.reject_code === "in_flight") return { ok: false, code: "in_flight" };
+        if (!row.id) return { ok: false, code: "quota_exceeded" };
+        return { ok: true, job: toJob(row) };
+      } catch (err) {
+        if (isUniqueViolation(err)) return { ok: false, code: "in_flight" };
+        throw err;
+      }
     },
     async get(id) {
       const rows = await sql<JobRow>`
         select
-          id, user_id, project_id, action,
+          id, user_id, project_id, action, slot,
           catalog_model_id, upstream_model_id, display_name_snapshot,
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
@@ -289,7 +366,7 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           finished_at = to_timestamp(${finishedAt / 1000})
         where id = ${id}
         returning
-          id, user_id, project_id, action,
+          id, user_id, project_id, action, slot,
           catalog_model_id, upstream_model_id, display_name_snapshot,
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,

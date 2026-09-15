@@ -173,6 +173,7 @@ async function runOwnedImageJob(
   input: {
     projectId: string;
     action: ImageJobAction;
+    slot?: Slot | null;
     prompt: string;
     aspect: string;
     n: number;
@@ -186,6 +187,7 @@ async function runOwnedImageJob(
       userId,
       projectId: input.projectId,
       action: input.action,
+      slot: input.slot ?? null,
       prompt: input.prompt,
       aspect: input.aspect,
       n: input.n,
@@ -208,6 +210,7 @@ export const generateCandidate = createServerFn({ method: "POST" })
     return runOwnedImageJob(context.userId, {
       projectId: data.projectId,
       action: "direction",
+      slot: null,
       prompt: candidatePrompt(preset.dna, data.product),
       aspect: SLOT_ASPECT.candidate,
       n: 1,
@@ -234,6 +237,7 @@ export const generateSlotFn = createServerFn({ method: "POST" })
     return runOwnedImageJob(context.userId, {
       projectId: data.projectId,
       action: "generate",
+      slot: data.slot,
       prompt,
       aspect: SLOT_ASPECT[data.slot],
       n: 2,
@@ -257,6 +261,7 @@ export const tuneImageFn = createServerFn({ method: "POST" })
     return runOwnedImageJob(context.userId, {
       projectId: data.projectId,
       action: "tune",
+      slot: data.slot,
       prompt: tunePrompt(data.dna, data.instruction),
       aspect: SLOT_ASPECT[data.slot],
       n: 1,
@@ -279,6 +284,7 @@ export const composeImageFn = createServerFn({ method: "POST" })
     return runOwnedImageJob(context.userId, {
       projectId: data.projectId,
       action: "compose",
+      slot: data.slot,
       prompt: tunePrompt(data.dna, data.instruction),
       aspect: SLOT_ASPECT[data.slot],
       n: 1,

@@ -37,6 +37,7 @@ export type ImageRev = {
   diff: string;
   writeback: "none" | "promoted";
   styleRev: number;
+  jobId?: string;
 };
 
 export type Asset = {

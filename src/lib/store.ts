@@ -42,6 +42,7 @@ type State = {
     diff: string;
     parentId: string | null;
     writeback?: ImageRev["writeback"];
+    jobId?: string;
   }) => string[];
   adoptImage: (styleId: string, slot: Slot, imageId: string) => void;
   writebackStyle: (opts: { styleId: string; changeLog: string; dna: StyleDna }) => void;
@@ -186,7 +187,7 @@ export const useStudio = create<State>()(
         if (!id) return;
         set((s) => ({ projects: patchProject(s.projects, id, (p) => ({ ...p, mode })) }));
       },
-      addImageRevs: ({ styleId, slot, urls, action, diff, parentId, writeback = "none" }) => {
+      addImageRevs: ({ styleId, slot, urls, action, diff, parentId, writeback = "none", jobId }) => {
         const ids: string[] = [];
         const pid = get().currentId;
         if (!pid) return ids;
@@ -209,6 +210,7 @@ export const useStudio = create<State>()(
                   diff,
                   writeback,
                   styleRev: st.currentRev,
+                  jobId,
                 });
               }
               const trimmed = nextRevs.slice(-10);

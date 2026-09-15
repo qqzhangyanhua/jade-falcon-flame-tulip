@@ -7,6 +7,7 @@ import type { Slot, StyleDna } from "@/lib/types";
 import { fetchRemoteImage, listJobImages, openJobImage } from "./durable.ts";
 import { ImageJobError } from "./errors.ts";
 import { runImageJob, unwrapImageJob } from "./gateway.ts";
+import { listUserJobs } from "./list-jobs.ts";
 import {
   createStudioProject,
   ensureStudioProject,
@@ -28,6 +29,7 @@ import type { ImageJobGatewayDeps } from "./stores.ts";
 import { createXaiImageUpstream } from "./upstream.ts";
 import type {
   ImageJobAction,
+  ImageJobHistoryItem,
   PickerImageModel,
   StudioImageState,
   StudioQuota,
@@ -294,6 +296,15 @@ export const composeImageFn = createServerFn({ method: "POST" })
       n: 1,
       imageUrl: data.imageUrl,
     });
+  });
+
+export const listMyJobsFn = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<ImageJobHistoryItem[]> => {
+    const deps = await createSqlGatewayDeps();
+    const result = await listUserJobs(deps, { userId: context.userId });
+    if (!result.ok) throw new ImageJobError(result.code);
+    return result.jobs;
   });
 
 export const listJobImagesFn = createServerFn({ method: "POST" })

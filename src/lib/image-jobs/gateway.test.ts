@@ -5,6 +5,7 @@ import { beijingCalendarDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES, messageForImageJobError } from "./errors.ts";
 import { DURABLE_IMAGE_PATH_PREFIX, listJobImages, openJobImage } from "./durable.ts";
 import { runImageJob } from "./gateway.ts";
+import { listUserJobs } from "./list-jobs.ts";
 import {
   DEFAULT_CHAT_MODEL_ID,
   DEFAULT_IMAGE_MODEL_ID,
@@ -975,5 +976,128 @@ describe("durable image copies", () => {
       tuned.job.id,
       tuned.revs.map((rev) => rev.url),
     );
+  });
+});
+
+describe("list jobs", () => {
+  it("scopes the list to the caller and returns newest first", async () => {
+    let now = 1_700_000_000_000;
+    const world = createMemoryGatewayWorld({
+      userId: "designer-1",
+      now: () => now,
+    });
+    await world.projects.create({
+      id: "prj-other",
+      userId: "admin-1",
+      currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
+      createdAt: 1,
+    });
+
+    const older = await runImageJob(
+      world,
+      jobInput(world, { userId: "designer-1", action: "generate", n: 1 }),
+    );
+    assert.equal(older.ok, true);
+    now += 1_000;
+    const newer = await runImageJob(
+      world,
+      jobInput(world, { userId: "designer-1", action: "tune", n: 1, imageUrl: "https://img.example/src.png" }),
+    );
+    assert.equal(newer.ok, true);
+    now += 1_000;
+    const adminJob = await runImageJob(
+      world,
+      jobInput(world, {
+        userId: "admin-1",
+        projectId: "prj-other",
+        action: "compose",
+        n: 1,
+        imageUrl: "https://img.example/src.png",
+      }),
+    );
+    assert.equal(adminJob.ok, true);
+
+    const designerList = await listUserJobs(world, { userId: "designer-1" });
+    assert.equal(designerList.ok, true);
+    if (!designerList.ok) return;
+    assert.deepEqual(
+      designerList.jobs.map((job) => job.id),
+      [newer.ok ? newer.job.id : "", older.ok ? older.job.id : ""],
+    );
+    assert.deepEqual(
+      designerList.jobs.map((job) => job.action),
+      ["tune", "generate"],
+    );
+    assert.ok(designerList.jobs.every((job) => job.projectId === world.projectId));
+
+    const adminList = await listUserJobs(world, { userId: "admin-1" });
+    assert.equal(adminList.ok, true);
+    if (!adminList.ok) return;
+    assert.equal(adminList.jobs.length, 1);
+    assert.equal(adminList.jobs[0]?.id, adminJob.ok ? adminJob.job.id : "");
+    assert.equal(adminList.jobs[0]?.action, "compose");
+    assert.ok(!adminList.jobs.some((job) => job.id === (newer.ok ? newer.job.id : "")));
+  });
+
+  it("keeps the write-time snapshot name after an admin rename", async () => {
+    const world = createMemoryGatewayWorld();
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.displayNameSnapshot, "Grok Imagine 2.0");
+
+    await world.catalog.setDisplayName(DEFAULT_IMAGE_MODEL_ID, "Renamed Imagine");
+    const listed = await listUserJobs(world, { userId: world.userId });
+    assert.equal(listed.ok, true);
+    if (!listed.ok) return;
+    assert.equal(listed.jobs.length, 1);
+    assert.equal(listed.jobs[0]?.displayNameSnapshot, "Grok Imagine 2.0");
+    const live = await world.catalog.get(DEFAULT_IMAGE_MODEL_ID);
+    assert.equal(live?.displayName, "Renamed Imagine");
+  });
+
+  it("marks 已停用 from the live catalog flag, not the write-time snapshot", async () => {
+    const world = createMemoryGatewayWorld();
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+
+    const before = await listUserJobs(world, { userId: world.userId });
+    assert.equal(before.ok, true);
+    if (!before.ok) return;
+    assert.equal(before.jobs[0]?.modelDisabled, false);
+    assert.equal(before.jobs[0]?.displayNameSnapshot, "Grok Imagine 2.0");
+    assert.ok(before.jobs[0]?.imageUrls[0]?.startsWith(DURABLE_IMAGE_PATH_PREFIX));
+
+    await world.catalog.setEnabled(DEFAULT_IMAGE_MODEL_ID, false);
+    await world.catalog.setDisplayName(DEFAULT_IMAGE_MODEL_ID, "Should Not Appear");
+    const disabled = await listUserJobs(world, { userId: world.userId });
+    assert.equal(disabled.ok, true);
+    if (!disabled.ok) return;
+    assert.equal(disabled.jobs[0]?.modelDisabled, true);
+    assert.equal(disabled.jobs[0]?.displayNameSnapshot, "Grok Imagine 2.0");
+
+    await world.catalog.setEnabled(DEFAULT_IMAGE_MODEL_ID, true);
+    const reenabled = await listUserJobs(world, { userId: world.userId });
+    assert.equal(reenabled.ok, true);
+    if (!reenabled.ok) return;
+    assert.equal(reenabled.jobs[0]?.modelDisabled, false);
+    assert.equal(reenabled.jobs[0]?.displayNameSnapshot, "Grok Imagine 2.0");
+  });
+
+  it("rejects an empty caller and never lists another user's jobs", async () => {
+    const world = createMemoryGatewayWorld({ userId: "designer-1" });
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, true);
+
+    const anon = await listUserJobs(world, { userId: "" });
+    assert.equal(anon.ok, false);
+    if (anon.ok) return;
+    assert.equal(anon.code, "unauthorized");
+
+    const stranger = await listUserJobs(world, { userId: "admin-looking-around" });
+    assert.equal(stranger.ok, true);
+    if (!stranger.ok) return;
+    assert.deepEqual(stranger.jobs, []);
   });
 });

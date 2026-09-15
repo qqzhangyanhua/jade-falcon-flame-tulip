@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { AuthSlot } from "@/components/auth-slot";
+import { JobHistoryLink } from "@/components/job-history-link";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +23,7 @@ export function AppHeader({
       )}
       <div className="flex items-center gap-2">
         {extra}
+        <JobHistoryLink />
         <AuthSlot />
       </div>
     </header>

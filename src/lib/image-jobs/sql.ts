@@ -398,6 +398,21 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
       `;
       return rows[0] ? toJob(rows[0]) : null;
     },
+    async listByUser(userId) {
+      const rows = await sql<JobRow>`
+        select
+          id, user_id, project_id, action, slot,
+          catalog_model_id, upstream_model_id, display_name_snapshot,
+          status, error_code,
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when finished_at is null then null
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+        from image_jobs
+        where user_id = ${userId}
+        order by created_at desc, id desc
+      `;
+      return rows.map(toJob);
+    },
     async finish(id, status, errorCode, finishedAt) {
       const rows = await sql<JobRow>`
         update image_jobs

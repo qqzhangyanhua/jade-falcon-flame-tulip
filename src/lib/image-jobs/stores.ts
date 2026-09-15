@@ -31,6 +31,8 @@ export type ImageJobStore = {
   /** Insert a running job and reserve today's cap in one atomic step. */
   insertReserved: (record: ImageJobRecord) => Promise<ReservedJobInsert>;
   get: (id: string) => Promise<ImageJobRecord | null>;
+  /** Current user's jobs only, newest first. */
+  listByUser: (userId: string) => Promise<ImageJobRecord[]>;
   finish: (
     id: string,
     status: "succeeded" | "failed",

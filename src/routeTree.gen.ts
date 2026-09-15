@@ -74,10 +74,19 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/account' | '/history' | '/login' | '/api/auth/$' | '/api/images/$id'
+  fullPaths:
+    '/' | '/account' | '/history' | '/login' | '/api/auth/$' | '/api/images/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/account' | '/history' | '/login' | '/api/auth/$' | '/api/images/$id'
-  id: '__root__' | '/' | '/account' | '/history' | '/login' | '/api/auth/$' | '/api/images/$id'
+  to:
+    '/' | '/account' | '/history' | '/login' | '/api/auth/$' | '/api/images/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/history'
+    | '/login'
+    | '/api/auth/$'
+    | '/api/images/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {

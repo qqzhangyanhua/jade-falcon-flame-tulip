@@ -1,4 +1,4 @@
-import { IMAGE_JOB_USER_MESSAGES } from "./errors.ts";
+import { IMAGE_JOB_USER_MESSAGES } from "./errors";
 import type {
   ActionAvailability,
   ImageJobAction,
@@ -6,9 +6,9 @@ import type {
   StudioImageState,
   StudioQuota,
   StudioRole,
-} from "./types.ts";
-import { IMAGE_JOB_ACTIONS } from "./types.ts";
-import type { QuotaStore, RoleStore } from "./stores.ts";
+} from "./types";
+import { IMAGE_JOB_ACTIONS } from "./types";
+import type { QuotaStore, RoleStore } from "./stores";
 
 export const DEFAULT_DAILY_IMAGE_CAP = 30;
 export const DAILY_IMAGE_CAP_SETTING_KEY = "daily_image_cap";

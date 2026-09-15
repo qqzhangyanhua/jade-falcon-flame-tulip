@@ -1,3 +1,5 @@
+"use client";
+
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
@@ -7,7 +9,7 @@ import { QuotaMeter } from "@/components/quota-meter";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { messageForImageJobError } from "@/lib/image-jobs";
-import { useStudioImageGate } from "@/lib/image-jobs/use-studio-image-gate.ts";
+import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { useStudio } from "@/lib/store";
 
 export function DirectionView() {

@@ -1,11 +1,10 @@
 import { createHash } from "node:crypto";
-import { getRequest } from "@tanstack/react-start/server";
 import {
   assertSameSiteRequest,
   CrossSiteRequestError,
-} from "../auth/isolation.server.ts";
-import { env, isWorkspacePreview } from "../env.server.ts";
-import { assertAppDataServerOnly } from "./server-only.ts";
+} from "../auth/isolation.server";
+import { env, isWorkspacePreview } from "../env.server";
+import { assertAppDataServerOnly } from "./server-only";
 import {
   CONNECTOR_TOKEN_HEADER,
   CONNECTOR_TOKEN_PENDING_CODE,
@@ -13,7 +12,7 @@ import {
   type CallToolOptions,
   type CallToolResult,
   type ToolArgs,
-} from "./types.ts";
+} from "./types";
 
 assertAppDataServerOnly("app-data/client.server");
 
@@ -49,11 +48,7 @@ function connectorsBaseFor(publicHost: string | null): string | null {
 }
 
 function tryGetRequest(): Request | null {
-  try {
-    return getRequest() ?? null;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 function inboundContext(): InboundContext {
@@ -81,7 +76,7 @@ export function getConnectorAccessToken(): string | null {
   return inboundContext().token;
 }
 
-export { isWorkspacePreview } from "../env.server.ts";
+export { isWorkspacePreview } from "../env.server";
 
 // Digest of the last preview token the gate answered 401 for. The readiness
 // probe reports "not ready" while that exact token is still the one on the
@@ -243,9 +238,9 @@ function unauthorizedResult(
   };
 }
 
-function crossSiteBlockedResult(): CallToolResult | null {
+async function crossSiteBlockedResult(): Promise<CallToolResult | null> {
   try {
-    assertSameSiteRequest();
+    await assertSameSiteRequest();
     return null;
   } catch (e) {
     if (e instanceof CrossSiteRequestError) {
@@ -327,7 +322,7 @@ function nonPostBlockedResult(): CallToolResult | null {
     data: null,
     errorMessage:
       `blocked ${req.method} inbound request: connector calls must run inside ` +
-      'a createServerFn({ method: "POST" }) handler',
+      "a server action or POST route handler",
   };
 }
 
@@ -336,9 +331,8 @@ export async function callTool(
   args: ToolArgs,
   options: CallToolOptions,
 ): Promise<CallToolResult> {
-  const blocked = crossSiteBlockedResult() ?? nonPostBlockedResult();
+  const blocked = (await crossSiteBlockedResult()) ?? nonPostBlockedResult();
   if (blocked) return blocked;
-
   const ctx = inboundContext();
   const token = options.token ?? ctx.token;
   if (!token) {
@@ -417,11 +411,11 @@ export {
   GoogleCalendarTools,
   GoogleDriveTools,
   CONNECTOR_TOKEN_HEADER,
-} from "./types.ts";
+} from "./types";
 export type {
   CallToolResult,
   CallToolOptions,
   ToolArgs,
   ConnectorTypeName,
-} from "./types.ts";
-export { isLoginRequired, redirectToLoginIfRequired } from "./login.ts";
+} from "./types";
+export { isLoginRequired, redirectToLoginIfRequired } from "./login";

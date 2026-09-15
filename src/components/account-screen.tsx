@@ -1,24 +1,18 @@
+"use client";
+
 import { useEffect, useState, type FormEvent } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import {
-  getStudioAccessFn,
-  messageForImageJobError,
-  setDailyImageCapFn,
-  type StudioQuota,
-  type StudioRole,
-} from "@/lib/image-jobs";
-import { getProfile, saveProfile } from "@/lib/profile";
+import { getProfile, saveProfile } from "@/app/actions/profile";
+import { getStudioAccessFn, setDailyImageCapFn } from "@/app/actions/studio";
+import { messageForImageJobError, type StudioQuota, type StudioRole } from "@/lib/image-jobs";
 import type { ProfileRecord } from "@/lib/types";
 
-export const Route = createFileRoute("/account")({ component: Account });
-
-function Account() {
+export function AccountScreen() {
   const { user, isPending } = useCurrentUserState();
   const userId = user?.id ?? null;
   const sessionName = user?.displayName ?? "";

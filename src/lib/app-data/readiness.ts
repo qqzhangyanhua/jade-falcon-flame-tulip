@@ -1,10 +1,8 @@
-import { createServerFn } from "@tanstack/react-start";
+"use server";
 
 export type ConnectorReadiness = { ready: boolean };
 
-export const getConnectorReadiness = createServerFn({ method: "POST" }).handler(
-  async (): Promise<ConnectorReadiness> => {
-    const { isConnectorTokenReady } = await import("./client.server.ts");
-    return { ready: isConnectorTokenReady() };
-  },
-);
+export async function getConnectorReadiness(): Promise<ConnectorReadiness> {
+  const { isConnectorTokenReady } = await import("./client.server");
+  return { ready: isConnectorTokenReady() };
+}

@@ -1,14 +1,13 @@
+"use client";
+
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import {
-  listMyJobsFn,
-  messageForImageJobError,
-  type ImageJobHistoryItem,
-} from "@/lib/image-jobs";
+import { listMyJobsFn } from "@/app/actions/studio";
+import { messageForImageJobError, type ImageJobHistoryItem } from "@/lib/image-jobs";
 import {
   actionLabel,
   formatJobTime,
@@ -22,7 +21,7 @@ import { cn } from "@/lib/utils";
 
 export function JobHistoryView() {
   const { user, isPending } = useCurrentUserState();
-  const navigate = useNavigate();
+  const router = useRouter();
   const projects = useStudio((s) => s.projects);
   const [jobs, setJobs] = useState<ImageJobHistoryItem[] | null>(null);
 
@@ -67,7 +66,7 @@ export function JobHistoryView() {
       projectAlive: job.projectAlive,
     });
     if (opened) {
-      void navigate({ to: "/" });
+      void router.push("/");
       return;
     }
     toast.error("项目已不在本地");

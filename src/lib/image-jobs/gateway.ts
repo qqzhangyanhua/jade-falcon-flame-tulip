@@ -1,9 +1,9 @@
-import { persistDurableCopies, resolveUpstreamImageUrl } from "./durable.ts";
-import { newEntityId } from "./ids.ts";
-import { evaluateImageAction } from "./availability.ts";
-import { resolveJobSlot } from "./concurrency.ts";
-import { ImageJobError } from "./errors.ts";
-import type { ImageJobGatewayDeps } from "./stores.ts";
+import { persistDurableCopies, resolveUpstreamImageUrl } from "./durable";
+import { newEntityId } from "./ids";
+import { evaluateImageAction } from "./availability";
+import { resolveJobSlot } from "./concurrency";
+import { ImageJobError } from "./errors";
+import type { ImageJobGatewayDeps } from "./stores";
 import type {
   ImageJobErrorCode,
   ImageJobRecord,
@@ -11,7 +11,7 @@ import type {
   ImageUpstreamResult,
   RunImageJobInput,
   RunImageJobResult,
-} from "./types.ts";
+} from "./types";
 
 function fail(code: ImageJobErrorCode, job?: ImageJobRecord): RunImageJobResult {
   return job ? { ok: false, code, job } : { ok: false, code };

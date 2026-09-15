@@ -4,27 +4,9 @@ export {
   ImageJobError,
   imageJobErrorCode,
   messageForImageJobError,
-} from "./errors.ts";
-export {
-  composeImageFn,
-  createStudioProjectFn,
-  deleteStudioProjectFn,
-  ensureStudioProjectFn,
-  generateCandidate,
-  generateSlotFn,
-  getDailyQuotaFn,
-  getImageStudioStateFn,
-  getStudioAccessFn,
-  listImageModelsFn,
-  listJobImagesFn,
-  listMyJobsFn,
-  openJobImageFn,
-  pickProjectImageModelFn,
-  setDailyImageCapFn,
-  tuneImageFn,
-} from "./functions.ts";
-export { durableImageUrl, listJobImages, openJobImage } from "./durable.ts";
-export { listUserJobs } from "./list-jobs.ts";
+} from "./errors";
+export { durableImageUrl, listJobImages, openJobImage } from "./durable";
+export { listUserJobs } from "./list-jobs";
 export type {
   ActionAvailability,
   DurableImageRef,
@@ -36,4 +18,4 @@ export type {
   StudioImageState,
   StudioQuota,
   StudioRole,
-} from "./types.ts";
+} from "./types";

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { isFramed } from "./login.ts";
-import { getConnectorReadiness } from "./readiness.ts";
+import { isFramed } from "./login";
+import { getConnectorReadiness } from "./readiness";
 import {
   READINESS_PROBE_MAX_TOTAL_MS,
   readinessProbeDelayMs,
   readinessProbeExhausted,
-} from "./readiness-schedule.ts";
-import { CONNECTOR_TOKEN_READY_EVENT } from "./types.ts";
+} from "./readiness-schedule";
+import { CONNECTOR_TOKEN_READY_EVENT } from "./types";
 
 export type ConnectorWaitStatus =
   | "idle"

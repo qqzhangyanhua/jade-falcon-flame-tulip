@@ -1,12 +1,13 @@
+"use client";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   ensureStudioProjectFn,
   getImageStudioStateFn,
-  imageJobErrorCode,
   pickProjectImageModelFn,
-  type StudioImageState,
-} from "@/lib/image-jobs";
-import { messageForImageJobError } from "@/lib/image-jobs/errors.ts";
+} from "@/app/actions/studio";
+import { imageJobErrorCode, type StudioImageState } from "@/lib/image-jobs";
+import { messageForImageJobError } from "@/lib/image-jobs/errors";
 import { useStudio } from "@/lib/store";
 
 export function useStudioImageGate(projectId: string | undefined) {

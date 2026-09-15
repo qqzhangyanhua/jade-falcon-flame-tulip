@@ -87,7 +87,7 @@ export function looksLikePreviewProcess(cmdline) {
   // `preview` must be the whole script name: `run preview:stop`/`preview:restart`
   // are this tooling's own wrappers, and `vite build --outDir preview-dist` is
   // not a server.
-  return /\brun\s+preview(?:\s|$)/.test(argv) || /\bvite\b\s+preview\b/.test(argv);
+  return /\brun\s+preview(?:\s|$)/.test(argv) || /\bvite\b\s+preview\b/.test(argv) || /\bnext\b[\s\S]*\bstart\b/.test(argv);
 }
 
 /**
@@ -317,8 +317,8 @@ async function restart() {
     const secs = Math.round(READY_TIMEOUT_MS / 1000);
     const why =
       failure ??
-      `nothing answered on ${PREVIEW_URL} within ${secs}s — check that vite.config.ts ` +
-        `still sets preview.port ${PREVIEW_PORT}`;
+      `nothing answered on ${PREVIEW_URL} within ${secs}s — check that npm run preview ` +
+        `still binds 127.0.0.1:${PREVIEW_PORT}`;
     console.error(`[preview] ${why} — see ${LOG_FILE}`);
     // A server that binds a few seconds later would serve a build the agent has
     // already been told to distrust.

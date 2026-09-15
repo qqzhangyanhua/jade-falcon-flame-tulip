@@ -1,4 +1,5 @@
-import type { ErrorComponentProps } from "@tanstack/react-router";
+"use client";
+
 import { TriangleAlert } from "lucide-react";
 
 const FALLBACK_MESSAGE = "An unexpected error occurred. Try reloading the page.";
@@ -9,14 +10,9 @@ function errorMessage(error: unknown): string {
   return FALLBACK_MESSAGE;
 }
 
-export function AppErrorComponent({ error }: ErrorComponentProps) {
+export default function ErrorPage({ error }: { error: Error }) {
   return (
-    <main
-      className={
-        "flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center " +
-        "bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50"
-      }
-    >
+    <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-zinc-50 px-6 text-center text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <span className="text-red-500" aria-hidden="true">
         <TriangleAlert className="size-10" strokeWidth={2} />
       </span>

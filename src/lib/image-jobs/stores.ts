@@ -8,7 +8,7 @@ import type {
   StudioProjectRecord,
   StudioQuota,
   StudioRole,
-} from "./types.ts";
+} from "./types";
 
 export type ModelCatalogStore = {
   list: () => Promise<CatalogModel[]>;

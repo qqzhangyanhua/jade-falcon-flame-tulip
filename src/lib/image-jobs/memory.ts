@@ -1,9 +1,9 @@
-import { beijingCalendarDay } from "./beijing-day.ts";
-import { concurrencyBlock } from "./concurrency.ts";
-import { newEntityId } from "./ids.ts";
-import { cloneModel } from "./availability.ts";
-import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
-import { decodeDataUrl } from "./durable.ts";
+import { beijingCalendarDay } from "./beijing-day";
+import { concurrencyBlock } from "./concurrency";
+import { newEntityId } from "./ids";
+import { cloneModel } from "./availability";
+import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota";
+import { decodeDataUrl } from "./durable";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -16,7 +16,7 @@ import type {
   ImageUpstreamRequest,
   StudioProjectRecord,
   StudioRole,
-} from "./types.ts";
+} from "./types";
 import type {
   ImageBlobStore,
   ImageJobGatewayDeps,
@@ -26,7 +26,7 @@ import type {
   QuotaStore,
   RoleStore,
   StudioProjectStore,
-} from "./stores.ts";
+} from "./stores";
 
 function cloneJob(job: ImageJobRecord): ImageJobRecord {
   return { ...job };

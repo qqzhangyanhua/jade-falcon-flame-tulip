@@ -1,11 +1,11 @@
+"use client";
+
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  deleteStudioProjectFn,
-  messageForImageJobError,
-} from "@/lib/image-jobs";
+import { deleteStudioProjectFn } from "@/app/actions/studio";
+import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudio } from "@/lib/store";
 import { cn } from "@/lib/utils";
 

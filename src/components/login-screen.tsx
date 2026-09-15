@@ -1,13 +1,14 @@
+"use client";
+
 import { useState, type FormEvent } from "react";
-import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { authClient, authEnabled, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
-
-export const Route = createFileRoute("/login")({ component: Login });
 
 function mapAuthError(message: string): string {
   const lower = message.toLowerCase();
@@ -22,7 +23,8 @@ function mapAuthError(message: string): string {
   return message;
 }
 
-function Login() {
+export function LoginScreen() {
+  const router = useRouter();
   const { user, isPending } = useCurrentUserState();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -38,7 +40,14 @@ function Login() {
       </main>
     );
   }
-  if (user) return <Navigate to="/" />;
+  if (user) {
+    router.replace("/");
+    return (
+      <main className="grid min-h-dvh place-items-center bg-bg">
+        <div className="h-10 w-40 animate-pulse rounded-md bg-surface-2" />
+      </main>
+    );
+  }
 
   async function onOAuth(providerId: string) {
     setError(null);
@@ -80,7 +89,7 @@ function Login() {
   return (
     <main className="grid min-h-dvh place-items-center bg-bg px-5 py-10">
       <div className="w-full max-w-sm">
-        <Link to="/" className="inline-block">
+        <Link href="/" className="inline-block">
           <Wordmark />
         </Link>
         <h1 className="mt-8 font-display text-3xl tracking-tight text-fg">登录后继续定调</h1>

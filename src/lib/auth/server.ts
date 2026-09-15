@@ -29,10 +29,11 @@
  * components read the user via `@/lib/auth/use-current-user`; server functions get
  * a verified id via `@/lib/auth/middleware`.
  */
+import "server-only";
 import { betterAuth } from "better-auth";
+import { nextCookies } from "better-auth/next-js";
 import { bearer, genericOAuth } from "better-auth/plugins";
-import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { getCookie } from "@tanstack/react-start/server";
+import { cookies } from "next/headers";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
@@ -246,14 +247,18 @@ export const auth = betterAuth({
     // (deployed apps) is unaffected.
     bearer(),
 
-    // Bridges Better Auth's Set-Cookie into TanStack Start responses. MUST be
-    // last so it runs after every other plugin's hooks.
-    tanstackStartCookies(),
+    // Bridges Better Auth's Set-Cookie into Next.js responses. MUST be last so
+    // it runs after every other plugin's hooks.
+    nextCookies(),
   ],
 });
 
-export function readSessionToken(): string | null {
-  return getCookie(SESSION_TOKEN_COOKIE) ?? null;
+export async function readSessionToken(): Promise<string | null> {
+  try {
+    return (await cookies()).get(SESSION_TOKEN_COOKIE)?.value ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // Re-exported for convenience; the array lives in the dependency-free

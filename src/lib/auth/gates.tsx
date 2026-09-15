@@ -1,5 +1,7 @@
-import { useState, useSyncExternalStore, type ReactNode } from "react";
-import { Navigate } from "@tanstack/react-router";
+"use client";
+
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { resolveSignInGateState } from "./sign-in-gate";
@@ -38,15 +40,18 @@ export function SignedOut({ children }: { children: ReactNode }) {
 }
 
 /**
- * Client-side redirect to the sign-in route (TanStack `<Navigate>` — NOT a full
- * `window.location` reload). A hard navigation re-bootstraps the SPA and re-runs
- * session loading, which feels like a second "Loading…" on /login.
- *
- * Guard routes by waiting out `isPending` first (see `use-current-user`), then
- * render this.
+ * Client-side redirect to the sign-in route (soft navigation, not a full reload).
  */
 export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
-  return <Navigate to={to} />;
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(to);
+  }, [router, to]);
+  return (
+    <main className="grid min-h-dvh place-items-center bg-bg">
+      <div className="h-10 w-40 animate-pulse rounded-md bg-surface-2" />
+    </main>
+  );
 }
 
 export function SignInGate({

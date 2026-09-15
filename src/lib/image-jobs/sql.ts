@@ -1,13 +1,13 @@
-import type { Sql } from "../db.ts";
-import { beijingCalendarDay } from "./beijing-day.ts";
-import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency.ts";
-import { DEFAULT_DAILY_IMAGE_CAP } from "./quota.ts";
+import type { Sql } from "../db";
+import { beijingCalendarDay } from "./beijing-day";
+import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency";
+import { DEFAULT_DAILY_IMAGE_CAP } from "./quota";
 import {
   IMAGE_JOB_ACTIONS,
   IMAGE_JOB_SLOTS,
   type ImageJobAction,
   type ImageJobSlot,
-} from "./types.ts";
+} from "./types";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -16,14 +16,14 @@ import type {
   ImageJobStatus,
   ImageRevRecord,
   StudioProjectRecord,
-} from "./types.ts";
+} from "./types";
 import type {
   ImageBlobStore,
   ImageJobStore,
   ImageRevStore,
   ModelCatalogStore,
   StudioProjectStore,
-} from "./stores.ts";
+} from "./stores";
 
 type CatalogRow = {
   id: string;

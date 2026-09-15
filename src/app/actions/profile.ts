@@ -1,5 +1,6 @@
-import { createServerFn } from "@tanstack/react-start";
-import { authMiddleware } from "@/lib/auth/middleware";
+"use server";
+
+import { requireActionUser } from "@/lib/auth/session";
 import { getSql } from "@/lib/db";
 import type { ProfileRecord } from "@/lib/types";
 
@@ -37,26 +38,26 @@ function parseProfileInput(input: {
   return { displayName, title, bio };
 }
 
-export const getProfile = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .handler(async ({ context }): Promise<ProfileRecord> => {
-    const sql = await getSql();
-    const rows = await sql<ProfileRow>`
+export async function getProfile(): Promise<ProfileRecord> {
+  const { userId } = await requireActionUser();
+  const sql = await getSql();
+  const rows = await sql<ProfileRow>`
       select display_name, title, bio, updated_at::text as updated_at
       from profiles
-      where user_id = ${context.userId}
+      where user_id = ${userId}
     `;
-    return toRecord(rows[0]);
-  });
+  return toRecord(rows[0]);
+}
 
-export const saveProfile = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator(parseProfileInput)
-  .handler(async ({ context, data }): Promise<ProfileRecord> => {
-    const sql = await getSql();
-    const rows = await sql<ProfileRow>`
+export async function saveProfile(input: {
+  data: { displayName: string; title: string; bio: string };
+}): Promise<ProfileRecord> {
+  const { userId } = await requireActionUser();
+  const data = parseProfileInput(input.data);
+  const sql = await getSql();
+  const rows = await sql<ProfileRow>`
       insert into profiles (user_id, display_name, title, bio, updated_at)
-      values (${context.userId}, ${data.displayName}, ${data.title}, ${data.bio}, now())
+      values (${userId}, ${data.displayName}, ${data.title}, ${data.bio}, now())
       on conflict (user_id) do update set
         display_name = excluded.display_name,
         title = excluded.title,
@@ -64,5 +65,5 @@ export const saveProfile = createServerFn({ method: "POST" })
         updated_at = now()
       returning display_name, title, bio, updated_at::text as updated_at
     `;
-    return toRecord(rows[0]);
-  });
+  return toRecord(rows[0]);
+}

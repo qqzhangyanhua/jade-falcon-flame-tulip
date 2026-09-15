@@ -1,12 +1,12 @@
-import type { Sql } from "../db.ts";
-import { beijingCalendarDay } from "./beijing-day.ts";
+import type { Sql } from "../db";
+import { beijingCalendarDay } from "./beijing-day";
 import {
   DAILY_IMAGE_CAP_SETTING_KEY,
   parseDailyCap,
   quotaFromParts,
-} from "./quota.ts";
-import type { QuotaStore, RoleStore } from "./stores.ts";
-import type { StudioRole } from "./types.ts";
+} from "./quota";
+import type { QuotaStore, RoleStore } from "./stores";
+import type { StudioRole } from "./types";
 
 type SettingRow = { value: string };
 type UsedRow = { used: number };

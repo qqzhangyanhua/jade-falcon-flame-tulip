@@ -1,6 +1,6 @@
-import { newEntityId } from "./ids.ts";
-import { isProjectAlive } from "./projects.ts";
-import type { ImageJobGatewayDeps } from "./stores.ts";
+import { newEntityId } from "./ids";
+import { isProjectAlive } from "./projects";
+import type { ImageJobGatewayDeps } from "./stores";
 import type {
   DurableImageRef,
   ImageBlobRecord,
@@ -10,7 +10,7 @@ import type {
   ImageJobErrorCode,
   ImageRevRecord,
   OpenedDurableImage,
-} from "./types.ts";
+} from "./types";
 
 export const DURABLE_IMAGE_PATH_PREFIX = "/api/images/";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;

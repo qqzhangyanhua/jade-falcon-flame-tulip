@@ -1,5 +1,7 @@
+"use client";
+
 import { useState, useSyncExternalStore } from "react";
-import { Link } from "@tanstack/react-router";
+import Link from "next/link";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -33,7 +35,7 @@ export function AuthSlot({ compact = false }: { compact?: boolean }) {
   if (!user) {
     return (
       <Link
-        to="/login"
+        href="/login"
         className={cn(
           "inline-flex items-center rounded-md px-3 text-sm text-muted hover:text-fg",
           compact ? "h-9" : "h-11",
@@ -49,7 +51,7 @@ export function AuthSlot({ compact = false }: { compact?: boolean }) {
   return (
     <div className="flex items-center gap-1">
       <Link
-        to="/account"
+        href="/account"
         className={cn(
           "flex items-center gap-2 rounded-md hover:bg-surface-2",
           compact ? "h-9 px-1.5" : "h-11 px-2",

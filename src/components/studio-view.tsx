@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { Download, PanelLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -10,9 +12,13 @@ import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
 import { StudioGenerateBar, StudioTunePanel } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
-import { composeImageFn, generateSlotFn, tuneImageFn } from "@/lib/ai";
+import {
+  composeImageFn,
+  generateSlotFn,
+  tuneImageFn,
+} from "@/app/actions/studio";
 import { messageForImageJobError } from "@/lib/image-jobs";
-import { useStudioImageGate } from "@/lib/image-jobs/use-studio-image-gate.ts";
+import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { useStudio } from "@/lib/store";
 import {
   SLOTS,

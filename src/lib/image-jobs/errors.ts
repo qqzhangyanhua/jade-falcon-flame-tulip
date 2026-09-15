@@ -1,7 +1,7 @@
 import {
   IMAGE_JOB_ERROR_CODES,
   type ImageJobErrorCode,
-} from "./types.ts";
+} from "./types";
 
 export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   unauthorized: "请先登录",

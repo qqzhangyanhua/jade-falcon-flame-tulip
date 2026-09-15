@@ -1,5 +1,7 @@
+"use client";
+
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useRouter } from "next/navigation";
 import { ImagePlus, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
@@ -7,15 +9,15 @@ import { DeleteProjectControl } from "@/components/delete-project-control";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { QuotaMeter } from "@/components/quota-meter";
-import { parseBrief, generateCandidate } from "@/lib/ai";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { parseBrief } from "@/app/actions/brief";
 import {
   createStudioProjectFn,
+  generateCandidate,
   getDailyQuotaFn,
   listImageModelsFn,
-  messageForImageJobError,
-  type StudioQuota,
-} from "@/lib/image-jobs";
+} from "@/app/actions/studio";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { messageForImageJobError, type StudioQuota } from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
 import { fileToDataUrl } from "@/lib/resize-image";
 import { useStudio } from "@/lib/store";
@@ -37,7 +39,7 @@ export function BriefView() {
   const patchCandidate = useStudio((s) => s.patchCandidate);
   const projects = useStudio((s) => s.projects);
   const { user, isPending: authPending } = useCurrentUserState();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [imagesUnavailable, setImagesUnavailable] = useState(false);
   const [quota, setQuota] = useState<StudioQuota | null>(null);
 
@@ -62,7 +64,7 @@ export function BriefView() {
   async function start() {
     if (authPending) return;
     if (!user) {
-      navigate({ to: "/login" });
+      router.push("/login");
       return;
     }
     const text = brief.trim();

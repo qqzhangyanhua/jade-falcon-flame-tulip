@@ -2,7 +2,7 @@ import type {
   ImageUpstream,
   ImageUpstreamRequest,
   ImageUpstreamResult,
-} from "./types.ts";
+} from "./types";
 
 type FetchLike = (
   input: string,

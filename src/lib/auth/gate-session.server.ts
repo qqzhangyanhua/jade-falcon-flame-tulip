@@ -6,6 +6,7 @@ import {
   setSessionCookie,
 } from "better-auth/cookies";
 import { handleOAuthUserInfo } from "better-auth/oauth2";
+import { cookies } from "next/headers";
 import {
   GATE_IDENTITY_HEADER,
   gateIdentityEnabled,
@@ -18,6 +19,25 @@ import { GATE_SESSION_MARKER_COOKIE } from "./gate-session-marker";
 export const GATE_PROVIDER_ID = "grok-gate";
 const GATE_ACCOUNT_ISSUER = "https://grok.com";
 const LOG = "[gate-identity]";
+
+async function setNextCookie(
+  name: string,
+  value: string,
+  options: {
+    path?: string;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: "lax" | "strict" | "none";
+    maxAge?: number;
+    domain?: string;
+  },
+) {
+  try {
+    (await cookies()).set(name, value, options);
+  } catch (err) {
+    console.error(`${LOG} Next cookies().set failed`, err);
+  }
+}
 
 type GateAccount = Parameters<typeof handleOAuthUserInfo>[1]["account"];
 
@@ -65,23 +85,17 @@ async function emitSessionCookie(
     return null;
   }
 
-  // Primary path: TanStack Start's response cookie store (reaches the browser).
-  try {
-    const { setCookie } = await import("@tanstack/react-start/server");
-    setCookie(sessionTokenName, sessionValue, {
-      path: cookieOptions.path ?? "/",
-      httpOnly: cookieOptions.httpOnly ?? true,
-      secure: cookieOptions.secure ?? true,
-      sameSite: (cookieOptions.sameSite as "lax" | "strict" | "none") ?? "lax",
-      maxAge: typeof maxAge === "number" ? maxAge : undefined,
-      domain: cookieOptions.domain,
-    });
-  } catch (err) {
-    console.error(`${LOG} TanStack setCookie failed`, err);
-  }
+  // Primary path: Next.js cookie store (reaches the browser).
+  await setNextCookie(sessionTokenName, sessionValue, {
+    path: cookieOptions.path ?? "/",
+    httpOnly: cookieOptions.httpOnly ?? true,
+    secure: cookieOptions.secure ?? true,
+    sameSite: (cookieOptions.sameSite as "lax" | "strict" | "none") ?? "lax",
+    maxAge: typeof maxAge === "number" ? maxAge : undefined,
+    domain: cookieOptions.domain,
+  });
 
-  // Also stash on Better Auth responseHeaders so after-hooks (tanstackStartCookies)
-  // can forward it if they run.
+  // Also stash on Better Auth responseHeaders so nextCookies() can forward it.
   try {
     const responseHeaders = ctx.context.responseHeaders;
     if (responseHeaders) {
@@ -109,18 +123,13 @@ async function expireSessionDataCookie(
 ): Promise<void> {
   const path = cookie.attributes.path ?? "/";
   const secure = cookie.attributes.secure ?? true;
-  try {
-    const { setCookie } = await import("@tanstack/react-start/server");
-    setCookie(cookie.name, "", {
-      path,
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      maxAge: 0,
-    });
-  } catch (err) {
-    console.error(`${LOG} TanStack setCookie (expire session_data) failed`, err);
-  }
+  await setNextCookie(cookie.name, "", {
+    path,
+    httpOnly: true,
+    secure,
+    sameSite: "lax",
+    maxAge: 0,
+  });
   try {
     ctx.context.responseHeaders?.append(
       "set-cookie",
@@ -152,18 +161,13 @@ async function writeGateMarkerCookie(
       ? sessionMaxAge
       : undefined;
   const value = clear ? "" : "1";
-  try {
-    const { setCookie } = await import("@tanstack/react-start/server");
-    setCookie(GATE_SESSION_MARKER_COOKIE, value, {
-      path: "/",
-      httpOnly: false,
-      secure: true,
-      sameSite: "lax",
-      maxAge,
-    });
-  } catch (err) {
-    console.error(`${LOG} TanStack setCookie (gate marker) failed`, err);
-  }
+  await setNextCookie(GATE_SESSION_MARKER_COOKIE, value, {
+    path: "/",
+    httpOnly: false,
+    secure: true,
+    sameSite: "lax",
+    maxAge,
+  });
   try {
     ctx.context.responseHeaders?.append(
       "set-cookie",

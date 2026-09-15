@@ -12,7 +12,7 @@ export const Route = createFileRoute("/api/images/$id")({
         const sql = await getSql();
         const blob = await createSqlBlobStore(sql).get(id);
         if (!blob) return new Response("Not found", { status: 404 });
-        return new Response(blob.bytes, {
+        return new Response(Buffer.from(blob.bytes), {
           status: 200,
           headers: {
             "Content-Type": blob.contentType,

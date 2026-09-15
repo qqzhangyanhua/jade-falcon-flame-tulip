@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Download, PanelLeft } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
+import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
@@ -81,6 +82,7 @@ export function StudioView() {
         action: "generate",
         diff: content.trim() || "首次生成",
         parentId: currentImg?.id ?? null,
+        jobId: res.jobId,
       });
       toast.success("已生成 2 张变体，点「采用」选定");
     } catch (e) {
@@ -128,6 +130,7 @@ export function StudioView() {
         diff: instruction.slice(0, 24),
         parentId: currentImg.id,
         writeback: writeback ? "promoted" : "none",
+        jobId: res.jobId,
       });
       if (ids[0]) adoptImage(style.id, slot, ids[0]);
       if (writeback) {
@@ -211,6 +214,7 @@ export function StudioView() {
             <Download className="size-3.5" />
             下载
           </a>
+          <JobHistoryLink compact />
           <AuthSlot compact />
         </div>
       </header>

@@ -160,6 +160,12 @@ export function createMemoryJobs(
       const job = jobs.get(id);
       return job ? cloneJob(job) : null;
     },
+    async listByUser(userId) {
+      return [...jobs.values()]
+        .filter((job) => job.userId === userId)
+        .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .map(cloneJob);
+    },
     async finish(id, status, errorCode, finishedAt) {
       const job = jobs.get(id);
       if (!job) return null;

@@ -158,6 +158,25 @@ export type RunImageJobFailure = {
 
 export type RunImageJobResult = RunImageJobSuccess | RunImageJobFailure;
 
+export type ImageJobHistoryItem = {
+  id: string;
+  projectId: string;
+  projectAlive: boolean;
+  action: ImageJobAction;
+  slot: ImageJobSlot | null;
+  displayNameSnapshot: string;
+  status: ImageJobStatus;
+  createdAt: number;
+  finishedAt: number | null;
+  /** Live catalog `enabled` flag — not a snapshot. */
+  modelDisabled: boolean;
+  imageUrls: string[];
+};
+
+export type ListUserJobsResult =
+  | { ok: true; jobs: ImageJobHistoryItem[] }
+  | { ok: false; code: "unauthorized" };
+
 export type ImageUpstreamRequest = {
   action: ImageJobAction;
   upstreamModelId: string;

@@ -1,0 +1,35 @@
+src/lib/style-ai/merge.test.ts
+  s_60710aa7dc0949::t_382d873bd1b7d2 1-118
+src/app/actions/writeback.ts
+  s_60710aa7dc0949::t_5da5cb585363af 1-16
+src/components/dna-change-list.tsx
+  s_60710aa7dc0949::t_0090b9732fafc5 1-71
+src/lib/style-ai/merge.ts
+  s_60710aa7dc0949::t_9d4f88decb6cc5 1-63
+package.json
+  s_60710aa7dc0949::t_2a08eebedf0e6c 19
+src/components/studio-panels.tsx
+  s_60710aa7dc0949::t_de731e99500e72 1,110-113,115-117
+src/components/studio-view.tsx
+  s_60710aa7dc0949::t_1b93ababe95b75 7,22-24,52-58,68,126,132-175,182,195-199,201-208,474,476-481,483
+src/lib/store.ts
+  s_60710aa7dc0949::t_feaf2fe05b9a5e 23,57-62,174-175
+src/lib/style-ai/index.ts
+  s_60710aa7dc0949::t_7a316fdbc697e9 25-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "c138ecd82f7fb90918b418cb8422b6f906e53b12",
+  "prompts": {},
+  "sessions": {
+    "s_60710aa7dc0949": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "48513c3b-b299-4891-a149-ee1cefb3a684",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

@@ -20,6 +20,7 @@ export function DirectionView() {
 
   if (!project) return null;
   const pending = project.candidates.some((c) => c.status === "pending");
+  const tailoring = project.mode === "tailoring";
 
   return (
     <div className="page-shell">
@@ -64,7 +65,10 @@ export function DirectionView() {
                     {c.status === "error" ? (
                       <p className="text-sm text-danger">出图失败</p>
                     ) : (
-                      <Loader2 className="size-6 animate-spin" />
+                      <>
+                        <Loader2 className="size-6 animate-spin" />
+                        {tailoring ? <p className="text-sm">正在定制方向</p> : null}
+                      </>
                     )}
                   </div>
                 )}
@@ -104,7 +108,9 @@ export function DirectionView() {
           ))}
         </div>
         {pending ? (
-          <p className="mt-8 text-center text-sm text-muted">正在出四个方向，卡片会逐张亮起。</p>
+          <p className="mt-8 text-center text-sm text-muted">
+            {tailoring ? "正在按你的需求定制方向…" : "正在出四个方向，卡片会逐张亮起。"}
+          </p>
         ) : null}
       </main>
     </div>

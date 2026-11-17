@@ -1,3 +1,4 @@
+import { DnaChangeList } from "@/components/dna-change-list";
 import type { ImageRev, StyleBranch, StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -106,8 +107,14 @@ export function StudioHistoryPanel({
                     rev{rev.rev} · {rev.changeLog}
                     {style.currentRev === rev.rev ? " · 当前" : ""}
                   </span>
-                  <span className="text-xs text-subtle">之后新图跟这个 DNA，旧图不变</span>
+                  <span className="text-xs text-subtle">
+                    {rev.parentRev !== null ? `改自 rev${rev.parentRev} · ` : ""}
+                    之后新图跟这个 DNA，旧图不变
+                  </span>
                 </button>
+                {rev.changes?.length ? (
+                  <DnaChangeList changes={rev.changes} className="px-2 pb-3 pt-1" />
+                ) : null}
               </li>
             ))}
         </ul>

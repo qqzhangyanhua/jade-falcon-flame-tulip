@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
+import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
+import { StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
+import { StyleLineActions } from "@/components/style-line-actions";
 import { StudioGenerateBar, StudioTunePanel } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
@@ -18,6 +21,9 @@ import {
   generateSlotFn,
   tuneImageFn,
 } from "@/app/actions/studio";
+import { mergeStyleInstructionFn } from "@/app/actions/writeback";
+import type { DnaChange } from "@/lib/project/dna";
+import { messageForMergeError } from "@/lib/style-ai/merge";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { useStudio } from "@/lib/store";
@@ -45,7 +51,13 @@ export function StudioView() {
   const [content, setContent] = useState("");
   const [tab, setTab] = useState<"image" | "style">("image");
   const [mobile, setMobile] = useState<"canvas" | "style" | "history">("canvas");
-  const [confirmWrite, setConfirmWrite] = useState<null | { instruction: string }>(null);
+  const [confirmWrite, setConfirmWrite] = useState<null | {
+    instruction: string;
+    dna: StyleDna;
+    changes: DnaChange[];
+    fromRev: number;
+  }>(null);
+  const [merging, setMerging] = useState(false);
   const [sliders, setSliders] = useState({ brightness: 50, warmth: 50, contrast: 50 });
   const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
@@ -55,7 +67,7 @@ export function StudioView() {
   const slot: Slot = project?.currentSlot ?? "kv";
   const asset = style?.assets[slot];
   const currentImg = asset ? adoptedRev(asset) : null;
-  const generating = project?.mode === "generating";
+  const generating = project?.mode === "generating" || merging;
   const generateBlocked = Boolean(imageGate && !imageGate.actions.generate.enabled);
   const generateReason = imageGate?.actions.generate.reason ?? null;
 
@@ -113,22 +125,63 @@ export function StudioView() {
       return;
     }
     if (writeback) {
-      setConfirmWrite({ instruction });
+      await previewWriteback(instruction);
       return;
     }
     await applyTune(instruction, false, action);
   }
 
-  async function applyTune(instruction: string, writeback: boolean, action: "tune" | "compose" = "tune") {
-    if (!project || !style || !dna || !currentImg) return;
+  async function previewWriteback(instruction: string) {
+    if (!style || !dna) return;
+    setMerging(true);
+    setBusyLabel("合并风格中");
+    try {
+      const merged = await mergeStyleInstructionFn({ data: { dna, instruction } });
+      if (!merged.ok) {
+        toast.error(messageForMergeError(merged.error));
+        return;
+      }
+      setConfirmWrite({
+        instruction,
+        dna: merged.dna,
+        changes: merged.changes,
+        fromRev: style.currentRev,
+      });
+    } catch {
+      toast.error(messageForMergeError("network"));
+    } finally {
+      setMerging(false);
+      setBusyLabel(null);
+    }
+  }
+
+  async function confirmWriteback() {
+    if (!confirmWrite || !style) return;
+    const { instruction, dna: nextDna, changes } = confirmWrite;
+    setConfirmWrite(null);
+    writebackStyle({
+      styleId: style.id,
+      changeLog: instruction.slice(0, 32),
+      dna: nextDna,
+      changes,
+    });
+    await applyTune(instruction, true, "tune", nextDna);
+  }
+
+  async function applyTune(
+    instruction: string,
+    writeback: boolean,
+    action: "tune" | "compose" = "tune",
+    tuneDna: StyleDna | null = dna,
+  ) {
+    if (!project || !style || !tuneDna || !currentImg) return;
     setBeforeUrl(currentImg.url);
     setMode("generating");
     setBusyLabel(action === "compose" ? "换构图中" : "微调中");
-    setConfirmWrite(null);
     try {
       const fn = action === "compose" ? composeImageFn : tuneImageFn;
       const res = await fn({
-        data: { projectId: project.id, dna, imageUrl: currentImg.url, instruction, slot },
+        data: { projectId: project.id, dna: tuneDna, imageUrl: currentImg.url, instruction, slot },
       });
       const ids = addImageRevs({
         styleId: style.id,
@@ -141,18 +194,20 @@ export function StudioView() {
         jobId: res.jobId,
       });
       if (ids[0]) adoptImage(style.id, slot, ids[0]);
-      if (writeback) {
-        writebackStyle({
-          styleId: style.id,
-          changeLog: instruction.slice(0, 32),
-          dna: { ...dna } satisfies StyleDna,
-        });
-        toast.success("已写回风格。旧图保留，之后新图会带上这次修改。");
-      } else {
-        toast.success("只改了这一张，风格 DNA 未动");
-      }
+      toast.success(
+        writeback
+          ? "已写回风格。旧图保留，之后新图会带上这次修改。"
+          : "只改了这一张，风格 DNA 未动",
+      );
     } catch (e) {
-      toast.error(messageForImageJobError(e));
+      const reason = messageForImageJobError(e);
+      toast.error(
+        writeback
+          ? reason === "出图失败"
+            ? "风格已写回，出图失败，可重试"
+            : `风格已写回，出图失败，可重试（${reason}）`
+          : reason,
+      );
     } finally {
       setMode("idle");
       setBusyLabel(null);
@@ -205,19 +260,8 @@ export function StudioView() {
         </div>
         <div className="flex items-center justify-end gap-1">
           <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
-          <a
-            className={cn(
-              "inline-flex size-11 items-center justify-center rounded-md border border-border text-fg transition-colors duration-150 hover:bg-surface-2",
-              !currentImg && "pointer-events-none opacity-40",
-            )}
-            href={currentImg?.url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="下载"
-            title="下载"
-          >
-            <Download className="size-4" />
-          </a>
+          <StudioDownloadLink url={currentImg?.url} slot={slot} />
+          <StudioExportButton projectName={project.name} styleLine={style} />
           <DeleteProjectControl projectId={project.id} compact />
           <JobHistoryLink compact />
           <AuthSlot compact />
@@ -266,6 +310,7 @@ export function StudioView() {
               </div>
             </div>
           ) : null}
+          <StyleLineActions styles={project.styles} style={style} disabled={generating} />
           <div>
             <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">物料槽</p>
             <div className="flex flex-col gap-1">
@@ -375,8 +420,9 @@ export function StudioView() {
           ) : null}
 
           {mobile === "style" ? (
-            <div className="overflow-auto p-5 md:hidden">
+            <div className="flex flex-col gap-8 overflow-auto p-5 md:hidden">
               <StyleCard dna={dna} />
+              <StyleLineActions styles={project.styles} style={style} disabled={generating} />
             </div>
           ) : null}
 
@@ -418,10 +464,16 @@ export function StudioView() {
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-surface p-6 shadow-border">
             <h2 className="font-display text-2xl tracking-tight">写回风格？</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              会影响这条风格线以后出的新图。已采用的图不会自动变。确定要把这次修改升为新的风格版本吗？
+              会基于 rev{confirmWrite.fromRev} 生成新的风格版本，影响这条风格线以后出的新图。已采用的图不会自动变。
             </p>
+            <div className="mt-4 max-h-64 overflow-y-auto rounded-md bg-bg p-3 shadow-border">
+              <p className="mb-2 text-xs uppercase tracking-kicker text-subtle">
+                将改动 {confirmWrite.changes.length} 个字段
+              </p>
+              <DnaChangeList changes={confirmWrite.changes} />
+            </div>
             <div className="mt-6 flex gap-2">
-              <Button className="flex-1" onClick={() => void applyTune(confirmWrite.instruction, true)}>
+              <Button className="flex-1" onClick={() => void confirmWriteback()}>
                 写回并微调
               </Button>
               <Button variant="outline" className="flex-1" onClick={() => setConfirmWrite(null)}>

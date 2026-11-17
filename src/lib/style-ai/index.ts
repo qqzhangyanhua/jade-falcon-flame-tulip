@@ -22,3 +22,8 @@ export async function parseBrief(brief: string, opts?: ChatOptions): Promise<Bri
     forbidden: parsed?.forbidden ?? [],
   };
 }
+
+export { mergeInstruction, messageForMergeError } from "./merge.ts";
+export type { MergeError, MergeResult } from "./merge.ts";
+export { tailorDirections } from "./tailor.ts";
+export type { TailoredDirection } from "./tailor.ts";

@@ -15,11 +15,15 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  forkStyle,
   lockCandidate,
+  restoreStyle,
   setCurrentStyle,
   setStyleRev,
   writebackStyle,
 } from "./project/ops.ts";
+import type { DnaChange } from "./project/dna.ts";
+import type { ArchiveResult } from "./project/ops.ts";
 import { uid } from "./utils";
 
 type State = {
@@ -53,11 +57,20 @@ type State = {
     jobId?: string;
   }) => string[];
   adoptImage: (styleId: string, slot: Slot, imageId: string) => void;
-  writebackStyle: (opts: { styleId: string; changeLog: string; dna: StyleDna }) => void;
+  writebackStyle: (opts: {
+    styleId: string;
+    changeLog: string;
+    dna: StyleDna;
+    changes?: DnaChange[];
+  }) => void;
   setStyleRev: (styleId: string, rev: number) => void;
-  archiveStyle: (styleId: string) => void;
+  archiveStyle: (styleId: string) => ArchiveOutcome;
+  restoreStyle: (styleId: string) => void;
+  forkStyle: (styleId: string) => void;
   removeProject: (id: string) => void;
 };
+
+export type ArchiveOutcome = { ok: true } | Extract<ArchiveResult, { ok: false }>;
 
 type StoreSet = (fn: (state: State) => Partial<State>) => void;
 
@@ -165,8 +178,8 @@ export const useStudio = create<State>()(
       },
       adoptImage: (styleId, slot, imageId) =>
         update(set, get, (p) => adoptImage(p, styleId, slot, imageId)),
-      writebackStyle: ({ styleId, changeLog, dna }) =>
-        update(set, get, (p) => writebackStyle(p, { styleId, changeLog, dna })),
+      writebackStyle: ({ styleId, changeLog, dna, changes }) =>
+        update(set, get, (p) => writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid })),
       setStyleRev: (styleId, rev) => update(set, get, (p) => setStyleRev(p, styleId, rev)),
       removeProject: (id) => {
         set((s) => ({
@@ -174,11 +187,16 @@ export const useStudio = create<State>()(
           currentId: s.currentId === id ? null : s.currentId,
         }));
       },
-      archiveStyle: (styleId) =>
-        update(set, get, (p) => {
-          const result = archiveStyle(p, styleId);
-          return result.ok ? result.project : p;
-        }),
+      archiveStyle: (styleId) => {
+        const project = get().current();
+        if (!project) return { ok: false, reason: "not_found" };
+        const result = archiveStyle(project, styleId);
+        if (!result.ok) return result;
+        update(set, get, () => result.project);
+        return { ok: true };
+      },
+      restoreStyle: (styleId) => update(set, get, (p) => restoreStyle(p, styleId)),
+      forkStyle: (styleId) => update(set, get, (p) => forkStyle(p, styleId, { newId: uid })),
     }),
     {
       name: "keystone-v1",

@@ -1,22 +1,22 @@
-import { newEntityId } from "./ids";
+import { newEntityId } from "./ids.ts";
 import {
   buildStudioImageState,
   listEnabledImagePicker,
   resolveNewProjectModelId,
-} from "./availability";
-import { ImageJobError } from "./errors";
+} from "./availability.ts";
+import { ImageJobError } from "./errors.ts";
 import type {
   ImageJobGatewayDeps,
   ModelCatalogStore,
   QuotaStore,
   StudioProjectStore,
-} from "./stores";
+} from "./stores.ts";
 import type {
   ImageJobErrorCode,
   PickerImageModel,
   StudioImageState,
   StudioProjectRecord,
-} from "./types";
+} from "./types.ts";
 
 export type ProjectOpResult<T> =
   | { ok: true; value: T }

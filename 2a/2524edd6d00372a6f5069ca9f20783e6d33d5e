@@ -1,0 +1,49 @@
+src/lib/project-sync.ts
+  s_a124205241a4b1::t_97be752759fd43 1-224
+  s_a124205241a4b1::t_6c360951f9a2e9 225-228
+src/lib/image-jobs/project-document.test.ts
+  s_a124205241a4b1::t_d91d1fa2c247c1 1-200
+src/lib/project-sync.test.ts
+  s_a124205241a4b1::t_45342049bdb59e 1-354
+  s_a124205241a4b1::t_3d345fc06601ab 355-368
+migrations/0010_studio_project_document.sql
+  s_a124205241a4b1::t_a70b24ccaa6568 1-5
+package.json
+  s_a124205241a4b1::t_9584964f4cadd8 19
+src/app/actions/studio.ts
+  s_a124205241a4b1::t_d80f442d0a17d4 9,31,34,364-404
+src/app/providers.tsx
+  s_a124205241a4b1::t_75b89ea4b8466a 6,14
+src/components/project-sync.tsx
+  s_a124205241a4b1::t_8ad55a2c6b3a3f 1-115
+src/lib/image-jobs/errors.ts
+  s_a124205241a4b1::t_5a2ab27e1da63b 19-21
+src/lib/image-jobs/memory.ts
+  s_a124205241a4b1::t_4d2f6c00ede46f 17,82-88,114-129
+src/lib/image-jobs/project-document.ts
+  s_a124205241a4b1::t_ffb4f9ef1141d7 1-66
+src/lib/image-jobs/projects.ts
+  s_a124205241a4b1::t_14192b4c6ca973 17,24-29
+src/lib/image-jobs/sql.ts
+  s_a124205241a4b1::t_c311cc640e2a2e 18,121-136,306-339
+src/lib/image-jobs/stores.ts
+  s_a124205241a4b1::t_b085a39c6fe9e9 1,9-10,29-40
+src/lib/image-jobs/types.ts
+  s_a124205241a4b1::t_50432df484f41c 1-2,29-31,48-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "2a2524edd6d00372a6f5069ca9f20783e6d33d5e",
+  "prompts": {},
+  "sessions": {
+    "s_a124205241a4b1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "6da7dd70-3c41-43f9-a205-925562dc4cfd",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

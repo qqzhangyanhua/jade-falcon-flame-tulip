@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
 import { DeleteProjectControl } from "@/components/delete-project-control";
@@ -9,6 +9,8 @@ import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
+import { StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
+import { StyleLineActions } from "@/components/style-line-actions";
 import { StudioGenerateBar, StudioTunePanel } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
@@ -205,19 +207,8 @@ export function StudioView() {
         </div>
         <div className="flex items-center justify-end gap-1">
           <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
-          <a
-            className={cn(
-              "inline-flex size-11 items-center justify-center rounded-md border border-border text-fg transition-colors duration-150 hover:bg-surface-2",
-              !currentImg && "pointer-events-none opacity-40",
-            )}
-            href={currentImg?.url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="下载"
-            title="下载"
-          >
-            <Download className="size-4" />
-          </a>
+          <StudioDownloadLink url={currentImg?.url} slot={slot} />
+          <StudioExportButton projectName={project.name} styleLine={style} />
           <DeleteProjectControl projectId={project.id} compact />
           <JobHistoryLink compact />
           <AuthSlot compact />
@@ -266,6 +257,7 @@ export function StudioView() {
               </div>
             </div>
           ) : null}
+          <StyleLineActions styles={project.styles} style={style} disabled={generating} />
           <div>
             <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">物料槽</p>
             <div className="flex flex-col gap-1">
@@ -375,8 +367,9 @@ export function StudioView() {
           ) : null}
 
           {mobile === "style" ? (
-            <div className="overflow-auto p-5 md:hidden">
+            <div className="flex flex-col gap-8 overflow-auto p-5 md:hidden">
               <StyleCard dna={dna} />
+              <StyleLineActions styles={project.styles} style={style} disabled={generating} />
             </div>
           ) : null}
 

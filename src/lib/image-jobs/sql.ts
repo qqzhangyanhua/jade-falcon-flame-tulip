@@ -76,7 +76,8 @@ type BlobRow = {
   id: string;
   user_id: string;
   project_id: string;
-  job_id: string;
+  job_id: string | null;
+  kind: string;
   content_type: string;
   bytes: unknown;
   created_at_ms: number;
@@ -171,6 +172,7 @@ function toBlob(row: BlobRow): ImageBlobRecord {
     userId: row.user_id,
     projectId: row.project_id,
     jobId: row.job_id,
+    kind: row.kind === "upload" ? "upload" : "job",
     contentType: row.content_type,
     bytes: toBytes(row.bytes),
     createdAt: Number(row.created_at_ms),
@@ -510,19 +512,20 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
       const payload = Buffer.from(record.bytes);
       const rows = await sql<BlobRow>`
         insert into image_blobs (
-          id, user_id, project_id, job_id, content_type, bytes, created_at
+          id, user_id, project_id, job_id, kind, content_type, bytes, created_at
         )
         values (
           ${record.id},
           ${record.userId},
           ${record.projectId},
           ${record.jobId},
+          ${record.kind},
           ${record.contentType},
           ${payload},
           to_timestamp(${record.createdAt / 1000})
         )
         returning
-          id, user_id, project_id, job_id, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes,
           (extract(epoch from created_at) * 1000) as created_at_ms
       `;
       return rows[0] ? toBlob(rows[0]) : record;
@@ -530,7 +533,7 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
     async get(id) {
       const rows = await sql<BlobRow>`
         select
-          id, user_id, project_id, job_id, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes,
           (extract(epoch from created_at) * 1000) as created_at_ms
         from image_blobs
         where id = ${id}

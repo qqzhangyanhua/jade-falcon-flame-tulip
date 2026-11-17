@@ -33,6 +33,7 @@ import type {
   StudioQuota,
   StudioRole,
 } from "@/lib/image-jobs/types";
+import { uploadWireframe } from "@/lib/image-jobs/upload";
 import { createXaiImageUpstream } from "@/lib/image-jobs/upstream";
 import { styleDnaSchema } from "@/lib/project/dna";
 import { PRESETS } from "@/lib/presets";
@@ -94,6 +95,21 @@ export async function ensureStudioProjectFn(input: { data: { projectId: string }
     id: project.id,
     currentImageModelId: project.currentImageModelId,
   };
+}
+
+export async function uploadWireframeFn(input: {
+  data: { projectId: string; dataUrl: string };
+}): Promise<{ url: string }> {
+  const { userId } = await requireActionUser();
+  const { projectId } = parseProjectId(input.data);
+  const deps = await createSqlGatewayDeps();
+  const result = await uploadWireframe(deps, {
+    userId,
+    projectId,
+    dataUrl: input.data.dataUrl,
+  });
+  if (!result.ok) throw new ImageJobError(result.code);
+  return { url: result.url };
 }
 
 export async function pickProjectImageModelFn(input: {

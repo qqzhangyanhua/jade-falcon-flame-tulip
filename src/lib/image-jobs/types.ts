@@ -22,6 +22,8 @@ export const IMAGE_JOB_ERROR_CODES = [
   "in_flight",
   "upstream_failed",
   "project_deleted",
+  "invalid_image",
+  "image_too_large",
 ] as const;
 
 export type ImageJobErrorCode = (typeof IMAGE_JOB_ERROR_CODES)[number];
@@ -74,11 +76,15 @@ export type ImageRevRecord = {
   createdAt: number;
 };
 
+export type ImageBlobKind = "job" | "upload";
+
 export type ImageBlobRecord = {
   id: string;
   userId: string;
   projectId: string;
-  jobId: string;
+  /** Null for user uploads, which belong to no generation job. */
+  jobId: string | null;
+  kind: ImageBlobKind;
   contentType: string;
   bytes: Uint8Array;
   createdAt: number;
@@ -91,7 +97,8 @@ export type DurableImageRef = {
   contentType: string;
 };
 
-export type OpenedDurableImage = DurableImageRef & {
+export type OpenedDurableImage = Omit<DurableImageRef, "jobId"> & {
+  jobId: string | null;
   bytes: Uint8Array;
 };
 

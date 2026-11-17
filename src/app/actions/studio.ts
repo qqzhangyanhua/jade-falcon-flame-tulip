@@ -6,6 +6,12 @@ import { fetchRemoteImage, listJobImages, openJobImage } from "@/lib/image-jobs/
 import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
+import { loadProjectDocument, saveProjectDocument } from "@/lib/image-jobs/project-document";
+import {
+  importLocalProject,
+  listProjectSummaries,
+  type ImportLocalResult,
+} from "@/lib/image-jobs/project-list";
 import {
   createStudioProject,
   deleteStudioProject,
@@ -27,13 +33,18 @@ import {
 import type { ImageJobGatewayDeps } from "@/lib/image-jobs/stores";
 import type {
   ImageJobAction,
+  ImageJobErrorCode,
   ImageJobHistoryItem,
   PickerImageModel,
+  ProjectDocumentSnapshot,
+  ProjectSummary,
   StudioImageState,
   StudioQuota,
   StudioRole,
 } from "@/lib/image-jobs/types";
+import { uploadWireframe } from "@/lib/image-jobs/upload";
 import { createXaiImageUpstream } from "@/lib/image-jobs/upstream";
+import { styleDnaSchema } from "@/lib/project/dna";
 import { PRESETS } from "@/lib/presets";
 import { candidatePrompt, slotPrompt, SLOT_ASPECT, tunePrompt } from "@/lib/prompts";
 import type { Slot, StyleDna } from "@/lib/types";
@@ -57,6 +68,17 @@ function parseProjectId(input: { projectId: string }): { projectId: string } {
   const projectId = input.projectId.trim();
   if (!projectId) throw new ImageJobError("not_found");
   return { projectId };
+}
+
+/** The result-returning actions answer a blank id with a code instead of throwing. */
+async function resolveActionContext(input: {
+  projectId: string;
+}): Promise<{ ok: true; userId: string; projectId: string } | { ok: false; code: ImageJobErrorCode }> {
+  const userId = await signedInUserId();
+  if (!userId) return { ok: false, code: "unauthorized" };
+  const projectId = input.projectId.trim();
+  if (!projectId) return { ok: false, code: "not_found" };
+  return { ok: true, userId, projectId };
 }
 
 export async function listImageModelsFn(): Promise<PickerImageModel[]> {
@@ -93,6 +115,37 @@ export async function ensureStudioProjectFn(input: { data: { projectId: string }
     id: project.id,
     currentImageModelId: project.currentImageModelId,
   };
+}
+
+// Result form of ensureStudioProjectFn: production strips the message of a thrown action error,
+// so the client could not tell "not yours" or "deleted" from a network failure.
+export async function ensureStudioProjectResultFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<{ id: string }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  const result = await ensureStudioProject(deps.catalog, deps.projects, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+  });
+  if (!result.ok) return { ok: false, code: result.code };
+  return { ok: true, value: { id: result.value.id } };
+}
+
+export async function uploadWireframeFn(input: {
+  data: { projectId: string; dataUrl: string };
+}): Promise<{ url: string }> {
+  const { userId } = await requireActionUser();
+  const { projectId } = parseProjectId(input.data);
+  const deps = await createSqlGatewayDeps();
+  const result = await uploadWireframe(deps, {
+    userId,
+    projectId,
+    dataUrl: input.data.dataUrl,
+  });
+  if (!result.ok) throw new ImageJobError(result.code);
+  return { url: result.url };
 }
 
 export async function pickProjectImageModelFn(input: {
@@ -200,16 +253,17 @@ async function runOwnedImageJob(
 }
 
 export async function generateCandidate(input: {
-  data: { projectId: string; presetId: string; product: string };
+  data: { projectId: string; presetId: string; product: string; dna?: StyleDna };
 }): Promise<ImageJobFnResult> {
   const { userId } = await requireActionUser();
   const data = input.data;
   const preset = PRESETS.find((item) => item.id === data.presetId) ?? PRESETS[0];
+  const tailored = styleDnaSchema.safeParse(data.dna);
   return runOwnedImageJob(userId, {
     projectId: data.projectId,
     action: "direction",
     slot: null,
-    prompt: candidatePrompt(preset.dna, data.product),
+    prompt: candidatePrompt(tailored.success ? tailored.data : preset.dna, data.product),
     aspect: SLOT_ASPECT.candidate,
     n: 1,
   });
@@ -341,4 +395,59 @@ export async function openJobImageFn(input: { data: { imageId: string } }) {
     contentType: result.image.contentType,
     base64: Buffer.from(result.image.bytes).toString("base64"),
   };
+}
+
+export type ProjectDocumentActionResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; code: ImageJobErrorCode; current?: ProjectDocumentSnapshot };
+
+// Returned rather than thrown: production strips error messages from thrown server action errors,
+// and the client needs the code (and the server copy on a conflict) to decide what to do.
+async function signedInUserId(): Promise<string | null> {
+  try {
+    return (await requireActionUser()).userId;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadProjectDocumentFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<ProjectDocumentSnapshot>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const { userId, projectId } = ctx;
+  const deps = await createSqlGatewayDeps();
+  return loadProjectDocument(deps, { userId, projectId });
+}
+
+export async function saveProjectDocumentFn(input: {
+  data: { projectId: string; document: unknown; expectedVersion: number };
+}): Promise<ProjectDocumentActionResult<{ version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const { userId, projectId } = ctx;
+  const deps = await createSqlGatewayDeps();
+  return saveProjectDocument(deps, {
+    userId,
+    projectId,
+    document: input.data.document,
+    expectedVersion: input.data.expectedVersion,
+  });
+}
+
+export async function listProjectSummariesFn(): Promise<ProjectSummary[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return unwrapProjectOp(await listProjectSummaries(deps, { userId }));
+}
+
+export async function importLocalProjectFn(input: {
+  data: { projectId: string; document: unknown };
+}): Promise<ProjectDocumentActionResult<ImportLocalResult>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const { userId, projectId } = ctx;
+  const deps = await createSqlGatewayDeps();
+  return importLocalProject(deps, { userId, projectId, document: input.data.document });
 }

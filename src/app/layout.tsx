@@ -8,7 +8,7 @@ const APP_NAME = "Keystone";
 
 export const metadata: Metadata = {
   title: APP_NAME,
-  description: "先锁定视觉方向，再出同一品牌的高保真图。",
+  description: "先锁品牌方向，再出同一 DNA 的图。",
   icons: {
     icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
     apple: "/__grok/icon-180.png",
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0c0c0d",
+  themeColor: "#050506",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

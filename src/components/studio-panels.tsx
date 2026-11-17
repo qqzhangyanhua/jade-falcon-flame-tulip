@@ -1,9 +1,15 @@
+import { DnaChangeList } from "@/components/dna-change-list";
 import type { ImageRev, StyleBranch, StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function StyleCard({ dna }: { dna: StyleDna }) {
+// The heading stays the DNA's own name, which an explicit rename changes; the line name only shows
+// when it differs (e.g. a fork, whose DNA is a copy of the original).
+export function StyleCard({ dna, lineName }: { dna: StyleDna; lineName?: string }) {
   return (
     <div>
+      {lineName && lineName !== dna.name ? (
+        <p className="mb-1 text-xs uppercase tracking-kicker text-subtle">{lineName}</p>
+      ) : null}
       <h2 className="font-display text-xl leading-tight tracking-tight">{dna.name}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{dna.oneLiner}</p>
       <div className="mt-4 flex overflow-hidden rounded-md">
@@ -106,8 +112,14 @@ export function StudioHistoryPanel({
                     rev{rev.rev} · {rev.changeLog}
                     {style.currentRev === rev.rev ? " · 当前" : ""}
                   </span>
-                  <span className="text-xs text-subtle">之后新图跟这个 DNA，旧图不变</span>
+                  <span className="text-xs text-subtle">
+                    {rev.parentRev !== null ? `改自 rev${rev.parentRev} · ` : ""}
+                    之后新图跟这个 DNA，旧图不变
+                  </span>
                 </button>
+                {rev.changes?.length ? (
+                  <DnaChangeList changes={rev.changes} className="px-2 pb-3 pt-1" />
+                ) : null}
               </li>
             ))}
         </ul>

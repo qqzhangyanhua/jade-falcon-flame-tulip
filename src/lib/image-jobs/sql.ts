@@ -1,6 +1,7 @@
 import type { Sql } from "../db";
 import { beijingCalendarDay } from "./beijing-day";
 import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency";
+import { COVER_SLOT } from "../project/summary";
 import { DEFAULT_DAILY_IMAGE_CAP } from "./quota";
 import {
   IMAGE_JOB_ACTIONS,
@@ -15,6 +16,8 @@ import type {
   ImageJobRecord,
   ImageJobStatus,
   ImageRevRecord,
+  ProjectDocumentSnapshot,
+  ProjectSummary,
   StudioProjectRecord,
 } from "./types";
 import type {
@@ -76,7 +79,8 @@ type BlobRow = {
   id: string;
   user_id: string;
   project_id: string;
-  job_id: string;
+  job_id: string | null;
+  kind: string;
   content_type: string;
   bytes: unknown;
   created_at_ms: number;
@@ -113,6 +117,22 @@ function toModel(row: CatalogRow): CatalogModel {
     enabled: Boolean(row.enabled),
     capabilities: parseCapabilities(row.capabilities ?? ""),
     isAdminDefault: Boolean(row.is_admin_default),
+  };
+}
+
+type DocumentRow = {
+  document: unknown;
+  version: number | string;
+  updated_at_ms: number | string | null;
+};
+
+function toSnapshot(row: DocumentRow): ProjectDocumentSnapshot {
+  const document =
+    typeof row.document === "string" ? JSON.parse(row.document) : row.document;
+  return {
+    document: (document ?? null) as ProjectDocumentSnapshot["document"],
+    version: Number(row.version),
+    updatedAt: row.updated_at_ms === null ? null : Number(row.updated_at_ms),
   };
 }
 
@@ -171,6 +191,7 @@ function toBlob(row: BlobRow): ImageBlobRecord {
     userId: row.user_id,
     projectId: row.project_id,
     jobId: row.job_id,
+    kind: row.kind === "upload" ? "upload" : "job",
     contentType: row.content_type,
     bytes: toBytes(row.bytes),
     createdAt: Number(row.created_at_ms),
@@ -222,6 +243,13 @@ export function createSqlCatalogStore(sql: Sql): ModelCatalogStore {
         update model_catalog
         set display_name = ${displayName}
         where id = ${id}
+      `;
+    },
+    async setAdminDefault(id) {
+      await sql`
+        update model_catalog
+        set is_admin_default = (id = ${id})
+        where kind = 'image'
       `;
     },
   };
@@ -276,6 +304,85 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
                else extract(epoch from deleted_at) * 1000 end as deleted_at_ms
       `;
       return rows[0] ? toProject(rows[0]) : null;
+    },
+    async getDocument(id) {
+      const rows = await sql<DocumentRow>`
+        select document, version, case when updated_at is null then null
+               else extract(epoch from updated_at) * 1000 end as updated_at_ms
+        from studio_projects
+        where id = ${id}
+      `;
+      return rows[0] ? toSnapshot(rows[0]) : null;
+    },
+    async listSummaries(userId, limit) {
+      // Only the few fields the list needs are pulled out of the jsonb; the document is never loaded whole.
+      const rows = await sql<{
+        id: string;
+        name: string | null;
+        stage: string | null;
+        cover_url: string | null;
+        updated_at_ms: number | string;
+      }>`
+        select p.id,
+               p.document->>'name' as name,
+               p.document->>'phase' as stage,
+               coalesce(
+                 (select r->>'url'
+                    from jsonb_array_elements(cur.style->'assets'->${COVER_SLOT}::text->'revs') r
+                   where r->>'id' = cur.style->'assets'->${COVER_SLOT}::text->>'adoptedId'
+                   limit 1),
+                 cur.style->'assets'->${COVER_SLOT}::text->'revs'->-1->>'url',
+                 cur.style->>'candidateUrl'
+               ) as cover_url,
+               extract(epoch from p.updated_at) * 1000 as updated_at_ms
+        from studio_projects p
+        left join lateral (
+          select s as style
+            from jsonb_array_elements(p.document->'styles') s
+           where s->>'id' = p.document->>'currentStyleId'
+           limit 1
+        ) cur on true
+        where p.user_id = ${userId}
+          and p.deleted_at is null
+          and p.document is not null
+          and p.updated_at is not null
+        order by p.updated_at desc, p.id asc
+        limit ${limit}
+      `;
+      return rows.map(
+        (row): ProjectSummary => ({
+          id: row.id,
+          name: row.name ?? "",
+          stage: row.stage === "studio" || row.stage === "direction" ? row.stage : "brief",
+          coverUrl: row.cover_url,
+          updatedAt: Number(row.updated_at_ms),
+        }),
+      );
+    },
+    async saveDocument(id, document, expectedVersion, now) {
+      // Version and deleted checks live in the WHERE so a concurrent save or delete cannot slip between them.
+      const saved = await sql<DocumentRow>`
+        update studio_projects
+        set document = ${JSON.stringify(document)}::jsonb,
+            version = version + 1,
+            updated_at = to_timestamp(${now / 1000})
+        where id = ${id} and deleted_at is null and version = ${expectedVersion}
+        returning document, version, case when updated_at is null then null
+               else extract(epoch from updated_at) * 1000 end as updated_at_ms
+      `;
+      if (saved[0]) return { status: "saved", snapshot: toSnapshot(saved[0]) };
+
+      const rows = await sql<DocumentRow & { deleted: boolean }>`
+        select document, version, case when updated_at is null then null
+               else extract(epoch from updated_at) * 1000 end as updated_at_ms,
+               (deleted_at is not null) as deleted
+        from studio_projects
+        where id = ${id}
+      `;
+      const row = rows[0];
+      if (!row) return { status: "not_found" };
+      if (row.deleted) return { status: "deleted" };
+      return { status: "conflict", current: toSnapshot(row) };
     },
     async markDeleted(id, deletedAt) {
       const rows = await sql<ProjectRow>`
@@ -503,19 +610,20 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
       const payload = Buffer.from(record.bytes);
       const rows = await sql<BlobRow>`
         insert into image_blobs (
-          id, user_id, project_id, job_id, content_type, bytes, created_at
+          id, user_id, project_id, job_id, kind, content_type, bytes, created_at
         )
         values (
           ${record.id},
           ${record.userId},
           ${record.projectId},
           ${record.jobId},
+          ${record.kind},
           ${record.contentType},
           ${payload},
           to_timestamp(${record.createdAt / 1000})
         )
         returning
-          id, user_id, project_id, job_id, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes,
           (extract(epoch from created_at) * 1000) as created_at_ms
       `;
       return rows[0] ? toBlob(rows[0]) : record;
@@ -523,7 +631,7 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
     async get(id) {
       const rows = await sql<BlobRow>`
         select
-          id, user_id, project_id, job_id, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes,
           (extract(epoch from created_at) * 1000) as created_at_ms
         from image_blobs
         where id = ${id}

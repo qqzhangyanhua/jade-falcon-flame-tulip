@@ -1,7 +1,7 @@
 import {
   IMAGE_JOB_ERROR_CODES,
   type ImageJobErrorCode,
-} from "./types";
+} from "./types.ts";
 
 export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   unauthorized: "请先登录",
@@ -14,6 +14,11 @@ export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   not_found: "项目不存在",
   upstream_failed: "出图失败",
   project_deleted: "项目已删除",
+  invalid_image: "图片格式不支持，请上传 PNG、JPEG 或 WebP",
+  image_too_large: "图片过大，请压缩后重试",
+  version_conflict: "项目已在别处更新，已载入最新版本",
+  invalid_document: "项目数据格式不正确",
+  document_too_large: "项目内容过大，无法保存",
 };
 
 export const CAPABILITY_DENIED_REASONS: Record<

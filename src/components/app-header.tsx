@@ -24,7 +24,7 @@ export function AppHeader({
       )}
     >
       {leading ?? (
-        <Link href="/" className="min-h-11">
+        <Link href="/studio" className="min-h-11">
           <Wordmark />
         </Link>
       )}

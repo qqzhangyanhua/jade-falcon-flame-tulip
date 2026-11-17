@@ -1,9 +1,9 @@
-import { isProjectAlive } from "./projects";
-import type { ImageJobGatewayDeps } from "./stores";
+import { isProjectAlive } from "./projects.ts";
+import type { ImageJobGatewayDeps } from "./stores.ts";
 import type {
   ImageJobHistoryItem,
   ListUserJobsResult,
-} from "./types";
+} from "./types.ts";
 
 export async function listUserJobs(
   deps: ImageJobGatewayDeps,

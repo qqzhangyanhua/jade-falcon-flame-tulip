@@ -1,26 +1,32 @@
-import { newEntityId } from "./ids";
+import { newEntityId } from "./ids.ts";
 import {
   buildStudioImageState,
   listEnabledImagePicker,
   resolveNewProjectModelId,
-} from "./availability";
-import { ImageJobError } from "./errors";
+} from "./availability.ts";
+import { ImageJobError } from "./errors.ts";
 import type {
   ImageJobGatewayDeps,
   ModelCatalogStore,
   QuotaStore,
   StudioProjectStore,
-} from "./stores";
+} from "./stores.ts";
 import type {
   ImageJobErrorCode,
   PickerImageModel,
+  ProjectDocumentSnapshot,
   StudioImageState,
   StudioProjectRecord,
-} from "./types";
+} from "./types.ts";
 
 export type ProjectOpResult<T> =
   | { ok: true; value: T }
-  | { ok: false; code: ImageJobErrorCode };
+  | {
+      ok: false;
+      code: ImageJobErrorCode;
+      /** Set with `version_conflict`: the server copy the caller should reload. */
+      current?: ProjectDocumentSnapshot;
+    };
 
 async function requireUser(userId: string): Promise<ImageJobErrorCode | null> {
   return userId ? null : "unauthorized";

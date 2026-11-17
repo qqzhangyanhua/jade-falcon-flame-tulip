@@ -1,9 +1,10 @@
-import { beijingCalendarDay } from "./beijing-day";
-import { concurrencyBlock } from "./concurrency";
-import { newEntityId } from "./ids";
-import { cloneModel } from "./availability";
-import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota";
-import { decodeDataUrl } from "./durable";
+import { beijingCalendarDay } from "./beijing-day.ts";
+import { concurrencyBlock } from "./concurrency.ts";
+import { newEntityId } from "./ids.ts";
+import { cloneModel } from "./availability.ts";
+import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
+import { decodeDataUrl } from "./durable.ts";
+import { projectCoverUrl } from "../project/summary.ts";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -14,9 +15,11 @@ import type {
   ImageRevRecord,
   ImageUpstream,
   ImageUpstreamRequest,
+  ProjectDocumentSnapshot,
+  ProjectSummary,
   StudioProjectRecord,
   StudioRole,
-} from "./types";
+} from "./types.ts";
 import type {
   ImageBlobStore,
   ImageJobGatewayDeps,
@@ -26,7 +29,7 @@ import type {
   QuotaStore,
   RoleStore,
   StudioProjectStore,
-} from "./stores";
+} from "./stores.ts";
 
 function cloneJob(job: ImageJobRecord): ImageJobRecord {
   return { ...job };
@@ -64,6 +67,11 @@ export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
       const model = models.get(id);
       if (model) model.displayName = displayName;
     },
+    async setAdminDefault(id) {
+      for (const model of models.values()) {
+        if (model.kind === "image") model.isAdminDefault = model.id === id;
+      }
+    },
   };
 }
 
@@ -73,6 +81,13 @@ export function createMemoryProjects(
   const projects = new Map(
     seed.map((project) => [project.id, cloneProject(project)]),
   );
+  const documents = new Map<string, ProjectDocumentSnapshot>();
+  const snapshotOf = (id: string): ProjectDocumentSnapshot => {
+    const stored = documents.get(id);
+    return stored
+      ? structuredClone(stored)
+      : { document: null, version: 0, updatedAt: null };
+  };
   return {
     async create(record) {
       const next = cloneProject({
@@ -97,6 +112,39 @@ export function createMemoryProjects(
       if (!project) return null;
       if (project.deletedAt === null) project.deletedAt = deletedAt;
       return cloneProject(project);
+    },
+    async getDocument(id) {
+      return projects.has(id) ? snapshotOf(id) : null;
+    },
+    async listSummaries(userId, limit) {
+      const rows: ProjectSummary[] = [];
+      for (const project of projects.values()) {
+        if (project.userId !== userId || project.deletedAt !== null) continue;
+        const stored = documents.get(project.id);
+        if (!stored?.document || stored.updatedAt === null) continue;
+        rows.push({
+          id: project.id,
+          name: stored.document.name,
+          stage: stored.document.phase,
+          coverUrl: projectCoverUrl(stored.document),
+          updatedAt: stored.updatedAt,
+        });
+      }
+      rows.sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1));
+      return rows.slice(0, limit);
+    },
+    async saveDocument(id, document, expectedVersion, now) {
+      const project = projects.get(id);
+      if (!project) return { status: "not_found" };
+      if (project.deletedAt !== null) return { status: "deleted" };
+      const current = snapshotOf(id);
+      if (current.version !== expectedVersion) return { status: "conflict", current };
+      documents.set(id, {
+        document: structuredClone(document),
+        version: current.version + 1,
+        updatedAt: now,
+      });
+      return { status: "saved", snapshot: snapshotOf(id) };
     },
   };
 }

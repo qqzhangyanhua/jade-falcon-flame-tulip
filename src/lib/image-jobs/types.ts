@@ -1,3 +1,5 @@
+import type { ProjectDocument } from "../project/schema.ts";
+
 export const IMAGE_JOB_ACTIONS = [
   "direction",
   "generate",
@@ -22,6 +24,11 @@ export const IMAGE_JOB_ERROR_CODES = [
   "in_flight",
   "upstream_failed",
   "project_deleted",
+  "invalid_image",
+  "image_too_large",
+  "version_conflict",
+  "invalid_document",
+  "document_too_large",
 ] as const;
 
 export type ImageJobErrorCode = (typeof IMAGE_JOB_ERROR_CODES)[number];
@@ -37,6 +44,28 @@ export type CatalogModel = {
   capabilities: ImageJobAction[];
   isAdminDefault: boolean;
 };
+
+/** The server copy of a Project Document; `document` is null until the first save. */
+export type ProjectDocumentSnapshot = {
+  document: ProjectDocument | null;
+  version: number;
+  updatedAt: number | null;
+};
+
+/** One row of the recent-projects list; deliberately omits everything else in the document. */
+export type ProjectSummary = {
+  id: string;
+  name: string;
+  stage: ProjectDocument["phase"];
+  coverUrl: string | null;
+  updatedAt: number;
+};
+
+export type SaveDocumentOutcome =
+  | { status: "saved"; snapshot: ProjectDocumentSnapshot }
+  | { status: "conflict"; current: ProjectDocumentSnapshot }
+  | { status: "deleted" }
+  | { status: "not_found" };
 
 export type StudioProjectRecord = {
   id: string;
@@ -74,11 +103,15 @@ export type ImageRevRecord = {
   createdAt: number;
 };
 
+export type ImageBlobKind = "job" | "upload";
+
 export type ImageBlobRecord = {
   id: string;
   userId: string;
   projectId: string;
-  jobId: string;
+  /** Null for user uploads, which belong to no generation job. */
+  jobId: string | null;
+  kind: ImageBlobKind;
   contentType: string;
   bytes: Uint8Array;
   createdAt: number;
@@ -91,7 +124,8 @@ export type DurableImageRef = {
   contentType: string;
 };
 
-export type OpenedDurableImage = DurableImageRef & {
+export type OpenedDurableImage = Omit<DurableImageRef, "jobId"> & {
+  jobId: string | null;
   bytes: Uint8Array;
 };
 

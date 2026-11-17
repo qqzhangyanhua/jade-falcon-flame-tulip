@@ -2,27 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowRight, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { AtmosphereGrid } from "@/components/atmosphere-grid";
-import { DeleteProjectControl } from "@/components/delete-project-control";
+import { LocalMigrationPrompt } from "@/components/local-migration";
 import { QuotaMeter } from "@/components/quota-meter";
+import { RecentProjects } from "@/components/recent-projects";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
-import { parseBrief } from "@/app/actions/brief";
+import { parseBrief, tailorDirections } from "@/app/actions/brief";
 import {
   createStudioProjectFn,
   generateCandidate,
   getDailyQuotaFn,
   listImageModelsFn,
+  uploadWireframeFn,
 } from "@/app/actions/studio";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { messageForImageJobError, type StudioQuota } from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
+import { presetDirections } from "@/lib/style-ai/shared";
 import { fileToDataUrl } from "@/lib/resize-image";
 import { useStudio } from "@/lib/store";
-import { adoptedRev, SLOTS, type Project } from "@/lib/types";
 import { uid } from "@/lib/utils";
 
 const EXAMPLES = [
@@ -37,27 +40,6 @@ const STEPS = [
   { n: "03", title: "同一 DNA 出图", body: "旗舰页、KV、官网共用。" },
 ];
 
-function projectCover(project: Project): string | null {
-  const style = project.styles.find((s) => s.id === project.currentStyleId) ?? project.styles[0];
-  if (style) {
-    for (const slot of SLOTS) {
-      const asset = style.assets[slot.id];
-      const adopted = adoptedRev(asset);
-      if (adopted?.url) return adopted.url;
-      const last = asset.revs.at(-1);
-      if (last?.url) return last.url;
-    }
-    if (style.candidateUrl) return style.candidateUrl;
-  }
-  return project.candidates.find((c) => c.url)?.url ?? project.prototypeDataUrl;
-}
-
-function phaseLabel(phase: Project["phase"]): string {
-  if (phase === "studio") return "工作台";
-  if (phase === "direction") return "选方向";
-  return "草稿";
-}
-
 export function BriefView() {
   const [brief, setBrief] = useState("");
   const [proto, setProto] = useState<string | null>(null);
@@ -66,7 +48,7 @@ export function BriefView() {
   const setIntent = useStudio((s) => s.setIntent);
   const setCandidates = useStudio((s) => s.setCandidates);
   const patchCandidate = useStudio((s) => s.patchCandidate);
-  const projects = useStudio((s) => s.projects);
+  const setMode = useStudio((s) => s.setMode);
   const { user, isPending: authPending } = useCurrentUserState();
   const router = useRouter();
   const [imagesUnavailable, setImagesUnavailable] = useState(false);
@@ -108,34 +90,52 @@ export function BriefView() {
     setBusy(true);
     try {
       const created = await createStudioProjectFn({ data: { name: text.slice(0, 24) } });
+      const prototypeUrl = proto
+        ? (await uploadWireframeFn({ data: { projectId: created.id, dataUrl: proto } })).url
+        : null;
       createProject({
         brief: text,
-        prototypeDataUrl: proto,
+        prototypeDataUrl: prototypeUrl,
         id: created.id,
         currentImageModelId: created.currentImageModelId,
       });
-      const seeds = PRESETS.map((p) => ({
+      const presetSeeds = PRESETS.map((p) => ({
         id: uid("can"),
         presetId: p.id,
         dna: p.dna,
         url: null,
         status: "pending" as const,
       }));
-      setCandidates(seeds);
+      setCandidates(presetSeeds);
       let product = text;
+      let seeds = presetSeeds;
       try {
         const intent = await parseBrief({ data: { brief: text } });
         setIntent(intent);
         product = intent.productName || text;
+        setMode("tailoring");
+        const dnaByPreset = new Map(presetDirections(intent).map((d) => [d.presetId, d.dna]));
+        try {
+          for (const d of await tailorDirections({ data: { intent } }))
+            dnaByPreset.set(d.presetId, d.dna);
+        } catch {
+          /* the preset directions already carry the user's mood and forbidden styles */
+        }
+        seeds = presetSeeds.map((seed) => ({
+          ...seed,
+          dna: dnaByPreset.get(seed.presetId) ?? seed.dna,
+        }));
+        setCandidates(seeds);
       } catch {
         /* keep raw brief */
       }
+      setMode("generating");
       const failures: string[] = [];
       await Promise.all(
         seeds.map(async (c) => {
           try {
             const res = await generateCandidate({
-              data: { projectId: created.id, presetId: c.presetId, product },
+              data: { projectId: created.id, presetId: c.presetId, product, dna: c.dna },
             });
             const url = res.urls[0];
             if (!url) throw new Error("upstream_failed");
@@ -152,6 +152,7 @@ export function BriefView() {
     } catch (e) {
       toast.error(messageForImageJobError(e));
     } finally {
+      setMode("idle");
       setBusy(false);
     }
   }
@@ -166,13 +167,21 @@ export function BriefView() {
           ? "登录后生成四个方向"
           : "生成四个方向";
 
-  const blocked = busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0);
+  const blocked =
+    busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0);
 
   return (
     <div className="page-shell">
-      <AppHeader leading={<Wordmark />} />
+      <AppHeader
+        leading={
+          <Link href="/" className="min-h-11">
+            <Wordmark />
+          </Link>
+        }
+      />
 
       <main className="mx-auto w-full max-w-6xl px-5 pb-20 pt-8 md:pt-14">
+        <LocalMigrationPrompt className="mb-8" />
         <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-16">
           <section className="order-2 space-y-8 lg:order-1">
             <div className="animate-rise space-y-4">
@@ -187,7 +196,10 @@ export function BriefView() {
 
             <ol className="animate-rise grid gap-3 sm:grid-cols-3">
               {STEPS.map((step) => (
-                <li key={step.n} className="rounded-lg border border-border bg-surface/60 px-4 py-4">
+                <li
+                  key={step.n}
+                  className="rounded-lg border border-border bg-surface/60 px-4 py-4"
+                >
                   <p className="text-xs tabular-nums text-subtle">{step.n}</p>
                   <p className="mt-2 font-medium text-fg">{step.title}</p>
                   <p className="mt-1 text-xs leading-relaxed text-muted">{step.body}</p>
@@ -227,7 +239,9 @@ export function BriefView() {
 
                 <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-dashed border-border px-3 py-2.5 text-sm text-muted transition-colors duration-150 hover:border-accent hover:text-fg">
                   <ImagePlus className="size-4 shrink-0" />
-                  <span>{proto ? "已上传原型，将作为结构参考" : "可选：上传线框 / 草图 / 截图"}</span>
+                  <span>
+                    {proto ? "已上传原型，将作为结构参考" : "可选：上传线框 / 草图 / 截图"}
+                  </span>
                   <input
                     type="file"
                     accept="image/*"
@@ -270,46 +284,7 @@ export function BriefView() {
           </section>
         </div>
 
-        {projects.length > 0 ? (
-          <section className="mt-16">
-            <p className="mb-4 text-xs uppercase tracking-kicker text-subtle">最近项目</p>
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.map((p) => {
-                const cover = projectCover(p);
-                return (
-                  <li key={p.id} className="overflow-hidden rounded-lg bg-surface shadow-border">
-                    <button
-                      type="button"
-                      className="block w-full text-left"
-                      onClick={() => {
-                        useStudio.setState({ currentId: p.id });
-                      }}
-                    >
-                      <div className="aspect-video bg-surface-2">
-                        {cover ? (
-                          <img src={cover} alt="" className="frame size-full object-cover" />
-                        ) : (
-                          <div className="flex size-full items-center justify-center text-xs text-subtle">
-                            尚未出图
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between gap-3 px-3 py-3">
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm text-fg">{p.name}</span>
-                          <span className="text-xs text-subtle">{phaseLabel(p.phase)}</span>
-                        </span>
-                      </div>
-                    </button>
-                    <div className="flex justify-end border-t border-border px-2 py-1">
-                      <DeleteProjectControl projectId={p.id} compact />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
+        {user ? <RecentProjects /> : null}
 
         <p className="mt-16 max-w-xl text-sm leading-relaxed text-subtle">
           Keystone 把风格锁成可复用的 DNA，而不是又一张好看的图。

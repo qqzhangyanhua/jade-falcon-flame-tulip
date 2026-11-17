@@ -1,6 +1,6 @@
-import { newEntityId } from "./ids";
-import { isProjectAlive } from "./projects";
-import type { ImageJobGatewayDeps } from "./stores";
+import { newEntityId } from "./ids.ts";
+import { isProjectAlive } from "./projects.ts";
+import type { ImageJobGatewayDeps } from "./stores.ts";
 import type {
   DurableImageRef,
   ImageBlobRecord,
@@ -10,7 +10,7 @@ import type {
   ImageJobErrorCode,
   ImageRevRecord,
   OpenedDurableImage,
-} from "./types";
+} from "./types.ts";
 
 export const DURABLE_IMAGE_PATH_PREFIX = "/api/images/";
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -50,7 +50,7 @@ function startsWithBytes(bytes: Uint8Array, magic: readonly number[]): boolean {
   return magic.every((value, index) => bytes[index] === value);
 }
 
-function sniffImageType(bytes: Uint8Array): string | null {
+export function sniffImageType(bytes: Uint8Array): string | null {
   if (startsWithBytes(bytes, PNG_MAGIC)) return "image/png";
   if (startsWithBytes(bytes, JPEG_MAGIC)) return "image/jpeg";
   if (startsWithBytes(bytes, GIF_MAGIC)) return "image/gif";
@@ -166,6 +166,7 @@ export async function persistDurableCopies(
       userId: input.userId,
       projectId: input.projectId,
       jobId: input.jobId,
+      kind: "job",
       contentType: copy.contentType,
       bytes: new Uint8Array(copy.bytes),
       createdAt: input.createdAt,

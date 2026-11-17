@@ -1,0 +1,43 @@
+src/lib/project/dna.ts
+  s_fe337c47948b91::t_d1dc778e6986d5 1-65
+src/lib/project/schema.ts
+  s_fe337c47948b91::t_fddd0cda3e3cc7 1-128
+src/lib/project/ops.ts
+  s_fe337c47948b91::t_ff93226714469d 1-244
+package.json
+  s_fe337c47948b91::t_5a6ea661dfa24d 19
+src/lib/project/dna.test.ts
+  s_fe337c47948b91::t_96cd1e6050d929 1-66
+src/lib/project/fixtures.ts
+  s_fe337c47948b91::t_d3aa3127f8a6fc 1-78
+src/lib/project/manifest.test.ts
+  s_fe337c47948b91::t_09febce956ed6a 1-61
+src/lib/project/manifest.ts
+  s_fe337c47948b91::t_535114b0efa793 1-37
+src/lib/project/ops.test.ts
+  s_fe337c47948b91::t_6310edf0b2054b 1-233
+src/lib/project/schema.test.ts
+  s_fe337c47948b91::t_7cd195462c8a9e 1-50
+src/lib/store.ts
+  s_fe337c47948b91::t_41adcec8820a4d 14-22,62-69,143-144,155,157-164,166-170,177-181
+src/lib/types.ts
+  s_fe337c47948b91::t_c2483cdadd6470 1-19
+tsconfig.json
+  s_fe337c47948b91::t_2306c8f634e71f 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "1c11dd58e59947fbe2fe0f831445d405f7167f84",
+  "prompts": {},
+  "sessions": {
+    "s_fe337c47948b91": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "781c0719-11a7-48f9-8e45-3961bae84eb4",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

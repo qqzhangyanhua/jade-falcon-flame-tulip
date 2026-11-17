@@ -1,0 +1,29 @@
+package-lock.json
+  s_054b8b49de3b7c::t_0cb7e664e1bd15 40,5675-5680
+package.json
+  s_054b8b49de3b7c::t_36dd5f69fbdeb7 19,55
+src/components/studio-export.tsx
+  s_054b8b49de3b7c::t_27588534118292 1-96
+src/components/studio-view.tsx
+  s_054b8b49de3b7c::t_93b316923f6b8c 4,12,209-210
+src/lib/project/export-zip.test.ts
+  s_054b8b49de3b7c::t_281993def2104a 1-95
+src/lib/project/export-zip.ts
+  s_054b8b49de3b7c::t_b44b5995d3174e 1-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "68b404abf8f73f5a9e4e4b1c3b63b3e1fc2f8374",
+  "prompts": {},
+  "sessions": {
+    "s_054b8b49de3b7c": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "ee142994-69d3-4e93-ba83-85780c52d3dd",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

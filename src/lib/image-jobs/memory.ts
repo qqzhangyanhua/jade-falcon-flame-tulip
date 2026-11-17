@@ -14,6 +14,7 @@ import type {
   ImageRevRecord,
   ImageUpstream,
   ImageUpstreamRequest,
+  ProjectDocumentSnapshot,
   StudioProjectRecord,
   StudioRole,
 } from "./types.ts";
@@ -78,6 +79,13 @@ export function createMemoryProjects(
   const projects = new Map(
     seed.map((project) => [project.id, cloneProject(project)]),
   );
+  const documents = new Map<string, ProjectDocumentSnapshot>();
+  const snapshotOf = (id: string): ProjectDocumentSnapshot => {
+    const stored = documents.get(id);
+    return stored
+      ? structuredClone(stored)
+      : { document: null, version: 0, updatedAt: null };
+  };
   return {
     async create(record) {
       const next = cloneProject({
@@ -102,6 +110,22 @@ export function createMemoryProjects(
       if (!project) return null;
       if (project.deletedAt === null) project.deletedAt = deletedAt;
       return cloneProject(project);
+    },
+    async getDocument(id) {
+      return projects.has(id) ? snapshotOf(id) : null;
+    },
+    async saveDocument(id, document, expectedVersion, now) {
+      const project = projects.get(id);
+      if (!project) return { status: "not_found" };
+      if (project.deletedAt !== null) return { status: "deleted" };
+      const current = snapshotOf(id);
+      if (current.version !== expectedVersion) return { status: "conflict", current };
+      documents.set(id, {
+        document: structuredClone(document),
+        version: current.version + 1,
+        updatedAt: now,
+      });
+      return { status: "saved", snapshot: snapshotOf(id) };
     },
   };
 }

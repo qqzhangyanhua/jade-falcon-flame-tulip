@@ -1,3 +1,5 @@
+import type { ProjectDocument } from "../project/schema.ts";
+
 export const IMAGE_JOB_ACTIONS = [
   "direction",
   "generate",
@@ -24,6 +26,9 @@ export const IMAGE_JOB_ERROR_CODES = [
   "project_deleted",
   "invalid_image",
   "image_too_large",
+  "version_conflict",
+  "invalid_document",
+  "document_too_large",
 ] as const;
 
 export type ImageJobErrorCode = (typeof IMAGE_JOB_ERROR_CODES)[number];
@@ -39,6 +44,19 @@ export type CatalogModel = {
   capabilities: ImageJobAction[];
   isAdminDefault: boolean;
 };
+
+/** The server copy of a Project Document; `document` is null until the first save. */
+export type ProjectDocumentSnapshot = {
+  document: ProjectDocument | null;
+  version: number;
+  updatedAt: number | null;
+};
+
+export type SaveDocumentOutcome =
+  | { status: "saved"; snapshot: ProjectDocumentSnapshot }
+  | { status: "conflict"; current: ProjectDocumentSnapshot }
+  | { status: "deleted" }
+  | { status: "not_found" };
 
 export type StudioProjectRecord = {
   id: string;

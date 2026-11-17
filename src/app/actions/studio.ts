@@ -8,6 +8,11 @@ import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
 import { loadProjectDocument, saveProjectDocument } from "@/lib/image-jobs/project-document";
 import {
+  importLocalProject,
+  listProjectSummaries,
+  type ImportLocalResult,
+} from "@/lib/image-jobs/project-list";
+import {
   createStudioProject,
   deleteStudioProject,
   ensureStudioProject,
@@ -32,6 +37,7 @@ import type {
   ImageJobHistoryItem,
   PickerImageModel,
   ProjectDocumentSnapshot,
+  ProjectSummary,
   StudioImageState,
   StudioQuota,
   StudioRole,
@@ -403,4 +409,21 @@ export async function saveProjectDocumentFn(input: {
     document: input.data.document,
     expectedVersion: input.data.expectedVersion,
   });
+}
+
+export async function listProjectSummariesFn(): Promise<ProjectSummary[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return unwrapProjectOp(await listProjectSummaries(deps, { userId }));
+}
+
+export async function importLocalProjectFn(input: {
+  data: { projectId: string; document: unknown };
+}): Promise<ProjectDocumentActionResult<ImportLocalResult>> {
+  const userId = await signedInUserId();
+  if (!userId) return { ok: false, code: "unauthorized" };
+  const projectId = input.data.projectId.trim();
+  if (!projectId) return { ok: false, code: "not_found" };
+  const deps = await createSqlGatewayDeps();
+  return importLocalProject(deps, { userId, projectId, document: input.data.document });
 }

@@ -4,6 +4,7 @@ import { newEntityId } from "./ids.ts";
 import { cloneModel } from "./availability.ts";
 import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
 import { decodeDataUrl } from "./durable.ts";
+import { projectCoverUrl } from "../project/summary.ts";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -15,6 +16,7 @@ import type {
   ImageUpstream,
   ImageUpstreamRequest,
   ProjectDocumentSnapshot,
+  ProjectSummary,
   StudioProjectRecord,
   StudioRole,
 } from "./types.ts";
@@ -113,6 +115,23 @@ export function createMemoryProjects(
     },
     async getDocument(id) {
       return projects.has(id) ? snapshotOf(id) : null;
+    },
+    async listSummaries(userId, limit) {
+      const rows: ProjectSummary[] = [];
+      for (const project of projects.values()) {
+        if (project.userId !== userId || project.deletedAt !== null) continue;
+        const stored = documents.get(project.id);
+        if (!stored?.document || stored.updatedAt === null) continue;
+        rows.push({
+          id: project.id,
+          name: stored.document.name,
+          stage: stored.document.phase,
+          coverUrl: projectCoverUrl(stored.document),
+          updatedAt: stored.updatedAt,
+        });
+      }
+      rows.sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1));
+      return rows.slice(0, limit);
     },
     async saveDocument(id, document, expectedVersion, now) {
       const project = projects.get(id);

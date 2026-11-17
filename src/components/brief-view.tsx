@@ -7,8 +7,8 @@ import { ArrowRight, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { AtmosphereGrid } from "@/components/atmosphere-grid";
-import { DeleteProjectControl } from "@/components/delete-project-control";
 import { QuotaMeter } from "@/components/quota-meter";
+import { RecentProjects } from "@/components/recent-projects";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { parseBrief, tailorDirections } from "@/app/actions/brief";
@@ -24,7 +24,6 @@ import { messageForImageJobError, type StudioQuota } from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
 import { fileToDataUrl } from "@/lib/resize-image";
 import { useStudio } from "@/lib/store";
-import { adoptedRev, SLOTS, type Project } from "@/lib/types";
 import { uid } from "@/lib/utils";
 
 const EXAMPLES = [
@@ -39,27 +38,6 @@ const STEPS = [
   { n: "03", title: "同一 DNA 出图", body: "旗舰页、KV、官网共用。" },
 ];
 
-function projectCover(project: Project): string | null {
-  const style = project.styles.find((s) => s.id === project.currentStyleId) ?? project.styles[0];
-  if (style) {
-    for (const slot of SLOTS) {
-      const asset = style.assets[slot.id];
-      const adopted = adoptedRev(asset);
-      if (adopted?.url) return adopted.url;
-      const last = asset.revs.at(-1);
-      if (last?.url) return last.url;
-    }
-    if (style.candidateUrl) return style.candidateUrl;
-  }
-  return project.candidates.find((c) => c.url)?.url ?? project.prototypeDataUrl;
-}
-
-function phaseLabel(phase: Project["phase"]): string {
-  if (phase === "studio") return "工作台";
-  if (phase === "direction") return "选方向";
-  return "草稿";
-}
-
 export function BriefView() {
   const [brief, setBrief] = useState("");
   const [proto, setProto] = useState<string | null>(null);
@@ -69,7 +47,6 @@ export function BriefView() {
   const setCandidates = useStudio((s) => s.setCandidates);
   const patchCandidate = useStudio((s) => s.patchCandidate);
   const setMode = useStudio((s) => s.setMode);
-  const projects = useStudio((s) => s.projects);
   const { user, isPending: authPending } = useCurrentUserState();
   const router = useRouter();
   const [imagesUnavailable, setImagesUnavailable] = useState(false);
@@ -293,46 +270,7 @@ export function BriefView() {
           </section>
         </div>
 
-        {projects.length > 0 ? (
-          <section className="mt-16">
-            <p className="mb-4 text-xs uppercase tracking-kicker text-subtle">最近项目</p>
-            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {projects.map((p) => {
-                const cover = projectCover(p);
-                return (
-                  <li key={p.id} className="overflow-hidden rounded-lg bg-surface shadow-border">
-                    <button
-                      type="button"
-                      className="block w-full text-left"
-                      onClick={() => {
-                        useStudio.setState({ currentId: p.id });
-                      }}
-                    >
-                      <div className="aspect-video bg-surface-2">
-                        {cover ? (
-                          <img src={cover} alt="" className="frame size-full object-cover" />
-                        ) : (
-                          <div className="flex size-full items-center justify-center text-xs text-subtle">
-                            尚未出图
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between gap-3 px-3 py-3">
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm text-fg">{p.name}</span>
-                          <span className="text-xs text-subtle">{phaseLabel(p.phase)}</span>
-                        </span>
-                      </div>
-                    </button>
-                    <div className="flex justify-end border-t border-border px-2 py-1">
-                      <DeleteProjectControl projectId={p.id} compact />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ) : null}
+        {user ? <RecentProjects /> : null}
 
         <p className="mt-16 max-w-xl text-sm leading-relaxed text-subtle">
           Keystone 把风格锁成可复用的 DNA，而不是又一张好看的图。

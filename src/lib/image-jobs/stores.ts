@@ -7,6 +7,7 @@ import type {
   ImageJobRecord,
   ImageRevRecord,
   ProjectDocumentSnapshot,
+  ProjectSummary,
   SaveDocumentOutcome,
   StudioProjectRecord,
   StudioQuota,
@@ -27,6 +28,11 @@ export type StudioProjectStore = {
   updateCurrentModel: (id: string, modelId: string) => Promise<StudioProjectRecord | null>;
   markDeleted: (id: string, deletedAt: number) => Promise<StudioProjectRecord | null>;
   getDocument: (id: string) => Promise<ProjectDocumentSnapshot | null>;
+  /**
+   * The user's live projects that have a document, most recently updated
+   * first, at most `limit`. Never loads whole documents into the caller.
+   */
+  listSummaries: (userId: string, limit: number) => Promise<ProjectSummary[]>;
   /**
    * Replace the document only if the stored version still equals
    * `expectedVersion` and the project is not deleted; both checks and the write

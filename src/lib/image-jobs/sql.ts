@@ -16,6 +16,7 @@ import type {
   ImageJobStatus,
   ImageRevRecord,
   ProjectDocumentSnapshot,
+  ProjectSummary,
   StudioProjectRecord,
 } from "./types";
 import type {
@@ -311,6 +312,51 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
         where id = ${id}
       `;
       return rows[0] ? toSnapshot(rows[0]) : null;
+    },
+    async listSummaries(userId, limit) {
+      // Only the few fields the list needs are pulled out of the jsonb; the document is never loaded whole.
+      const rows = await sql<{
+        id: string;
+        name: string | null;
+        stage: string | null;
+        cover_url: string | null;
+        updated_at_ms: number | string;
+      }>`
+        select p.id,
+               p.document->>'name' as name,
+               p.document->>'phase' as stage,
+               coalesce(
+                 (select r->>'url'
+                    from jsonb_array_elements(cur.style->'assets'->'kv'->'revs') r
+                   where r->>'id' = cur.style->'assets'->'kv'->>'adoptedId'
+                   limit 1),
+                 cur.style->'assets'->'kv'->'revs'->-1->>'url',
+                 cur.style->>'candidateUrl'
+               ) as cover_url,
+               extract(epoch from p.updated_at) * 1000 as updated_at_ms
+        from studio_projects p
+        left join lateral (
+          select s as style
+            from jsonb_array_elements(p.document->'styles') s
+           where s->>'id' = p.document->>'currentStyleId'
+           limit 1
+        ) cur on true
+        where p.user_id = ${userId}
+          and p.deleted_at is null
+          and p.document is not null
+          and p.updated_at is not null
+        order by p.updated_at desc, p.id asc
+        limit ${limit}
+      `;
+      return rows.map(
+        (row): ProjectSummary => ({
+          id: row.id,
+          name: row.name ?? "",
+          stage: row.stage === "studio" || row.stage === "direction" ? row.stage : "brief",
+          coverUrl: row.cover_url,
+          updatedAt: Number(row.updated_at_ms),
+        }),
+      );
     },
     async saveDocument(id, document, expectedVersion, now) {
       // Version and deleted checks live in the WHERE so a concurrent save or delete cannot slip between them.

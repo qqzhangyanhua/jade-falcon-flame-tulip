@@ -1,0 +1,23 @@
+src/components/style-line-actions.tsx
+  s_e329c109c2d298::t_3b4a6f4d352e0f 1-124
+src/components/studio-view.tsx
+  s_e329c109c2d298::t_ad507b26ee007c 12,270,380,382
+src/lib/store.ts
+  s_e329c109c2d298::t_2c129d00c50db2 18,20,25,61-63,67-68,184-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "5eade9aa78370100cd00f4a39407222c4bcefdca",
+  "prompts": {},
+  "sessions": {
+    "s_e329c109c2d298": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "a61f9033-eceb-4c0e-bca5-2fde0a2fe629",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
@@ -225,6 +226,21 @@ export function AccountScreen() {
             </form>
           ) : null}
         </section>
+
+        {role === "admin" ? (
+          <section className="rounded-xl border border-border bg-surface p-5">
+            <h2 className="font-display text-xl tracking-tight">模型目录</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              改显示名、开关模型，并指定新项目的默认出图模型。
+            </p>
+            <Link
+              href="/models"
+              className="mt-4 inline-flex h-11 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-fg transition-[opacity,transform] duration-150 ease-smooth hover:opacity-90 active:scale-[0.96]"
+            >
+              打开模型目录
+            </Link>
+          </section>
+        ) : null}
       </main>
     </div>
   );

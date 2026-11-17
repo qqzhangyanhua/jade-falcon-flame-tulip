@@ -41,7 +41,7 @@ export function LoginScreen() {
     );
   }
   if (user) {
-    router.replace("/");
+    router.replace("/studio");
     return (
       <main className="grid min-h-dvh place-items-center bg-bg">
         <div className="h-10 w-40 animate-pulse rounded-md bg-surface-2" />
@@ -52,7 +52,7 @@ export function LoginScreen() {
   async function onOAuth(providerId: string) {
     setError(null);
     try {
-      await signIn(providerId, { callbackURL: "/", errorCallbackURL: "/login" });
+      await signIn(providerId, { callbackURL: "/studio", errorCallbackURL: "/login" });
     } catch (e) {
       setError(e instanceof Error ? mapAuthError(e.message) : "登录失败");
     }
@@ -79,7 +79,7 @@ export function LoginScreen() {
         if (signInError) throw new Error(signInError.message ?? "登录失败");
       }
       await authClient.getSession();
-      window.location.href = "/";
+      window.location.href = "/studio";
     } catch (e) {
       setError(e instanceof Error ? mapAuthError(e.message) : "登录失败");
       setBusy(false);

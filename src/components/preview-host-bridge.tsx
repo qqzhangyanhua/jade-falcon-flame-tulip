@@ -9,7 +9,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { installPreviewHostBridge } from "@/lib/preview-host-bridge";
 
-const ROUTE_PATHS = ["/", "/login", "/account", "/history"];
+const ROUTE_PATHS = ["/", "/studio", "/login", "/account", "/history", "/models"];
 
 export function PreviewHostBridge() {
   const router = useRouter();

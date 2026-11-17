@@ -66,7 +66,7 @@ export function JobHistoryView() {
       projectAlive: job.projectAlive,
     });
     if (opened) {
-      void router.push("/");
+      void router.push("/studio");
       return;
     }
     toast.error("项目已不在本地");

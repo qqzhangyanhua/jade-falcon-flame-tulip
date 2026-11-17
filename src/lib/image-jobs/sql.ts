@@ -224,6 +224,13 @@ export function createSqlCatalogStore(sql: Sql): ModelCatalogStore {
         where id = ${id}
       `;
     },
+    async setAdminDefault(id) {
+      await sql`
+        update model_catalog
+        set is_admin_default = (id = ${id})
+        where kind = 'image'
+      `;
+    },
   };
 }
 

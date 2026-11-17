@@ -46,7 +46,7 @@ export function AuthSlot({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  const label = user.displayName ?? user.primaryEmail ?? "账户";
+  const label = user.isDevFallback ? "本地调试" : (user.displayName ?? user.primaryEmail ?? "账户");
 
   return (
     <div className="flex items-center gap-1">

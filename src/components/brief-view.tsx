@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ArrowRight, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
@@ -170,7 +171,13 @@ export function BriefView() {
 
   return (
     <div className="page-shell">
-      <AppHeader leading={<Wordmark />} />
+      <AppHeader
+        leading={
+          <Link href="/" className="min-h-11">
+            <Wordmark />
+          </Link>
+        }
+      />
 
       <main className="mx-auto w-full max-w-6xl px-5 pb-20 pt-8 md:pt-14">
         <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-16">

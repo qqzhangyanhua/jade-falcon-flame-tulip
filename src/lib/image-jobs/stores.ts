@@ -15,6 +15,7 @@ export type ModelCatalogStore = {
   get: (id: string) => Promise<CatalogModel | null>;
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   setDisplayName: (id: string, displayName: string) => Promise<void>;
+  setAdminDefault: (id: string) => Promise<void>;
 };
 
 export type StudioProjectStore = {

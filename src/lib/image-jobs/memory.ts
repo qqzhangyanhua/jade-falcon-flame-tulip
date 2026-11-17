@@ -64,6 +64,11 @@ export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
       const model = models.get(id);
       if (model) model.displayName = displayName;
     },
+    async setAdminDefault(id) {
+      for (const model of models.values()) {
+        if (model.kind === "image") model.isAdminDefault = model.id === id;
+      }
+    },
   };
 }
 

@@ -7,6 +7,7 @@ import { ArrowRight, ImagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { AtmosphereGrid } from "@/components/atmosphere-grid";
+import { LocalMigrationPrompt } from "@/components/local-migration";
 import { QuotaMeter } from "@/components/quota-meter";
 import { RecentProjects } from "@/components/recent-projects";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ import {
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { messageForImageJobError, type StudioQuota } from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
+import { presetDirections } from "@/lib/style-ai/shared";
 import { fileToDataUrl } from "@/lib/resize-image";
 import { useStudio } from "@/lib/store";
 import { uid } from "@/lib/utils";
@@ -112,13 +114,18 @@ export function BriefView() {
         setIntent(intent);
         product = intent.productName || text;
         setMode("tailoring");
+        const dnaByPreset = new Map(presetDirections(intent).map((d) => [d.presetId, d.dna]));
         try {
-          const tailored = await tailorDirections({ data: { intent } });
-          seeds = tailored.map((d, i) => ({ ...presetSeeds[i], presetId: d.presetId, dna: d.dna }));
-          setCandidates(seeds);
+          for (const d of await tailorDirections({ data: { intent } }))
+            dnaByPreset.set(d.presetId, d.dna);
         } catch {
-          /* keep the preset directions */
+          /* the preset directions already carry the user's mood and forbidden styles */
         }
+        seeds = presetSeeds.map((seed) => ({
+          ...seed,
+          dna: dnaByPreset.get(seed.presetId) ?? seed.dna,
+        }));
+        setCandidates(seeds);
       } catch {
         /* keep raw brief */
       }
@@ -160,7 +167,8 @@ export function BriefView() {
           ? "登录后生成四个方向"
           : "生成四个方向";
 
-  const blocked = busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0);
+  const blocked =
+    busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0);
 
   return (
     <div className="page-shell">
@@ -173,6 +181,7 @@ export function BriefView() {
       />
 
       <main className="mx-auto w-full max-w-6xl px-5 pb-20 pt-8 md:pt-14">
+        <LocalMigrationPrompt className="mb-8" />
         <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-16">
           <section className="order-2 space-y-8 lg:order-1">
             <div className="animate-rise space-y-4">
@@ -187,7 +196,10 @@ export function BriefView() {
 
             <ol className="animate-rise grid gap-3 sm:grid-cols-3">
               {STEPS.map((step) => (
-                <li key={step.n} className="rounded-lg border border-border bg-surface/60 px-4 py-4">
+                <li
+                  key={step.n}
+                  className="rounded-lg border border-border bg-surface/60 px-4 py-4"
+                >
                   <p className="text-xs tabular-nums text-subtle">{step.n}</p>
                   <p className="mt-2 font-medium text-fg">{step.title}</p>
                   <p className="mt-1 text-xs leading-relaxed text-muted">{step.body}</p>
@@ -227,7 +239,9 @@ export function BriefView() {
 
                 <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-dashed border-border px-3 py-2.5 text-sm text-muted transition-colors duration-150 hover:border-accent hover:text-fg">
                   <ImagePlus className="size-4 shrink-0" />
-                  <span>{proto ? "已上传原型，将作为结构参考" : "可选：上传线框 / 草图 / 截图"}</span>
+                  <span>
+                    {proto ? "已上传原型，将作为结构参考" : "可选：上传线框 / 草图 / 截图"}
+                  </span>
                   <input
                     type="file"
                     accept="image/*"

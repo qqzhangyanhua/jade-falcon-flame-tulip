@@ -70,6 +70,17 @@ function parseProjectId(input: { projectId: string }): { projectId: string } {
   return { projectId };
 }
 
+/** The result-returning actions answer a blank id with a code instead of throwing. */
+async function resolveActionContext(input: {
+  projectId: string;
+}): Promise<{ ok: true; userId: string; projectId: string } | { ok: false; code: ImageJobErrorCode }> {
+  const userId = await signedInUserId();
+  if (!userId) return { ok: false, code: "unauthorized" };
+  const projectId = input.projectId.trim();
+  if (!projectId) return { ok: false, code: "not_found" };
+  return { ok: true, userId, projectId };
+}
+
 export async function listImageModelsFn(): Promise<PickerImageModel[]> {
   await requireActionUser();
   const deps = await createSqlGatewayDeps();
@@ -104,6 +115,22 @@ export async function ensureStudioProjectFn(input: { data: { projectId: string }
     id: project.id,
     currentImageModelId: project.currentImageModelId,
   };
+}
+
+// Result form of ensureStudioProjectFn: production strips the message of a thrown action error,
+// so the client could not tell "not yours" or "deleted" from a network failure.
+export async function ensureStudioProjectResultFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<{ id: string }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  const result = await ensureStudioProject(deps.catalog, deps.projects, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+  });
+  if (!result.ok) return { ok: false, code: result.code };
+  return { ok: true, value: { id: result.value.id } };
 }
 
 export async function uploadWireframeFn(input: {
@@ -387,10 +414,9 @@ async function signedInUserId(): Promise<string | null> {
 export async function loadProjectDocumentFn(input: {
   data: { projectId: string };
 }): Promise<ProjectDocumentActionResult<ProjectDocumentSnapshot>> {
-  const userId = await signedInUserId();
-  if (!userId) return { ok: false, code: "unauthorized" };
-  const projectId = input.data.projectId.trim();
-  if (!projectId) return { ok: false, code: "not_found" };
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const { userId, projectId } = ctx;
   const deps = await createSqlGatewayDeps();
   return loadProjectDocument(deps, { userId, projectId });
 }
@@ -398,10 +424,9 @@ export async function loadProjectDocumentFn(input: {
 export async function saveProjectDocumentFn(input: {
   data: { projectId: string; document: unknown; expectedVersion: number };
 }): Promise<ProjectDocumentActionResult<{ version: number; updatedAt: number }>> {
-  const userId = await signedInUserId();
-  if (!userId) return { ok: false, code: "unauthorized" };
-  const projectId = input.data.projectId.trim();
-  if (!projectId) return { ok: false, code: "not_found" };
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const { userId, projectId } = ctx;
   const deps = await createSqlGatewayDeps();
   return saveProjectDocument(deps, {
     userId,
@@ -420,10 +445,9 @@ export async function listProjectSummariesFn(): Promise<ProjectSummary[]> {
 export async function importLocalProjectFn(input: {
   data: { projectId: string; document: unknown };
 }): Promise<ProjectDocumentActionResult<ImportLocalResult>> {
-  const userId = await signedInUserId();
-  if (!userId) return { ok: false, code: "unauthorized" };
-  const projectId = input.data.projectId.trim();
-  if (!projectId) return { ok: false, code: "not_found" };
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const { userId, projectId } = ctx;
   const deps = await createSqlGatewayDeps();
   return importLocalProject(deps, { userId, projectId, document: input.data.document });
 }

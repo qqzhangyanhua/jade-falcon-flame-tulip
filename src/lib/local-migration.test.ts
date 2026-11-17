@@ -193,3 +193,26 @@ describe("uploadLocalProject (user chose to upload)", () => {
     assert.deepEqual(result, { ok: false, reason: "unavailable" });
   });
 });
+
+describe("uploadLocalProject ensureRow outcomes", () => {
+  const failing = (code: ImageJobErrorCode) => {
+    const { api, host } = setup();
+    return uploadLocalProject({ ...api, ensureRow: async () => ({ ok: false, code }) }, host, local("a"));
+  };
+
+  it("maps forbidden and project_deleted to unavailable", async () => {
+    assert.deepEqual(await failing("forbidden"), { ok: false, reason: "unavailable" });
+    assert.deepEqual(await failing("project_deleted"), { ok: false, reason: "unavailable" });
+  });
+
+  it("treats any other code, or a thrown error, as a retryable upload failure", async () => {
+    assert.deepEqual(await failing("upstream_failed"), { ok: false, reason: "upload_failed" });
+    const { api, host } = setup();
+    const thrown = await uploadLocalProject(
+      { ...api, ensureRow: () => Promise.reject(new Error("offline")) },
+      host,
+      local("a"),
+    );
+    assert.deepEqual(thrown, { ok: false, reason: "upload_failed" });
+  });
+});

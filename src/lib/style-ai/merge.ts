@@ -1,15 +1,18 @@
 import { diffDna, styleDnaSchema, type DnaChange, type StyleDna } from "../project/dna.ts";
-import { chatJson, type ChatError, type ChatOptions } from "./chat.ts";
+import { chatJson, type ChatOptions } from "./chat.ts";
+import { isHexColor, type MergeError } from "./shared.ts";
 
 const MERGE_INSTRUCTION_MAX_TOKENS = 1200;
 
-export type MergeError = ChatError | "invalid_schema" | "renamed" | "no_change";
+export { messageForMergeError, type MergeError } from "./shared.ts";
 
 export type MergeResult =
   | { ok: true; dna: StyleDna; changes: DnaChange[] }
   | { ok: false; error: MergeError };
 
-const RENAME_REQUEST = /改名|重命名|命名|名称|名字|叫做|改叫|rename|\bname\b/i;
+// Only an explicit ask counts: "brand name in the logo" or "名字更醒目" mention a name without asking to change it.
+const RENAME_REQUEST =
+  /改名|重命名|更名|改叫|叫做|命名为|rename|change (the |its |this )?(style )?name|(名称|名字|风格名)\s*(改成|改为|换成|换为|设为|设成|叫)|\bname (it|the style|this style|the direction)\b.*\b(to|as)\b/i;
 
 /**
  * Folds a free-text instruction into a style DNA. The model's reply is only
@@ -38,26 +41,16 @@ export async function mergeInstruction(
   if (!parsed.success) return { ok: false, error: "invalid_schema" };
 
   const next = parsed.data;
+  // The stored schema takes any string as a colour (legacy data stays loadable), so only a colour
+  // the merge itself changed has to be a real hex value.
+  const badColor = (Object.keys(next.colors) as (keyof StyleDna["colors"])[]).some(
+    (key) => next.colors[key] !== dna.colors[key] && !isHexColor(next.colors[key]),
+  );
+  if (badColor) return { ok: false, error: "invalid_schema" };
   if (next.name !== dna.name && !RENAME_REQUEST.test(instruction)) {
     return { ok: false, error: "renamed" };
   }
   const changes = diffDna(dna, next);
   if (changes.length === 0) return { ok: false, error: "no_change" };
   return { ok: true, dna: next, changes };
-}
-
-export function messageForMergeError(error: MergeError): string {
-  switch (error) {
-    case "no_key":
-    case "upstream":
-    case "network":
-      return "暂时无法合并风格修改，请稍后重试";
-    case "unparseable":
-    case "invalid_schema":
-      return "模型返回的风格不合格，没有写回。换个说法再试一次";
-    case "renamed":
-      return "模型擅自改了风格名称，没有写回。换个说法再试一次";
-    case "no_change":
-      return "这条指令没有改动任何风格字段，没有写回。说得具体一些再试";
-  }
 }

@@ -1,0 +1,69 @@
+.grok/app-env.json
+  s_85c168c411e7b2::t_eb0b4364f6d47d 2
+GLOSSARY.md
+  s_85c168c411e7b2::t_5f0eaee0b76ef5 1-57
+docs/adr/0001-project-document-jsonb.md
+  s_85c168c411e7b2::t_5888e10876f61e 1-9
+pnpm-lock.yaml
+  s_85c168c411e7b2::t_741b311d0e6527 1-5540
+src/app/actions/catalog.ts
+  s_85c168c411e7b2::t_2afa0ffaf4be16 1-66
+src/app/globals.css
+  s_85c168c411e7b2::t_a2b2b2ba6b75e0 1,7,9,19-45,72,106-239,241-243
+src/app/layout.tsx
+  s_85c168c411e7b2::t_408a4fa2fd8ef5 11,20
+src/app/models/page.tsx
+  s_85c168c411e7b2::t_8c69afdd7a6a28 1-5
+src/app/not-found.tsx
+  s_85c168c411e7b2::t_70028b88751942 10
+src/app/page.tsx
+  s_85c168c411e7b2::t_801eed596267ce 1,4
+src/app/studio/page.tsx
+  s_85c168c411e7b2::t_41cbd279a6abc6 1-5
+src/components/account-screen.tsx
+  s_85c168c411e7b2::t_711ed553158742 4,229-243
+src/components/app-header.tsx
+  s_85c168c411e7b2::t_1ce23f6a849a8c 27
+src/components/auth-slot.tsx
+  s_85c168c411e7b2::t_eff7a3cfb007ac 49
+src/components/brief-view.tsx
+  s_85c168c411e7b2::t_8b31df80195cb6 5,174-180
+src/components/catalog-screen.tsx
+  s_85c168c411e7b2::t_e30fe775d382c7 1-234
+src/components/job-history-view.tsx
+  s_85c168c411e7b2::t_d1a2d0d5b65393 69
+src/components/landing-screen.tsx
+  s_85c168c411e7b2::t_b0ef3f96a9b9aa 1-490
+src/components/login-screen.tsx
+  s_85c168c411e7b2::t_e3efc813c43c97 44,55,82
+src/components/preview-host-bridge.tsx
+  s_85c168c411e7b2::t_5e6b97ae34b6ef 12
+src/components/wordmark.tsx
+  s_85c168c411e7b2::t_7991083bdd90fe 1-10,13-17
+src/lib/auth/gates.tsx
+  s_85c168c411e7b2::t_2b192f15139850 78
+src/lib/image-jobs/catalog-admin.ts
+  s_85c168c411e7b2::t_72cdaa82c931e7 1-79
+src/lib/image-jobs/memory.ts
+  s_85c168c411e7b2::t_b98e0c9ecfcaac 67-71
+src/lib/image-jobs/sql.ts
+  s_85c168c411e7b2::t_56f25d2e644f67 227-233
+src/lib/image-jobs/stores.ts
+  s_85c168c411e7b2::t_a5421f07fb3202 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "db16a9c0582cf277ff676781d9939ed27d4e028b",
+  "prompts": {},
+  "sessions": {
+    "s_85c168c411e7b2": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "029a92f6-2471-49b6-a43f-abdc18679653",
+        "model": "unknown"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

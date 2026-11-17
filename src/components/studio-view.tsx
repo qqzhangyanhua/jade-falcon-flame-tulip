@@ -10,6 +10,7 @@ import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
 import { StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
+import { StyleLineActions } from "@/components/style-line-actions";
 import { StudioGenerateBar, StudioTunePanel } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
@@ -256,6 +257,7 @@ export function StudioView() {
               </div>
             </div>
           ) : null}
+          <StyleLineActions styles={project.styles} style={style} disabled={generating} />
           <div>
             <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">物料槽</p>
             <div className="flex flex-col gap-1">
@@ -365,8 +367,9 @@ export function StudioView() {
           ) : null}
 
           {mobile === "style" ? (
-            <div className="overflow-auto p-5 md:hidden">
+            <div className="flex flex-col gap-8 overflow-auto p-5 md:hidden">
               <StyleCard dna={dna} />
+              <StyleLineActions styles={project.styles} style={style} disabled={generating} />
             </div>
           ) : null}
 

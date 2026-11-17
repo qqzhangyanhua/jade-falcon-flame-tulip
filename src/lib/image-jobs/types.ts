@@ -52,6 +52,15 @@ export type ProjectDocumentSnapshot = {
   updatedAt: number | null;
 };
 
+/** One row of the recent-projects list; deliberately omits everything else in the document. */
+export type ProjectSummary = {
+  id: string;
+  name: string;
+  stage: ProjectDocument["phase"];
+  coverUrl: string | null;
+  updatedAt: number;
+};
+
 export type SaveDocumentOutcome =
   | { status: "saved"; snapshot: ProjectDocumentSnapshot }
   | { status: "conflict"; current: ProjectDocumentSnapshot }

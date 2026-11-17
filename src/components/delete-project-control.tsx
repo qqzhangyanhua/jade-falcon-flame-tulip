@@ -13,12 +13,14 @@ type DeleteProjectControlProps = {
   projectId: string;
   compact?: boolean;
   className?: string;
+  onDeleted?: () => void;
 };
 
 export function DeleteProjectControl({
   projectId,
   compact = false,
   className,
+  onDeleted,
 }: DeleteProjectControlProps) {
   const removeProject = useStudio((s) => s.removeProject);
   const [confirming, setConfirming] = useState(false);
@@ -29,6 +31,7 @@ export function DeleteProjectControl({
     try {
       await deleteStudioProjectFn({ data: { projectId } });
       removeProject(projectId);
+      onDeleted?.();
       toast.success("项目已删除。作业记录还在，今日额度不退。");
     } catch (err) {
       toast.error(messageForImageJobError(err));

@@ -133,6 +133,14 @@ describe("project sync: saving", () => {
     assert.equal(h.versionMap.get("prj_1"), 1);
   });
 
+  it("holds back a project whose wireframe is still an inline data: URL", async () => {
+    const h = harness({ versions: { prj_1: 0 } });
+    h.projects.set("prj_1", sampleProject({ prototypeDataUrl: "data:image/png;base64,AAAA" }));
+    h.sync.touch("prj_1");
+    await h.elapse();
+    assert.equal(h.saves.length, 0);
+  });
+
   it("coalesces a burst of edits into one save", async () => {
     const h = harness({ versions: { prj_1: 0 } });
     h.projects.set("prj_1", sampleProject());

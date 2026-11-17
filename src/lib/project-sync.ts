@@ -126,6 +126,8 @@ export function createProjectSync(api: SyncApi, host: SyncHost) {
   async function saveNow(id: string): Promise<void> {
     const project = host.getProject(id);
     if (!project) return;
+    // A legacy inline wireframe would be saved as null; local migration uploads it and swaps in the address first.
+    if (project.prototypeDataUrl?.toLowerCase().startsWith("data:")) return;
     const document = toDocument(project);
     const fingerprint = stableStringify(document);
     if (fingerprint === synced.get(id)) return;

@@ -17,6 +17,7 @@ import {
   generateCandidate,
   getDailyQuotaFn,
   listImageModelsFn,
+  uploadWireframeFn,
 } from "@/app/actions/studio";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { messageForImageJobError, type StudioQuota } from "@/lib/image-jobs";
@@ -109,9 +110,12 @@ export function BriefView() {
     setBusy(true);
     try {
       const created = await createStudioProjectFn({ data: { name: text.slice(0, 24) } });
+      const prototypeUrl = proto
+        ? (await uploadWireframeFn({ data: { projectId: created.id, dataUrl: proto } })).url
+        : null;
       createProject({
         brief: text,
-        prototypeDataUrl: proto,
+        prototypeDataUrl: prototypeUrl,
         id: created.id,
         currentImageModelId: created.currentImageModelId,
       });

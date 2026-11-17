@@ -50,7 +50,7 @@ function startsWithBytes(bytes: Uint8Array, magic: readonly number[]): boolean {
   return magic.every((value, index) => bytes[index] === value);
 }
 
-function sniffImageType(bytes: Uint8Array): string | null {
+export function sniffImageType(bytes: Uint8Array): string | null {
   if (startsWithBytes(bytes, PNG_MAGIC)) return "image/png";
   if (startsWithBytes(bytes, JPEG_MAGIC)) return "image/jpeg";
   if (startsWithBytes(bytes, GIF_MAGIC)) return "image/gif";
@@ -166,6 +166,7 @@ export async function persistDurableCopies(
       userId: input.userId,
       projectId: input.projectId,
       jobId: input.jobId,
+      kind: "job",
       contentType: copy.contentType,
       bytes: new Uint8Array(copy.bytes),
       createdAt: input.createdAt,

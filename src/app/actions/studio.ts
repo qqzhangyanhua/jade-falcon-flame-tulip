@@ -35,6 +35,7 @@ import type {
 } from "@/lib/image-jobs/types";
 import { uploadWireframe } from "@/lib/image-jobs/upload";
 import { createXaiImageUpstream } from "@/lib/image-jobs/upstream";
+import { styleDnaSchema } from "@/lib/project/dna";
 import { PRESETS } from "@/lib/presets";
 import { candidatePrompt, slotPrompt, SLOT_ASPECT, tunePrompt } from "@/lib/prompts";
 import type { Slot, StyleDna } from "@/lib/types";
@@ -216,16 +217,17 @@ async function runOwnedImageJob(
 }
 
 export async function generateCandidate(input: {
-  data: { projectId: string; presetId: string; product: string };
+  data: { projectId: string; presetId: string; product: string; dna?: StyleDna };
 }): Promise<ImageJobFnResult> {
   const { userId } = await requireActionUser();
   const data = input.data;
   const preset = PRESETS.find((item) => item.id === data.presetId) ?? PRESETS[0];
+  const tailored = styleDnaSchema.safeParse(data.dna);
   return runOwnedImageJob(userId, {
     projectId: data.projectId,
     action: "direction",
     slot: null,
-    prompt: candidatePrompt(preset.dna, data.product),
+    prompt: candidatePrompt(tailored.success ? tailored.data : preset.dna, data.product),
     aspect: SLOT_ASPECT.candidate,
     n: 1,
   });

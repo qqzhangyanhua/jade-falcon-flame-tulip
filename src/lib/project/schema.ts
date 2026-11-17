@@ -99,7 +99,7 @@ export const projectDocumentSchema = z.object({
 export type ProjectDocument = z.infer<typeof projectDocumentSchema>;
 
 export type Project = ProjectDocument & {
-  mode: "idle" | "generating" | "editing";
+  mode: "idle" | "tailoring" | "generating" | "editing";
 };
 
 export type { StyleDna };

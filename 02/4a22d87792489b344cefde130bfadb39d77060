@@ -1,0 +1,29 @@
+package.json
+  s_14730f5018c9c9::t_1906f3973f93d4 19
+src/app/actions/brief.ts
+  s_14730f5018c9c9::t_384e0b0a2d5365 3-4,8-9
+src/lib/style-ai/chat.ts
+  s_14730f5018c9c9::t_1e8806ff9fafda 1-59
+src/lib/style-ai/index.ts
+  s_14730f5018c9c9::t_af4b1578a5e791 1-24
+src/lib/style-ai/style-ai.test.ts
+  s_14730f5018c9c9::t_691bbb9b31b6d9 1-129
+tsconfig.json
+  s_14730f5018c9c9::t_797ac98f491365 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "024a22d87792489b344cefde130bfadb39d77060",
+  "prompts": {},
+  "sessions": {
+    "s_14730f5018c9c9": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "816d002d-4ff7-4ab9-b802-170d5bf46593",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

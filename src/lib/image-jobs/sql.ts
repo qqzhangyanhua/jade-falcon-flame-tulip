@@ -15,6 +15,7 @@ import type {
   ImageJobRecord,
   ImageJobStatus,
   ImageRevRecord,
+  ProjectDocumentSnapshot,
   StudioProjectRecord,
 } from "./types";
 import type {
@@ -114,6 +115,22 @@ function toModel(row: CatalogRow): CatalogModel {
     enabled: Boolean(row.enabled),
     capabilities: parseCapabilities(row.capabilities ?? ""),
     isAdminDefault: Boolean(row.is_admin_default),
+  };
+}
+
+type DocumentRow = {
+  document: unknown;
+  version: number | string;
+  updated_at_ms: number | string | null;
+};
+
+function toSnapshot(row: DocumentRow): ProjectDocumentSnapshot {
+  const document =
+    typeof row.document === "string" ? JSON.parse(row.document) : row.document;
+  return {
+    document: (document ?? null) as ProjectDocumentSnapshot["document"],
+    version: Number(row.version),
+    updatedAt: row.updated_at_ms === null ? null : Number(row.updated_at_ms),
   };
 }
 
@@ -285,6 +302,40 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
                else extract(epoch from deleted_at) * 1000 end as deleted_at_ms
       `;
       return rows[0] ? toProject(rows[0]) : null;
+    },
+    async getDocument(id) {
+      const rows = await sql<DocumentRow>`
+        select document, version, case when updated_at is null then null
+               else extract(epoch from updated_at) * 1000 end as updated_at_ms
+        from studio_projects
+        where id = ${id}
+      `;
+      return rows[0] ? toSnapshot(rows[0]) : null;
+    },
+    async saveDocument(id, document, expectedVersion, now) {
+      // Version and deleted checks live in the WHERE so a concurrent save or delete cannot slip between them.
+      const saved = await sql<DocumentRow>`
+        update studio_projects
+        set document = ${JSON.stringify(document)}::jsonb,
+            version = version + 1,
+            updated_at = to_timestamp(${now / 1000})
+        where id = ${id} and deleted_at is null and version = ${expectedVersion}
+        returning document, version, case when updated_at is null then null
+               else extract(epoch from updated_at) * 1000 end as updated_at_ms
+      `;
+      if (saved[0]) return { status: "saved", snapshot: toSnapshot(saved[0]) };
+
+      const rows = await sql<DocumentRow & { deleted: boolean }>`
+        select document, version, case when updated_at is null then null
+               else extract(epoch from updated_at) * 1000 end as updated_at_ms,
+               (deleted_at is not null) as deleted
+        from studio_projects
+        where id = ${id}
+      `;
+      const row = rows[0];
+      if (!row) return { status: "not_found" };
+      if (row.deleted) return { status: "deleted" };
+      return { status: "conflict", current: toSnapshot(row) };
     },
     async markDeleted(id, deletedAt) {
       const rows = await sql<ProjectRow>`

@@ -1,3 +1,4 @@
+import type { ProjectDocument } from "../project/schema.ts";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -5,6 +6,8 @@ import type {
   ImageJobErrorCode,
   ImageJobRecord,
   ImageRevRecord,
+  ProjectDocumentSnapshot,
+  SaveDocumentOutcome,
   StudioProjectRecord,
   StudioQuota,
   StudioRole,
@@ -23,6 +26,18 @@ export type StudioProjectStore = {
   get: (id: string) => Promise<StudioProjectRecord | null>;
   updateCurrentModel: (id: string, modelId: string) => Promise<StudioProjectRecord | null>;
   markDeleted: (id: string, deletedAt: number) => Promise<StudioProjectRecord | null>;
+  getDocument: (id: string) => Promise<ProjectDocumentSnapshot | null>;
+  /**
+   * Replace the document only if the stored version still equals
+   * `expectedVersion` and the project is not deleted; both checks and the write
+   * are one atomic step.
+   */
+  saveDocument: (
+    id: string,
+    document: ProjectDocument,
+    expectedVersion: number,
+    now: number,
+  ) => Promise<SaveDocumentOutcome>;
 };
 
 export type ReservedJobInsert =

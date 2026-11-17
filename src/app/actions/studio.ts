@@ -6,6 +6,7 @@ import { fetchRemoteImage, listJobImages, openJobImage } from "@/lib/image-jobs/
 import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
+import { loadProjectDocument, saveProjectDocument } from "@/lib/image-jobs/project-document";
 import {
   createStudioProject,
   deleteStudioProject,
@@ -27,8 +28,10 @@ import {
 import type { ImageJobGatewayDeps } from "@/lib/image-jobs/stores";
 import type {
   ImageJobAction,
+  ImageJobErrorCode,
   ImageJobHistoryItem,
   PickerImageModel,
+  ProjectDocumentSnapshot,
   StudioImageState,
   StudioQuota,
   StudioRole,
@@ -357,4 +360,45 @@ export async function openJobImageFn(input: { data: { imageId: string } }) {
     contentType: result.image.contentType,
     base64: Buffer.from(result.image.bytes).toString("base64"),
   };
+}
+
+export type ProjectDocumentActionResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; code: ImageJobErrorCode; current?: ProjectDocumentSnapshot };
+
+// Returned rather than thrown: production strips error messages from thrown server action errors,
+// and the client needs the code (and the server copy on a conflict) to decide what to do.
+async function signedInUserId(): Promise<string | null> {
+  try {
+    return (await requireActionUser()).userId;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadProjectDocumentFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<ProjectDocumentSnapshot>> {
+  const userId = await signedInUserId();
+  if (!userId) return { ok: false, code: "unauthorized" };
+  const projectId = input.data.projectId.trim();
+  if (!projectId) return { ok: false, code: "not_found" };
+  const deps = await createSqlGatewayDeps();
+  return loadProjectDocument(deps, { userId, projectId });
+}
+
+export async function saveProjectDocumentFn(input: {
+  data: { projectId: string; document: unknown; expectedVersion: number };
+}): Promise<ProjectDocumentActionResult<{ version: number; updatedAt: number }>> {
+  const userId = await signedInUserId();
+  if (!userId) return { ok: false, code: "unauthorized" };
+  const projectId = input.data.projectId.trim();
+  if (!projectId) return { ok: false, code: "not_found" };
+  const deps = await createSqlGatewayDeps();
+  return saveProjectDocument(deps, {
+    userId,
+    projectId,
+    document: input.data.document,
+    expectedVersion: input.data.expectedVersion,
+  });
 }

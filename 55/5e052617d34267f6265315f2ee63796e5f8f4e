@@ -1,0 +1,43 @@
+src/app/actions/brief.ts
+  s_b169f2451cab8a::t_8eb9b07390ada4 4-8,15-21
+src/components/direction-view.tsx
+  s_b169f2451cab8a::t_f7cce89c196fce 23,68-71,111-113
+src/lib/project/schema.ts
+  s_b169f2451cab8a::t_6967faf325efe5 102
+src/lib/style-ai/index.ts
+  s_b169f2451cab8a::t_4d9940b6e8093c 25-27
+src/lib/style-ai/tailor.test.ts
+  s_b169f2451cab8a::t_7352a378000999 1-155
+src/lib/style-ai/tailor.ts
+  s_b169f2451cab8a::t_fc0012b05a47db 1-82
+package.json
+  s_a124205241a4b1::t_7d425cd7df01f6 19
+src/app/actions/studio.ts
+  s_a124205241a4b1::t_ad93836c8e8cad 37,204,209,214
+src/components/brief-view.tsx
+  s_a124205241a4b1::t_55642610e3d2b7 14,70,119,126,128,133-140,144,150,167
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "555e052617d34267f6265315f2ee63796e5f8f4e",
+  "prompts": {},
+  "sessions": {
+    "s_a124205241a4b1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "6da7dd70-3c41-43f9-a205-925562dc4cfd",
+        "model": "unknown"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    },
+    "s_b169f2451cab8a": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "d96a60cb-6e84-4f01-a3a2-fa7d045a7805",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

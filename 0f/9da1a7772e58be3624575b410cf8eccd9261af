@@ -1,0 +1,43 @@
+migrations/0009_image_blobs_uploads.sql
+  s_054b8b49de3b7c::t_c6148848e946d6 1-5
+package.json
+  s_054b8b49de3b7c::t_8819e3667a2441 19
+src/app/actions/studio.ts
+  s_054b8b49de3b7c::t_ee0f0f83022368 36,99-113
+src/components/brief-view.tsx
+  s_054b8b49de3b7c::t_4f9da3f5eae3f1 20,113-115,118
+src/components/studio-view.tsx
+  s_054b8b49de3b7c::t_a9ccb310e5c117 13,260,370,372
+src/components/style-line-actions.tsx
+  s_054b8b49de3b7c::t_b551eb82f35dfc 1-124
+src/lib/image-jobs/durable.ts
+  s_054b8b49de3b7c::t_e06e54874d3675 53,169
+src/lib/image-jobs/errors.ts
+  s_054b8b49de3b7c::t_8fdd96e788aaf1 17-18
+src/lib/image-jobs/sql.ts
+  s_054b8b49de3b7c::t_88fa2022583059 79-80,175,515,522,528,536
+src/lib/image-jobs/types.ts
+  s_054b8b49de3b7c::t_a554fda8323ffc 25-26,79-80,85-87,100-101
+src/lib/image-jobs/upload.test.ts
+  s_054b8b49de3b7c::t_aa3ad77fd28e6c 1-168
+src/lib/image-jobs/upload.ts
+  s_054b8b49de3b7c::t_28ec9b11b64c52 1-53
+src/lib/store.ts
+  s_054b8b49de3b7c::t_d03a524d93bba9 18,20,25,61-63,67-68,184-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "0f9da1a7772e58be3624575b410cf8eccd9261af",
+  "prompts": {},
+  "sessions": {
+    "s_054b8b49de3b7c": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "ee142994-69d3-4e93-ba83-85780c52d3dd",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

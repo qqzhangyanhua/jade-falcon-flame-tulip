@@ -20,6 +20,7 @@ import {
   setStyleRev,
   writebackStyle,
 } from "./project/ops.ts";
+import type { DnaChange } from "./project/dna.ts";
 import { uid } from "./utils";
 
 type State = {
@@ -53,7 +54,12 @@ type State = {
     jobId?: string;
   }) => string[];
   adoptImage: (styleId: string, slot: Slot, imageId: string) => void;
-  writebackStyle: (opts: { styleId: string; changeLog: string; dna: StyleDna }) => void;
+  writebackStyle: (opts: {
+    styleId: string;
+    changeLog: string;
+    dna: StyleDna;
+    changes?: DnaChange[];
+  }) => void;
   setStyleRev: (styleId: string, rev: number) => void;
   archiveStyle: (styleId: string) => void;
   removeProject: (id: string) => void;
@@ -165,8 +171,8 @@ export const useStudio = create<State>()(
       },
       adoptImage: (styleId, slot, imageId) =>
         update(set, get, (p) => adoptImage(p, styleId, slot, imageId)),
-      writebackStyle: ({ styleId, changeLog, dna }) =>
-        update(set, get, (p) => writebackStyle(p, { styleId, changeLog, dna })),
+      writebackStyle: ({ styleId, changeLog, dna, changes }) =>
+        update(set, get, (p) => writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid })),
       setStyleRev: (styleId, rev) => update(set, get, (p) => setStyleRev(p, styleId, rev)),
       removeProject: (id) => {
         set((s) => ({

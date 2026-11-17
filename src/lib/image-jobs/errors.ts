@@ -14,6 +14,8 @@ export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   not_found: "项目不存在",
   upstream_failed: "出图失败",
   project_deleted: "项目已删除",
+  invalid_image: "图片格式不支持，请上传 PNG、JPEG 或 WebP",
+  image_too_large: "图片过大，请压缩后重试",
 };
 
 export const CAPABILITY_DENIED_REASONS: Record<

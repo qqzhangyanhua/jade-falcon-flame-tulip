@@ -1,5 +1,5 @@
-import { CAPABILITY_DENIED_REASONS, IMAGE_JOB_USER_MESSAGES } from "./errors";
-import { applyQuotaToStudioState, emptyQuota } from "./quota";
+import { CAPABILITY_DENIED_REASONS, IMAGE_JOB_USER_MESSAGES } from "./errors.ts";
+import { applyQuotaToStudioState, emptyQuota } from "./quota.ts";
 import type {
   ActionAvailability,
   CatalogModel,
@@ -8,8 +8,8 @@ import type {
   PickerImageModel,
   StudioImageState,
   StudioQuota,
-} from "./types";
-import { IMAGE_JOB_ACTIONS } from "./types";
+} from "./types.ts";
+import { IMAGE_JOB_ACTIONS } from "./types.ts";
 
 export function cloneModel(model: CatalogModel): CatalogModel {
   return {

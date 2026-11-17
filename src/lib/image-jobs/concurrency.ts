@@ -1,5 +1,5 @@
-import type { ImageJobAction, ImageJobSlot } from "./types";
-import { IMAGE_JOB_SLOTS } from "./types";
+import type { ImageJobAction, ImageJobSlot } from "./types.ts";
+import { IMAGE_JOB_SLOTS } from "./types.ts";
 
 export const MAX_PARALLEL_DIRECTION_JOBS = 4;
 

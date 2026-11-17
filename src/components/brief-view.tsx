@@ -11,7 +11,7 @@ import { DeleteProjectControl } from "@/components/delete-project-control";
 import { QuotaMeter } from "@/components/quota-meter";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
-import { parseBrief } from "@/app/actions/brief";
+import { parseBrief, tailorDirections } from "@/app/actions/brief";
 import {
   createStudioProjectFn,
   generateCandidate,
@@ -67,6 +67,7 @@ export function BriefView() {
   const setIntent = useStudio((s) => s.setIntent);
   const setCandidates = useStudio((s) => s.setCandidates);
   const patchCandidate = useStudio((s) => s.patchCandidate);
+  const setMode = useStudio((s) => s.setMode);
   const projects = useStudio((s) => s.projects);
   const { user, isPending: authPending } = useCurrentUserState();
   const router = useRouter();
@@ -115,28 +116,38 @@ export function BriefView() {
         id: created.id,
         currentImageModelId: created.currentImageModelId,
       });
-      const seeds = PRESETS.map((p) => ({
+      const presetSeeds = PRESETS.map((p) => ({
         id: uid("can"),
         presetId: p.id,
         dna: p.dna,
         url: null,
         status: "pending" as const,
       }));
-      setCandidates(seeds);
+      setCandidates(presetSeeds);
       let product = text;
+      let seeds = presetSeeds;
       try {
         const intent = await parseBrief({ data: { brief: text } });
         setIntent(intent);
         product = intent.productName || text;
+        setMode("tailoring");
+        try {
+          const tailored = await tailorDirections({ data: { intent } });
+          seeds = tailored.map((d, i) => ({ ...presetSeeds[i], presetId: d.presetId, dna: d.dna }));
+          setCandidates(seeds);
+        } catch {
+          /* keep the preset directions */
+        }
       } catch {
         /* keep raw brief */
       }
+      setMode("generating");
       const failures: string[] = [];
       await Promise.all(
         seeds.map(async (c) => {
           try {
             const res = await generateCandidate({
-              data: { projectId: created.id, presetId: c.presetId, product },
+              data: { projectId: created.id, presetId: c.presetId, product, dna: c.dna },
             });
             const url = res.urls[0];
             if (!url) throw new Error("upstream_failed");
@@ -153,6 +164,7 @@ export function BriefView() {
     } catch (e) {
       toast.error(messageForImageJobError(e));
     } finally {
+      setMode("idle");
       setBusy(false);
     }
   }

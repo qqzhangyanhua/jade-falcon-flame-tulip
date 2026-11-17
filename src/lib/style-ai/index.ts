@@ -22,3 +22,6 @@ export async function parseBrief(brief: string, opts?: ChatOptions): Promise<Bri
     forbidden: parsed?.forbidden ?? [],
   };
 }
+
+export { tailorDirections } from "./tailor.ts";
+export type { TailoredDirection } from "./tailor.ts";

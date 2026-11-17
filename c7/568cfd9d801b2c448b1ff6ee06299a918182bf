@@ -1,0 +1,35 @@
+package.json
+  s_a8d289f4dd62c8::t_8f9b319b4a3776 19
+src/app/actions/brief.ts
+  s_a8d289f4dd62c8::t_f174b7889a57ac 4-8,15-21
+src/app/actions/studio.ts
+  s_a8d289f4dd62c8::t_2c6bc5db365114 38,220,225,230
+src/components/brief-view.tsx
+  s_a8d289f4dd62c8::t_c3546824b43852 14,71,123,130,132,137-144,148,154,171
+src/components/direction-view.tsx
+  s_a8d289f4dd62c8::t_e8e572a05bf722 23,68-71,111-113
+src/lib/project/schema.ts
+  s_a8d289f4dd62c8::t_892a9977d9a1e6 102
+src/lib/style-ai/index.ts
+  s_a8d289f4dd62c8::t_075772aeaf11bb 28-29
+src/lib/style-ai/tailor.test.ts
+  s_a8d289f4dd62c8::t_ab70518a1d424d 1-155
+src/lib/style-ai/tailor.ts
+  s_a8d289f4dd62c8::t_c22715687ba184 1-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "c7568cfd9d801b2c448b1ff6ee06299a918182bf",
+  "prompts": {},
+  "sessions": {
+    "s_a8d289f4dd62c8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "3e084d74-d378-43dc-a15d-45c8fbf80b9a",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

@@ -28,6 +28,10 @@ export type PendingProject = { id: string; name: string; reason: PendingReason }
 
 export type UploadFailure = "wireframe_failed" | "upload_failed" | "unavailable";
 
+/** A project another account owns, or that was deleted, can never be uploaded; anything else may work on retry. */
+const failureForCode = (code: ImageJobErrorCode): "unavailable" | "upload_failed" =>
+  code === "forbidden" || code === "project_deleted" ? "unavailable" : "upload_failed";
+
 const isInlineImage = (url: string | null): url is string =>
   Boolean(url && url.toLowerCase().startsWith("data:"));
 
@@ -52,10 +56,7 @@ async function uploadDocument(
   } catch {
     return { ok: false, reason: "upload_failed" };
   }
-  if (!imported.ok) {
-    const gone = imported.code === "forbidden" || imported.code === "project_deleted";
-    return { ok: false, reason: gone ? "unavailable" : "upload_failed" };
-  }
+  if (!imported.ok) return { ok: false, reason: failureForCode(imported.code) };
   await host.adopt(project.id).catch(() => undefined);
   return { ok: true };
 }
@@ -72,10 +73,7 @@ export async function uploadLocalProject(
   } catch {
     return { ok: false, reason: "upload_failed" };
   }
-  if (!row.ok) {
-    const gone = row.code === "forbidden" || row.code === "project_deleted";
-    return { ok: false, reason: gone ? "unavailable" : "upload_failed" };
-  }
+  if (!row.ok) return { ok: false, reason: failureForCode(row.code) };
   return uploadDocument(api, host, project);
 }
 
@@ -102,7 +100,7 @@ export async function migrateLocalProjects(
       if (loaded.code === "unauthorized") break;
       if (loaded.code === "not_found") {
         pending.push({ id: project.id, name: project.name, reason: "unmatched" });
-      } else if (loaded.code === "forbidden" || loaded.code === "project_deleted") {
+      } else if (failureForCode(loaded.code) === "unavailable") {
         pending.push({ id: project.id, name: project.name, reason: "unavailable" });
       }
       continue;

@@ -2,25 +2,12 @@ import { PRESETS } from "../presets.ts";
 import { styleDnaSchema, type StyleDna } from "../project/dna.ts";
 import type { BriefIntent } from "../types.ts";
 import { chatJson, type ChatOptions } from "./chat.ts";
+import { hasValidColors, withUserIntent, type TailoredDirection } from "./shared.ts";
 
-export type TailoredDirection = { presetId: string; dna: StyleDna };
+export type { TailoredDirection } from "./shared.ts";
 
 // Four full style DNAs (prompt text, colours, lists) come to well over 2k tokens.
 const TAILOR_DIRECTIONS_MAX_TOKENS = 6000;
-
-const HEX = /^#[0-9a-fA-F]{6}$/;
-
-function union(...lists: string[][]): string[] {
-  return [...new Set(lists.flat().map((item) => item.trim()).filter(Boolean))];
-}
-
-function withUserIntent(dna: StyleDna, intent: BriefIntent, mergeMood: boolean): StyleDna {
-  return {
-    ...dna,
-    mood: mergeMood ? union(dna.mood, intent.mood) : dna.mood,
-    forbidden: union(dna.forbidden, intent.forbidden),
-  };
-}
 
 function tailoringPrompt(intent: BriefIntent): string {
   const presets = PRESETS.map((p) => ({ presetId: p.id, dna: p.dna }));
@@ -35,15 +22,9 @@ function tailoringPrompt(intent: BriefIntent): string {
   ].join("\n");
 }
 
-function fallbackDirections(intent: BriefIntent): TailoredDirection[] {
-  return PRESETS.map((p) => ({ presetId: p.id, dna: withUserIntent(p.dna, intent, true) }));
-}
-
 function readTailoredDna(value: unknown): StyleDna | null {
   const parsed = styleDnaSchema.safeParse(value);
-  if (!parsed.success) return null;
-  const hexes = Object.values(parsed.data.colors);
-  return hexes.every((hex) => HEX.test(hex)) ? parsed.data : null;
+  return parsed.success && hasValidColors(parsed.data) ? parsed.data : null;
 }
 
 /**

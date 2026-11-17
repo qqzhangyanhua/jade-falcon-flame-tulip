@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import {
-  ensureStudioProjectFn,
+  ensureStudioProjectResultFn,
   importLocalProjectFn,
   loadProjectDocumentFn,
   uploadWireframeFn,
@@ -21,27 +21,25 @@ import {
   type PendingReason,
 } from "@/lib/local-migration";
 import { useStudio } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 const api: MigrationApi = {
   load: (projectId) => loadProjectDocumentFn({ data: { projectId } }),
   ensureRow: async (projectId) => {
-    try {
-      await ensureStudioProjectFn({ data: { projectId } });
-      return { ok: true };
-    } catch (err) {
-      const code = err instanceof Error ? err.message : "";
-      return { ok: false, code: code === "forbidden" || code === "project_deleted" ? code : "upstream_failed" };
-    }
+    const result = await ensureStudioProjectResultFn({ data: { projectId } });
+    return result.ok ? { ok: true } : { ok: false, code: result.code };
   },
-  uploadWireframe: async (projectId, dataUrl) => (await uploadWireframeFn({ data: { projectId, dataUrl } })).url,
+  uploadWireframe: async (projectId, dataUrl) =>
+    (await uploadWireframeFn({ data: { projectId, dataUrl } })).url,
   importProject: (projectId, document) => importLocalProjectFn({ data: { projectId, document } }),
 };
 
-const host: MigrationHost & { projects: () => ReturnType<typeof useStudio.getState>["projects"] } = {
-  projects: () => useStudio.getState().projects,
-  currentId: () => useStudio.getState().currentId,
-  adopt: async (id) => getProjectSync()?.open(id),
-};
+const host: MigrationHost & { projects: () => ReturnType<typeof useStudio.getState>["projects"] } =
+  {
+    projects: () => useStudio.getState().projects,
+    currentId: () => useStudio.getState().currentId,
+    adopt: async (id) => getProjectSync()?.open(id),
+  };
 
 const REASON_TEXT: Record<PendingReason, string> = {
   unmatched: "服务端没有这个项目的记录",
@@ -50,11 +48,32 @@ const REASON_TEXT: Record<PendingReason, string> = {
   upload_failed: "上传失败，项目仍保留在本地",
 };
 
+// The prompt is shown in the brief page's flow rather than docked over the page: anything fixed
+// to a corner ends up on top of some page's controls. The runner and the prompt share this list.
+const NO_PENDING: PendingProject[] = [];
+let pendingList: PendingProject[] = NO_PENDING;
+const listeners = new Set<() => void>();
+
+function setPendingList(next: PendingProject[] | ((list: PendingProject[]) => PendingProject[])) {
+  const value = typeof next === "function" ? next(pendingList) : next;
+  pendingList = value.length === 0 ? NO_PENDING : value;
+  listeners.forEach((listener) => listener());
+}
+
+function usePendingList(): PendingProject[] {
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => pendingList,
+    () => NO_PENDING,
+  );
+}
+
+/** Finds the old browser projects once per signed-in user; renders nothing itself. */
 export function LocalMigration() {
   const { user, isPending } = useCurrentUserState();
-  const [pending, setPending] = useState<PendingProject[]>([]);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
   const ranFor = useRef<string | null>(null);
 
   const userId = user?.id ?? null;
@@ -63,16 +82,25 @@ export function LocalMigration() {
     ranFor.current = userId;
     void migrateLocalProjects(api, host)
       .then((result) => {
-        setPending(result.pending);
+        setPendingList(result.pending);
         window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
       })
       .catch(() => undefined);
   }, [isPending, userId]);
 
-  if (!userId || pending.length === 0) return null;
+  return null;
+}
+
+export function LocalMigrationPrompt({ className }: { className?: string }) {
+  const { user } = useCurrentUserState();
+  const pending = usePendingList();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  if (!user || pending.length === 0) return null;
 
   function settle(id: string) {
-    setPending((list) => list.filter((p) => p.id !== id));
+    setPendingList((list) => list.filter((p) => p.id !== id));
     window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
   }
 
@@ -87,7 +115,9 @@ export function LocalMigration() {
         settle(id);
       } else {
         toast.error(REASON_TEXT[result.reason]);
-        setPending((list) => list.map((p) => (p.id === id ? { ...p, reason: result.reason } : p)));
+        setPendingList((list) =>
+          list.map((p) => (p.id === id ? { ...p, reason: result.reason } : p)),
+        );
       }
     } finally {
       setBusyId(null);
@@ -101,10 +131,9 @@ export function LocalMigration() {
   }
 
   return (
-    <div
-      role="dialog"
+    <section
       aria-label="本地项目"
-      className="fixed inset-x-3 bottom-3 z-50 mx-auto max-h-[70vh] max-w-md overflow-y-auto rounded-xl bg-surface p-4 shadow-border sm:inset-x-auto sm:right-4 sm:mx-0"
+      className={cn("rounded-xl bg-surface p-4 shadow-border", className)}
     >
       <p className="text-sm font-medium text-fg">发现浏览器里的旧项目</p>
       <p className="mt-1 text-xs leading-relaxed text-muted">
@@ -118,12 +147,21 @@ export function LocalMigration() {
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {p.reason !== "unavailable" ? (
                 <Button size="sm" disabled={busyId === p.id} onClick={() => void upload(p.id)}>
-                  {busyId === p.id ? "上传中…" : p.reason === "unmatched" ? "上传到账号" : "重试上传"}
+                  {busyId === p.id
+                    ? "上传中…"
+                    : p.reason === "unmatched"
+                      ? "上传到账号"
+                      : "重试上传"}
                 </Button>
               ) : null}
               {confirmId === p.id ? (
                 <>
-                  <Button variant="danger" size="sm" disabled={busyId === p.id} onClick={() => discard(p.id)}>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={busyId === p.id}
+                    onClick={() => discard(p.id)}
+                  >
                     确认丢弃
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setConfirmId(null)}>
@@ -131,7 +169,12 @@ export function LocalMigration() {
                   </Button>
                 </>
               ) : (
-                <Button variant="ghost" size="sm" disabled={busyId === p.id} onClick={() => setConfirmId(p.id)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busyId === p.id}
+                  onClick={() => setConfirmId(p.id)}
+                >
                   丢弃
                 </Button>
               )}
@@ -139,9 +182,9 @@ export function LocalMigration() {
           </li>
         ))}
       </ul>
-      <Button className="mt-3 w-full" variant="ghost" size="sm" onClick={() => setPending([])}>
+      <Button className="mt-3 w-full" variant="ghost" size="sm" onClick={() => setPendingList([])}>
         稍后再说
       </Button>
-    </div>
+    </section>
   );
 }

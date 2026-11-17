@@ -1,6 +1,7 @@
 import type { Sql } from "../db";
 import { beijingCalendarDay } from "./beijing-day";
 import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency";
+import { COVER_SLOT } from "../project/summary";
 import { DEFAULT_DAILY_IMAGE_CAP } from "./quota";
 import {
   IMAGE_JOB_ACTIONS,
@@ -327,10 +328,10 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
                p.document->>'phase' as stage,
                coalesce(
                  (select r->>'url'
-                    from jsonb_array_elements(cur.style->'assets'->'kv'->'revs') r
-                   where r->>'id' = cur.style->'assets'->'kv'->>'adoptedId'
+                    from jsonb_array_elements(cur.style->'assets'->${COVER_SLOT}::text->'revs') r
+                   where r->>'id' = cur.style->'assets'->${COVER_SLOT}::text->>'adoptedId'
                    limit 1),
-                 cur.style->'assets'->'kv'->'revs'->-1->>'url',
+                 cur.style->'assets'->${COVER_SLOT}::text->'revs'->-1->>'url',
                  cur.style->>'candidateUrl'
                ) as cover_url,
                extract(epoch from p.updated_at) * 1000 as updated_at_ms

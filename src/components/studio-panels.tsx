@@ -2,9 +2,14 @@ import { DnaChangeList } from "@/components/dna-change-list";
 import type { ImageRev, StyleBranch, StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function StyleCard({ dna }: { dna: StyleDna }) {
+// The heading stays the DNA's own name, which an explicit rename changes; the line name only shows
+// when it differs (e.g. a fork, whose DNA is a copy of the original).
+export function StyleCard({ dna, lineName }: { dna: StyleDna; lineName?: string }) {
   return (
     <div>
+      {lineName && lineName !== dna.name ? (
+        <p className="mb-1 text-xs uppercase tracking-kicker text-subtle">{lineName}</p>
+      ) : null}
       <h2 className="font-display text-xl leading-tight tracking-tight">{dna.name}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{dna.oneLiner}</p>
       <div className="mt-4 flex overflow-hidden rounded-md">

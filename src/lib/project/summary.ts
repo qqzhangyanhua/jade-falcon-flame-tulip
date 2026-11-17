@@ -1,6 +1,9 @@
-import type { ProjectDocument } from "./schema.ts";
+import type { ProjectDocument, Slot } from "./schema.ts";
 
 export const PROJECT_SUMMARY_LIMIT = 20;
+
+/** The slot whose adopted image is a project's cover; the SQL summary query binds this same value. */
+export const COVER_SLOT: Slot = "kv";
 
 /**
  * Cover of a project in the recent list: the current style line's main visual
@@ -12,7 +15,7 @@ export function projectCoverUrl(
 ): string | null {
   const style = document.styles.find((s) => s.id === document.currentStyleId);
   if (!style) return null;
-  const kv = style.assets.kv;
+  const kv = style.assets[COVER_SLOT];
   const adopted = kv.adoptedId ? kv.revs.find((r) => r.id === kv.adoptedId) : undefined;
   return adopted?.url ?? kv.revs.at(-1)?.url ?? style.candidateUrl ?? null;
 }

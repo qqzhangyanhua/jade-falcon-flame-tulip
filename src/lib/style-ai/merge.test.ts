@@ -86,6 +86,53 @@ describe("mergeInstruction", () => {
     assert.deepEqual(res, { ok: false, error: "renamed" });
   });
 
+  it("does not treat an incidental mention of a name as a rename request", async () => {
+    const res = await mergeInstruction(base, "主色改成暖橘，brand name in the logo 更醒目", {
+      apiKey: "k",
+      fetchImpl: fakeChat(
+        JSON.stringify(
+          sampleDna({ name: "暖橘", colors: { ...base.colors, primary: "#ff7a3d" } }),
+        ),
+      ),
+    });
+    assert.deepEqual(res, { ok: false, error: "renamed" });
+  });
+
+  it("accepts explicit rename phrasings", async () => {
+    for (const instruction of [
+      "rename it to Dusk",
+      "change the name to Dusk",
+      "name this style as Dusk",
+      "把名称改成暮光蓝",
+      "风格重命名为暮光蓝",
+    ]) {
+      const res = await mergeInstruction(base, instruction, {
+        apiKey: "k",
+        fetchImpl: fakeChat(JSON.stringify(sampleDna({ name: "暮光蓝" }))),
+      });
+      assert.equal(res.ok, true, instruction);
+    }
+  });
+
+  it("rejects a reply whose changed colour is not a hex value", async () => {
+    const res = await mergeInstruction(base, "主色改成暖橘", {
+      apiKey: "k",
+      fetchImpl: fakeChat(
+        JSON.stringify(sampleDna({ colors: { ...base.colors, primary: "warm orange" } })),
+      ),
+    });
+    assert.deepEqual(res, { ok: false, error: "invalid_schema" });
+  });
+
+  it("leaves a colour the stored DNA already had untouched, even if it is not strict hex", async () => {
+    const legacy = sampleDna({ colors: { ...base.colors, muted: "#abc" } });
+    const res = await mergeInstruction(legacy, "更暖一点", {
+      apiKey: "k",
+      fetchImpl: fakeChat(JSON.stringify({ ...legacy, light: "暖光" })),
+    });
+    assert.equal(res.ok, true);
+  });
+
   it("rejects a reply that changes nothing", async () => {
     const res = await mergeInstruction(base, "更暖一点", {
       apiKey: "k",

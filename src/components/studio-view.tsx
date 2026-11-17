@@ -23,7 +23,7 @@ import {
 } from "@/app/actions/studio";
 import { mergeStyleInstructionFn } from "@/app/actions/writeback";
 import type { DnaChange } from "@/lib/project/dna";
-import { messageForMergeError } from "@/lib/style-ai/merge";
+import { messageForMergeError } from "@/lib/style-ai/shared";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { useStudio } from "@/lib/store";
@@ -286,7 +286,7 @@ export function StudioView() {
 
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-64 shrink-0 flex-col gap-8 overflow-y-auto border-r border-border p-5 md:flex">
-          <StyleCard dna={dna} />
+          <StyleCard dna={dna} lineName={style?.name} />
           {standby.length > 0 ? (
             <div>
               <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">备选风格</p>
@@ -421,7 +421,7 @@ export function StudioView() {
 
           {mobile === "style" ? (
             <div className="flex flex-col gap-8 overflow-auto p-5 md:hidden">
-              <StyleCard dna={dna} />
+              <StyleCard dna={dna} lineName={style?.name} />
               <StyleLineActions styles={project.styles} style={style} disabled={generating} />
             </div>
           ) : null}

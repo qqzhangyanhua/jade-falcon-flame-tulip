@@ -1,0 +1,59 @@
+package-lock.json
+  s_a124205241a4b1::t_f60af540644923 40,5675-5680
+package.json
+  s_a124205241a4b1::t_bbf8c92962272c 19,55
+src/app/actions/brief.ts
+  s_a124205241a4b1::t_85f86acfb18b9b 4-8,15-21
+src/app/actions/studio.ts
+  s_a124205241a4b1::t_7dcfbc161f7c22 41,223,228,233
+src/app/actions/writeback.ts
+  s_a124205241a4b1::t_6d4c4af8be2ff2 1-16
+src/components/brief-view.tsx
+  s_a124205241a4b1::t_2c18176781e49e 14,71,123,130,132,137-144,148,154,171
+src/components/direction-view.tsx
+  s_a124205241a4b1::t_8e9ca3476014a4 23,68-71,111-113
+src/components/dna-change-list.tsx
+  s_a124205241a4b1::t_05d1324f37a285 1-71
+src/components/studio-export.tsx
+  s_a124205241a4b1::t_b97c14f4099b49 1-96
+src/components/studio-panels.tsx
+  s_a124205241a4b1::t_cb01fc027efb82 1,110-113,115-117
+src/components/studio-view.tsx
+  s_a124205241a4b1::t_f04d2f1af7a933 4,7,13-14,24-26,54-60,70,128,134-177,184,197-201,203-210,263-264,313,423,425,467,469-474,476
+src/components/style-line-actions.tsx
+  s_a124205241a4b1::t_5477efa15883c6 1-124
+src/lib/project/export-zip.test.ts
+  s_a124205241a4b1::t_25fc1e76a6cd6c 1-95
+src/lib/project/export-zip.ts
+  s_a124205241a4b1::t_ac8293e2d9ccad 1-59
+src/lib/project/schema.ts
+  s_a124205241a4b1::t_82a49a83b4ebf7 102
+src/lib/store.ts
+  s_a124205241a4b1::t_36d03d32d0f153 18,20,25-26,60-65,67-69,73-74,181-182,190-199
+src/lib/style-ai/index.ts
+  s_a124205241a4b1::t_bd0d8dcd0bfc56 25-29
+src/lib/style-ai/merge.test.ts
+  s_a124205241a4b1::t_32ac42212f1133 1-118
+src/lib/style-ai/merge.ts
+  s_a124205241a4b1::t_8c9bf4da012e45 1-63
+src/lib/style-ai/tailor.test.ts
+  s_a124205241a4b1::t_d2853416ad64ba 1-155
+src/lib/style-ai/tailor.ts
+  s_a124205241a4b1::t_2fe8083fbc1da0 1-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "b420c61f5e9d67fb073b6c27140d2b2753820761",
+  "prompts": {},
+  "sessions": {
+    "s_a124205241a4b1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "6da7dd70-3c41-43f9-a205-925562dc4cfd",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

@@ -15,7 +15,9 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  enableBuiltinSlot,
   forkStyle,
+  hideBuiltinSlot,
   lockCandidate,
   restoreStyle,
   setCurrentStyle,
@@ -46,6 +48,8 @@ type State = {
   lockCandidate: (candidateId: string) => void;
   setCurrentStyle: (styleId: string) => void;
   setSlot: (slot: Slot) => void;
+  enableBuiltinSlot: (slotId: string) => void;
+  hideBuiltinSlot: (slotId: string) => void;
   setMode: (mode: Project["mode"]) => void;
   addImageRevs: (opts: {
     styleId: string;
@@ -137,7 +141,11 @@ export const useStudio = create<State>()(
         const id = get().currentId;
         if (!id) return;
         set((s) => ({
-          projects: patchProject(s.projects, id, (p) => ({ ...p, intent, name: intent.productName || p.name })),
+          projects: patchProject(s.projects, id, (p) => ({
+            ...p,
+            intent,
+            name: intent.productName || p.name,
+          })),
         }));
       },
       setCandidates: (candidates) => {
@@ -155,13 +163,18 @@ export const useStudio = create<State>()(
           })),
         }));
       },
-      lockCandidate: (candidateId) => update(set, get, (p) => lockCandidate(p, candidateId, { newId: uid })),
+      lockCandidate: (candidateId) =>
+        update(set, get, (p) => lockCandidate(p, candidateId, { newId: uid })),
       setCurrentStyle: (styleId) => update(set, get, (p) => setCurrentStyle(p, styleId)),
       setSlot: (slot) => {
         const id = get().currentId;
         if (!id) return;
-        set((s) => ({ projects: patchProject(s.projects, id, (p) => ({ ...p, currentSlot: slot })) }));
+        set((s) => ({
+          projects: patchProject(s.projects, id, (p) => ({ ...p, currentSlot: slot })),
+        }));
       },
+      enableBuiltinSlot: (slotId) => update(set, get, (p) => enableBuiltinSlot(p, slotId)),
+      hideBuiltinSlot: (slotId) => update(set, get, (p) => hideBuiltinSlot(p, slotId)),
       setMode: (mode) => {
         const id = get().currentId;
         if (!id) return;
@@ -181,7 +194,9 @@ export const useStudio = create<State>()(
       adoptImage: (styleId, slot, imageId) =>
         update(set, get, (p) => adoptImage(p, styleId, slot, imageId)),
       writebackStyle: ({ styleId, changeLog, dna, changes }) =>
-        update(set, get, (p) => writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid })),
+        update(set, get, (p) =>
+          writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid }),
+        ),
       setStyleRev: (styleId, rev) => update(set, get, (p) => setStyleRev(p, styleId, rev)),
       removeProject: (id) => {
         set((s) => ({

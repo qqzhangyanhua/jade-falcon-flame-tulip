@@ -22,9 +22,10 @@ import {
 } from "./projects.ts";
 import { DEFAULT_DAILY_IMAGE_CAP, resolveStudioRole, setGlobalDailyCap } from "./quota.ts";
 import { projectDocumentSchema } from "../project/schema.ts";
+import { DEFAULT_ENABLED_SLOT_IDS } from "../project/slots.ts";
 import { sampleProject } from "../project/fixtures.ts";
 import type { CatalogModel, ImageJobAction, RunImageJobInput } from "./types.ts";
-import { IMAGE_JOB_ACTIONS, IMAGE_JOB_ERROR_CODES, IMAGE_JOB_SLOTS } from "./types.ts";
+import { IMAGE_JOB_ACTIONS, IMAGE_JOB_ERROR_CODES } from "./types.ts";
 
 function jobInput(
   world: ReturnType<typeof createMemoryGatewayWorld>,
@@ -87,9 +88,7 @@ describe("image job gateway", () => {
           action,
           n: action === "generate" ? 2 : 1,
           imageUrl:
-            action === "tune" || action === "compose"
-              ? "https://img.example/src.png"
-              : undefined,
+            action === "tune" || action === "compose" ? "https://img.example/src.png" : undefined,
         }),
       );
       assert.equal(result.ok, true);
@@ -113,10 +112,7 @@ describe("image job gateway", () => {
     const world = createMemoryGatewayWorld({
       models: [...defaultCatalogSeed(), extra],
     });
-    const result = await runImageJob(
-      world,
-      jobInput(world, { clientModelId: extra.id, n: 1 }),
-    );
+    const result = await runImageJob(world, jobInput(world, { clientModelId: extra.id, n: 1 }));
     assert.equal(result.ok, true);
     if (!result.ok) return;
     assert.equal(result.job.catalogModelId, DEFAULT_IMAGE_MODEL_ID);
@@ -297,7 +293,10 @@ describe("image job gateway", () => {
     const result = await runImageJob(world, jobInput(world, { n: 1 }));
     assert.equal(result.ok, false);
     if (result.ok) return;
-    assert.equal(messageForImageJobError({ message: result.code }), IMAGE_JOB_USER_MESSAGES[result.code]);
+    assert.equal(
+      messageForImageJobError({ message: result.code }),
+      IMAGE_JOB_USER_MESSAGES[result.code],
+    );
     assert.equal(
       messageForImageJobError(new Error("INTERNAL xAI 429 body should never leak")),
       IMAGE_JOB_USER_MESSAGES.upstream_failed,
@@ -314,10 +313,7 @@ describe("image job gateway", () => {
     assert.equal(anon.ok, false);
     if (!anon.ok) assert.equal(anon.code, "unauthorized");
 
-    const missing = await runImageJob(
-      world,
-      jobInput(world, { projectId: "missing", n: 1 }),
-    );
+    const missing = await runImageJob(world, jobInput(world, { projectId: "missing", n: 1 }));
     assert.equal(missing.ok, false);
     if (!missing.ok) assert.equal(missing.code, "not_found");
     assert.equal(world.calls.length, 0);
@@ -330,10 +326,7 @@ describe("image job gateway", () => {
     assert.equal(IMAGE_JOB_USER_MESSAGES.quota_exceeded, "今日额度已用完");
     assert.equal(IMAGE_JOB_USER_MESSAGES.in_flight, "当前有进行中的出图");
     assert.equal(IMAGE_JOB_USER_MESSAGES.project_deleted, "项目已删除");
-    assert.equal(
-      (IMAGE_JOB_ACTIONS as readonly string[]).includes("parse"),
-      false,
-    );
+    assert.equal((IMAGE_JOB_ACTIONS as readonly string[]).includes("parse"), false);
   });
 });
 
@@ -531,7 +524,7 @@ describe("parallel limits", () => {
       cap: 10,
       upstream: () => hold.run(),
     });
-    const pending = IMAGE_JOB_SLOTS.map((slot) =>
+    const pending = DEFAULT_ENABLED_SLOT_IDS.map((slot) =>
       runImageJob(world, jobInput(world, { slot, n: 1 })),
     );
     await hold.waitForStarts(3);
@@ -543,7 +536,7 @@ describe("parallel limits", () => {
     const results = await Promise.all(pending);
     assert.ok(results.every((result) => result.ok));
     const slots = results.flatMap((result) => (result.ok ? [result.job.slot] : []));
-    assert.deepEqual(new Set(slots), new Set(IMAGE_JOB_SLOTS));
+    assert.deepEqual(new Set(slots), new Set(DEFAULT_ENABLED_SLOT_IDS));
     assert.ok(results.every((result) => result.ok && result.job.status === "succeeded"));
   });
 
@@ -559,7 +552,12 @@ describe("parallel limits", () => {
 
     const blocked = await runImageJob(
       world,
-      jobInput(world, { action: "tune", slot: "kv", n: 1, imageUrl: "https://img.example/src.png" }),
+      jobInput(world, {
+        action: "tune",
+        slot: "kv",
+        n: 1,
+        imageUrl: "https://img.example/src.png",
+      }),
     );
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.code, "in_flight");
@@ -861,7 +859,11 @@ describe("durable image copies", () => {
       upstream: string[];
     }> = [
       { action: "direction", n: 1, upstream: ["https://img.example/candidate.png"] },
-      { action: "generate", n: 2, upstream: ["https://img.example/a.png", "https://img.example/b.png"] },
+      {
+        action: "generate",
+        n: 2,
+        upstream: ["https://img.example/a.png", "https://img.example/b.png"],
+      },
       {
         action: "tune",
         n: 1,
@@ -1011,7 +1013,12 @@ describe("list jobs", () => {
     now += 1_000;
     const newer = await runImageJob(
       world,
-      jobInput(world, { userId: "designer-1", action: "tune", n: 1, imageUrl: "https://img.example/src.png" }),
+      jobInput(world, {
+        userId: "designer-1",
+        action: "tune",
+        n: 1,
+        imageUrl: "https://img.example/src.png",
+      }),
     );
     assert.equal(newer.ok, true);
     now += 1_000;
@@ -1308,5 +1315,65 @@ describe("slot catalog on the gateway", () => {
     assert.equal(parseSlot("poster"), "poster");
     assert.equal(parseSlot(""), null);
     assert.equal(parseSlot(null), null);
+  });
+
+  it("accepts a newly enabled built-in and sends its catalog aspect, not the client aspect", async () => {
+    const world = createMemoryGatewayWorld();
+    const { mode: _mode, ...raw } = sampleProject({ id: world.projectId, currentSlot: "kv" });
+    raw.enabledSlotIds = ["ui_hero", "kv", "web_home", "app_icon"];
+    const saved = await world.projects.saveDocument(
+      world.projectId,
+      projectDocumentSchema.parse(raw),
+      0,
+      1,
+    );
+    assert.equal(saved.status, "saved");
+
+    const result = await runImageJob(
+      world,
+      jobInput(world, { slot: "app_icon", aspect: "16:9", n: 1 }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.slot, "app_icon");
+    assert.equal(world.calls[0]?.aspect, "1:1");
+  });
+
+  it("still allows only one running job on a newly enabled built-in slot", async () => {
+    const hold = holdUpstream();
+    const world = createMemoryGatewayWorld({
+      cap: 5,
+      upstream: () => hold.run(),
+    });
+    const { mode: _mode, ...raw } = sampleProject({ id: world.projectId, currentSlot: "kv" });
+    raw.enabledSlotIds = ["ui_hero", "kv", "web_home", "app_icon"];
+    const saved = await world.projects.saveDocument(
+      world.projectId,
+      projectDocumentSchema.parse(raw),
+      0,
+      1,
+    );
+    assert.equal(saved.status, "saved");
+
+    const first = runImageJob(world, jobInput(world, { slot: "app_icon", aspect: "16:9", n: 1 }));
+    await hold.waitForStarts(1);
+    assert.equal(world.calls[0]?.aspect, "1:1");
+
+    const blocked = await runImageJob(
+      world,
+      jobInput(world, { slot: "app_icon", aspect: "16:9", n: 1 }),
+    );
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.equal(blocked.code, "in_flight");
+    assert.equal(blocked.job, undefined);
+    assert.equal(world.calls.length, 1);
+
+    const other = runImageJob(world, jobInput(world, { slot: "kv", n: 1 }));
+    await hold.waitForStarts(2);
+    assert.equal(world.calls.length, 2);
+
+    hold.release();
+    const finished = await Promise.all([first, other]);
+    assert.ok(finished.every((result) => result.ok));
   });
 });

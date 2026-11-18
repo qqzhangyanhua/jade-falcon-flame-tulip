@@ -13,7 +13,12 @@ import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
 import { StudioCopyMenu, StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
 import { StyleLineActions } from "@/components/style-line-actions";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
-import { StudioGenerateBar, StudioTunePanel, TUNE_PRESETS } from "@/components/studio-tools";
+import {
+  StudioGenerateBar,
+  StudioSlotList,
+  StudioTunePanel,
+  TUNE_PRESETS,
+} from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { Wordmark } from "@/components/wordmark";
@@ -23,14 +28,17 @@ import type { DnaChange } from "@/lib/project/dna";
 import { messageForMergeError } from "@/lib/style-ai/shared";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
+import { BUILTIN_SLOTS } from "@/lib/project/slots";
 import { useStudio } from "@/lib/store";
-import { SLOTS, adoptedRev, currentDna, type Slot, type StyleDna } from "@/lib/types";
+import { adoptedRev, currentDna, type Slot, type StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function StudioView() {
   const project = useStudio((s) => s.current());
   const setCurrentStyle = useStudio((s) => s.setCurrentStyle);
   const setSlot = useStudio((s) => s.setSlot);
+  const enableBuiltinSlot = useStudio((s) => s.enableBuiltinSlot);
+  const hideBuiltinSlot = useStudio((s) => s.hideBuiltinSlot);
   const setMode = useStudio((s) => s.setMode);
   const addImageRevs = useStudio((s) => s.addImageRevs);
   const adoptImage = useStudio((s) => s.adoptImage);
@@ -74,6 +82,13 @@ export function StudioView() {
   if (!project || !style || !dna) return null;
 
   const product = project.intent?.productName || project.name;
+  const enabledSlots = project.enabledSlotIds.flatMap((id) => {
+    const entry = BUILTIN_SLOTS.find((item) => item.id === id);
+    return entry ? [entry] : [];
+  });
+  const availableSlots = BUILTIN_SLOTS.filter(
+    (item) => !project.enabledSlotIds.includes(item.id),
+  ).map((item) => ({ id: item.id, name: item.name }));
 
   async function runGenerate() {
     if (!project || !style || !dna) return;
@@ -212,7 +227,7 @@ export function StudioView() {
   const liveStyles = project.styles.filter((s) => s.status !== "archived");
 
   return (
-    <div className="flex h-dvh flex-col bg-bg text-fg">
+    <div className="flex h-dvh min-w-0 flex-col overflow-x-hidden bg-bg text-fg">
       <header className="grid min-h-16 shrink-0 grid-cols-[auto_1fr] items-center gap-3 border-b border-border px-3 py-2 md:grid-cols-[auto_minmax(0,1fr)_auto] md:px-4">
         <button
           type="button"
@@ -287,7 +302,7 @@ export function StudioView() {
         ))}
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1">
         <aside className="hidden w-64 shrink-0 flex-col gap-8 overflow-y-auto border-r border-border p-5 md:flex">
           <StyleCard dna={dna} lineName={style?.name} />
           {standby.length > 0 ? (
@@ -318,28 +333,16 @@ export function StudioView() {
             </div>
           ) : null}
           <StyleLineActions styles={project.styles} style={style} disabled={generating} />
-          <div>
-            <p className="mb-3 section-label">物料槽</p>
-            <div className="flex flex-col gap-1">
-              {SLOTS.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  disabled={generating}
-                  onClick={() => setSlot(s.id)}
-                  className={cn(
-                    "rounded-md px-3 py-2.5 text-left transition-colors duration-150",
-                    slot === s.id
-                      ? "bg-surface-2 text-fg"
-                      : "text-muted hover:bg-surface hover:text-fg",
-                  )}
-                >
-                  <span className="text-sm">{s.label}</span>
-                  <span className="mt-0.5 block text-xs text-subtle">{s.hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          <StudioSlotList
+            layout="stack"
+            slots={enabledSlots}
+            available={availableSlots}
+            current={slot}
+            disabled={generating}
+            onSelect={setSlot}
+            onEnable={enableBuiltinSlot}
+            onHide={hideBuiltinSlot}
+          />
         </aside>
 
         <section
@@ -467,8 +470,10 @@ export function StudioView() {
             </div>
           ) : null}
 
-          <div className={cn(mobile !== "canvas" && "hidden md:block")}>
+          <div className={cn("min-w-0", mobile !== "canvas" && "hidden md:block")}>
             <StudioGenerateBar
+              slots={enabledSlots}
+              available={availableSlots}
               slot={slot}
               content={content}
               generating={generating}
@@ -476,6 +481,8 @@ export function StudioView() {
               generateReason={generateReason}
               busyLabel={busyLabel}
               onSlot={setSlot}
+              onEnable={enableBuiltinSlot}
+              onHide={hideBuiltinSlot}
               onContent={setContent}
               onGenerate={() => void runGenerate()}
             />

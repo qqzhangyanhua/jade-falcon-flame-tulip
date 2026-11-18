@@ -4,13 +4,17 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  enableBuiltinSlot,
   forkStyle,
+  hideBuiltinSlot,
   lockCandidate,
   restoreStyle,
   setStyleRev,
   writebackStyle,
 } from "./ops.ts";
 import { currentDna } from "./schema.ts";
+import { BUILTIN_SLOTS, DEFAULT_ENABLED_SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
+import { slotPrompt } from "../prompts.ts";
 import { sampleCandidate, sampleDna, sampleProject, sampleStyle } from "./fixtures.ts";
 
 function counter() {
@@ -30,7 +34,12 @@ describe("lockCandidate", () => {
       phase: "direction",
       currentStyleId: null,
       styles: [],
-      candidates: [sampleCandidate("1"), sampleCandidate("2"), sampleCandidate("3"), sampleCandidate("4")],
+      candidates: [
+        sampleCandidate("1"),
+        sampleCandidate("2"),
+        sampleCandidate("3"),
+        sampleCandidate("4"),
+      ],
     });
     const next = lockCandidate(project, "2", counter());
     assert.equal(next.phase, "studio");
@@ -38,7 +47,10 @@ describe("lockCandidate", () => {
     assert.equal(next.styles[0].status, "active");
     assert.equal(next.styles[0].name, "方向 2");
     assert.equal(next.currentStyleId, next.styles[0].id);
-    assert.deepEqual(next.styles.slice(1).map((s) => s.status), ["standby", "standby"]);
+    assert.deepEqual(
+      next.styles.slice(1).map((s) => s.status),
+      ["standby", "standby"],
+    );
     assert.equal(next.styles[0].revs[0].changeLog, "锁定");
   });
 
@@ -66,26 +78,50 @@ describe("writebackStyle", () => {
 
   it("does not repeat a rev number when writing back from an older rev", () => {
     let project = sampleProject();
-    project = writebackStyle(project, { styleId: "a", changeLog: "v2", dna: sampleDna({ light: "x" }) });
-    project = writebackStyle(project, { styleId: "a", changeLog: "v3", dna: sampleDna({ light: "y" }) });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ light: "x" }),
+    });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v3",
+      dna: sampleDna({ light: "y" }),
+    });
     project = setStyleRev(project, "a", 1);
-    project = writebackStyle(project, { styleId: "a", changeLog: "from v1", dna: sampleDna({ light: "z" }) });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "from v1",
+      dna: sampleDna({ light: "z" }),
+    });
     const a = style(project, "a");
-    assert.deepEqual(a.revs.map((r) => r.rev), [1, 2, 3, 4]);
+    assert.deepEqual(
+      a.revs.map((r) => r.rev),
+      [1, 2, 3, 4],
+    );
     assert.equal(a.revs[3].parentRev, 1);
     assert.equal(a.currentRev, 4);
   });
 
   it("prefers explicitly supplied changes", () => {
     const changes = [{ field: "mood", from: "a", to: "b" }];
-    const next = writebackStyle(sampleProject(), { styleId: "a", changeLog: "c", dna: sampleDna(), changes });
+    const next = writebackStyle(sampleProject(), {
+      styleId: "a",
+      changeLog: "c",
+      dna: sampleDna(),
+      changes,
+    });
     assert.deepEqual(style(next, "a").revs[1].changes, changes);
   });
 });
 
 describe("setStyleRev", () => {
   it("changes the viewed rev", () => {
-    const project = writebackStyle(sampleProject(), { styleId: "a", changeLog: "c", dna: sampleDna({ light: "x" }) });
+    const project = writebackStyle(sampleProject(), {
+      styleId: "a",
+      changeLog: "c",
+      dna: sampleDna({ light: "x" }),
+    });
     assert.equal(style(setStyleRev(project, "a", 1), "a").currentRev, 1);
   });
 
@@ -145,12 +181,29 @@ describe("archiveStyle and restoreStyle", () => {
 describe("forkStyle", () => {
   it("forks from the viewed rev into a new current line", () => {
     let project = sampleProject();
-    project = writebackStyle(project, { styleId: "a", changeLog: "v2", dna: sampleDna({ name: "风格 a", light: "侧逆光" }) });
-    project = writebackStyle(project, { styleId: "a", changeLog: "v3", dna: sampleDna({ name: "风格 a", light: "硬光" }) });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
+    });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v3",
+      dna: sampleDna({ name: "风格 a", light: "硬光" }),
+    });
     project = setStyleRev(project, "a", 2);
-    project = addImageRevs(project, {
-      styleId: "a", slot: "kv", urls: ["/api/images/x"], action: "generate", diff: "d", parentId: null,
-    }, counter()).project;
+    project = addImageRevs(
+      project,
+      {
+        styleId: "a",
+        slot: "kv",
+        urls: ["/api/images/x"],
+        action: "generate",
+        diff: "d",
+        parentId: null,
+      },
+      counter(),
+    ).project;
 
     const next = forkStyle(project, "a", counter());
     assert.equal(next.styles.length, 4);
@@ -191,10 +244,17 @@ describe("addImageRevs and adoptImage", () => {
   };
 
   it("records the viewed style rev and adopts the first new image when none is adopted", () => {
-    const { project, ids } = addImageRevs(sampleProject(), { ...input, urls: ["/u/1", "/u/2"] }, counter());
+    const { project, ids } = addImageRevs(
+      sampleProject(),
+      { ...input, urls: ["/u/1", "/u/2"] },
+      counter(),
+    );
     assert.equal(ids.length, 2);
     const kv = style(project, "a").assets.kv;
-    assert.deepEqual(kv.revs.map((r) => r.url), ["/u/1", "/u/2"]);
+    assert.deepEqual(
+      kv.revs.map((r) => r.url),
+      ["/u/1", "/u/2"],
+    );
     assert.equal(kv.adoptedId, ids[0]);
     assert.equal(kv.revs[0].styleRev, 1);
   });
@@ -229,5 +289,154 @@ describe("addImageRevs and adoptImage", () => {
   it("returns no ids for an unknown style", () => {
     const result = addImageRevs(sampleProject(), { ...input, styleId: "zzz", urls: ["/u/1"] });
     assert.deepEqual(result.ids, []);
+  });
+});
+
+const EXTRA_BUILTINS = [
+  {
+    id: "app_icon",
+    name: "App 图标",
+    aspect: "1:1",
+    purpose: "方形应用图标，居中图形符号，不要做成海报",
+    lead: /centered graphic symbol/,
+  },
+  {
+    id: "xhs_cover",
+    name: "小红书封面",
+    aspect: "3:4",
+    purpose: "小红书笔记封面，竖版，标题清楚",
+    lead: /Xiaohongshu note cover/,
+  },
+  {
+    id: "wechat_header",
+    name: "公众号头图",
+    aspect: "21:9",
+    purpose: "公众号文章头图，超宽横幅",
+    lead: /WeChat official-account header/,
+  },
+  {
+    id: "banner",
+    name: "横幅 Banner",
+    aspect: "5:2",
+    purpose: "横幅 Banner，宽幅品牌或活动条",
+    lead: /wide brand or campaign banner/,
+  },
+  {
+    id: "poster",
+    name: "竖版海报",
+    aspect: "2:3",
+    purpose: "竖版海报，适合打印张贴",
+    lead: /vertical print poster/,
+  },
+  {
+    id: "namecard",
+    name: "名片",
+    aspect: "3:2",
+    purpose: "横版名片，姓名和联系方式位置清楚",
+    lead: /name and contact details/,
+  },
+  {
+    id: "ppt_cover",
+    name: "PPT 封面",
+    aspect: "16:9",
+    purpose: "演示文稿封面，标题明确，留白干净",
+    lead: /presentation cover/,
+  },
+  {
+    id: "empty_state",
+    name: "空状态插画",
+    aspect: "4:3",
+    purpose: "空状态插画，元素少，说明暂时没有内容",
+    lead: /empty-state illustration/,
+  },
+] as const;
+
+describe("built-in slot catalog", () => {
+  it("keeps eleven slots, with new projects still enabling only the original three", () => {
+    assert.deepEqual(
+      BUILTIN_SLOTS.slice(0, 3).map((slot) => slot.id),
+      ["ui_hero", "kv", "web_home"],
+    );
+    assert.deepEqual(DEFAULT_ENABLED_SLOT_IDS, ["ui_hero", "kv", "web_home"]);
+    assert.equal(BUILTIN_SLOTS.length, 11);
+    assert.equal(new Set(BUILTIN_SLOTS.map((slot) => slot.promptTemplate)).size, 11);
+
+    for (const expected of EXTRA_BUILTINS) {
+      const slot = BUILTIN_SLOTS.find((item) => item.id === expected.id);
+      assert.ok(slot, expected.id);
+      assert.equal(slot.name, expected.name);
+      assert.equal(slot.aspect, expected.aspect);
+      assert.equal(slot.purpose, expected.purpose);
+      assert.ok(SUPPORTED_ASPECTS.includes(slot.aspect));
+      assert.match(slot.promptTemplate, expected.lead);
+      assert.match(slot.promptTemplate, /\{product\}/);
+    }
+  });
+
+  it("asks for an app icon as a centered symbol, not a poster", () => {
+    const prompt = slotPrompt(sampleDna(), "app_icon", "Northwind", "");
+    assert.match(prompt, /centered graphic symbol/);
+    assert.match(prompt, /not a poster/);
+    assert.match(prompt, /Northwind/);
+    assert.equal(prompt.includes("Brand key visual poster"), false);
+  });
+});
+
+describe("enableBuiltinSlot and hideBuiltinSlot", () => {
+  it("appends a built-in and puts an empty asset on every style line", () => {
+    const next = enableBuiltinSlot(sampleProject(), "app_icon");
+    assert.deepEqual(next.enabledSlotIds, ["ui_hero", "kv", "web_home", "app_icon"]);
+    for (const line of next.styles) {
+      assert.deepEqual(line.assets.app_icon, { slot: "app_icon", adoptedId: null, revs: [] });
+    }
+  });
+
+  it("does not enable an id that is not built in, or the same built-in twice", () => {
+    const unknown = enableBuiltinSlot(sampleProject(), "custom_banner");
+    assert.deepEqual(unknown.enabledSlotIds, ["ui_hero", "kv", "web_home"]);
+    const once = enableBuiltinSlot(sampleProject(), "poster");
+    const twice = enableBuiltinSlot(once, "poster");
+    assert.equal(twice.enabledSlotIds.filter((id) => id === "poster").length, 1);
+  });
+
+  it("keeps images when a slot is hidden and still has them when it is enabled again", () => {
+    const enabled = enableBuiltinSlot(sampleProject(), "app_icon");
+    const added = addImageRevs(
+      enabled,
+      {
+        styleId: "a",
+        slot: "app_icon",
+        urls: ["/api/images/icon"],
+        action: "generate",
+        diff: "图标",
+        parentId: null,
+      },
+      counter(),
+    );
+    const hidden = hideBuiltinSlot(added.project, "app_icon");
+    assert.deepEqual(hidden.enabledSlotIds, ["ui_hero", "kv", "web_home"]);
+    assert.equal(hidden.currentSlot, "kv");
+    assert.equal(style(hidden, "a").assets.app_icon.revs[0]?.url, "/api/images/icon");
+    assert.equal(style(hidden, "b").assets.app_icon.revs.length, 0);
+
+    const again = enableBuiltinSlot(hidden, "app_icon");
+    assert.deepEqual(again.enabledSlotIds, ["ui_hero", "kv", "web_home", "app_icon"]);
+    assert.equal(style(again, "a").assets.app_icon.revs[0]?.url, "/api/images/icon");
+    assert.equal(style(again, "a").assets.app_icon.adoptedId, added.ids[0]);
+  });
+
+  it("selects the first remaining slot when the current one is hidden", () => {
+    const hidden = hideBuiltinSlot(sampleProject({ currentSlot: "kv" }), "kv");
+    assert.deepEqual(hidden.enabledSlotIds, ["ui_hero", "web_home"]);
+    assert.equal(hidden.currentSlot, "ui_hero");
+    assert.equal(style(hidden, "a").assets.kv.revs.length, 0);
+  });
+
+  it("refuses to hide the last enabled slot", () => {
+    const project = sampleProject({ enabledSlotIds: ["kv"], currentSlot: "kv" });
+    const next = hideBuiltinSlot(project, "kv");
+    assert.deepEqual(next.enabledSlotIds, ["kv"]);
+    assert.equal(next.currentSlot, "kv");
+    assert.equal(style(next, "a").assets.kv.slot, "kv");
   });
 });

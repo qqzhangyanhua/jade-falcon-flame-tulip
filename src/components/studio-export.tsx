@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Download, Loader2, PackageOpen } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Copy, Download, Loader2, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
 import { designTokens, formatPromptPack, promptPack } from "@/lib/project/dna-export";
 import { buildExportZip, extensionOfContentType } from "@/lib/project/export-zip";
@@ -53,6 +54,25 @@ export function StudioDownloadLink({ url, slot }: { url: string | undefined; slo
     >
       <Download className="size-4" />
     </a>
+  );
+}
+
+export function StudioBrandGuideLink({
+  projectId,
+  styleId,
+}: {
+  projectId: string;
+  styleId: string;
+}) {
+  return (
+    <Link
+      href={`/guide/${encodeURIComponent(projectId)}/${encodeURIComponent(styleId)}`}
+      className={iconButton}
+      aria-label="品牌规范"
+      title="打开品牌规范"
+    >
+      <BookOpen className="size-4" />
+    </Link>
   );
 }
 

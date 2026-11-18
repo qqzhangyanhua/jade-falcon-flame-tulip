@@ -11,7 +11,12 @@ import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
-import { StudioCopyMenu, StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
+import {
+  StudioBrandGuideLink,
+  StudioCopyMenu,
+  StudioDownloadLink,
+  StudioExportButton,
+} from "@/components/studio-export";
 import { StyleLineActions } from "@/components/style-line-actions";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
 import {
@@ -313,6 +318,7 @@ export function StudioView() {
             enabledSlotIds={project.enabledSlotIds}
             customSlots={customSlots}
           />
+          <StudioBrandGuideLink projectId={project.id} styleId={style.id} />
           <StudioExportButton
             projectName={project.name}
             product={product}

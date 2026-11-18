@@ -1,4 +1,5 @@
 import type { StyleDna } from "./dna.ts";
+import { adoptedRev, currentDna, type StyleBranch } from "./schema.ts";
 
 export type RgbPixel = { r: number; g: number; b: number };
 
@@ -241,6 +242,84 @@ function parseHex(hex: string): RgbPixel | null {
   if (!match?.[1]) return null;
   const value = Number.parseInt(match[1], 16);
   return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
+}
+
+const PALETTE_ROLES = ["bg", "surface", "text", "muted", "primary", "accent"] as const;
+
+export type BrandGuideSwatch = {
+  role: (typeof PALETTE_ROLES)[number];
+  hex: string;
+};
+
+/** One slot that has an image: the adopted rev, otherwise the latest. */
+export type BrandGuideSlot = {
+  id: string;
+  name: string;
+  aspect: string;
+  purpose: string;
+  url: string;
+  revId: string;
+};
+
+export type BrandGuide = {
+  palette: BrandGuideSwatch[];
+  typeMood: string;
+  fontFamily: string;
+  geometry: string;
+  density: string;
+  radius: string;
+  spacing: string;
+  mood: string[];
+  forbidden: string[];
+  dos: string[];
+  donts: string[];
+  slots: BrandGuideSlot[];
+};
+
+/**
+ * Page data for one style line's viewed rev. Do and don't lines come only from
+ * mood, type mood, geometry, density and forbidden styles. No model call.
+ */
+export function brandGuideModel(styleLine: StyleBranch, slots: readonly PromptSlot[]): BrandGuide {
+  const dna = currentDna(styleLine);
+  const mood = [...dna.mood];
+  const forbidden = [...dna.forbidden];
+  const dos = [
+    ...(mood.length > 0 ? [`情绪保持：${mood.join("、")}`] : []),
+    `字体气质：${dna.typeMood}`,
+    `几何与密度：${dna.geometry} / ${dna.density}`,
+  ];
+  const donts =
+    forbidden.length > 0 ? forbidden.map((item) => `避免${item}`) : ["不要偏离这份风格 DNA 的色板"];
+  const shown: BrandGuideSlot[] = [];
+  for (const slot of slots) {
+    const asset = styleLine.assets[slot.id];
+    if (!asset) continue;
+    const rev = adoptedRev(asset);
+    if (!rev) continue;
+    shown.push({
+      id: slot.id,
+      name: slot.name,
+      aspect: slot.aspect,
+      purpose: slot.purpose,
+      url: rev.url,
+      revId: rev.id,
+    });
+  }
+  return {
+    palette: PALETTE_ROLES.map((role) => ({ role, hex: dna.colors[role] })),
+    typeMood: dna.typeMood,
+    fontFamily: fontFamilyForTypeMood(dna.typeMood),
+    geometry: dna.geometry,
+    density: dna.density,
+    radius: radiusForGeometry(dna.geometry),
+    spacing: spacingForDensity(dna.density),
+    mood,
+    forbidden,
+    dos,
+    donts,
+    slots: shown,
+  };
 }
 
 /** Share of pixels within ΔE 10 of some palette color, as an integer 0–100. */

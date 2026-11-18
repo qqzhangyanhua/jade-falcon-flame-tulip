@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "./client";
 import { hasGateSessionMarker } from "./gate-session-marker";
 import { resolveSignInGateState } from "./sign-in-gate";
+import { SIGN_IN_PATH } from "./sign-in-path";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
+
+export { SIGN_IN_PATH };
 
 const subscribeToNothing = () => () => {};
 const noGateSessionOnServer = () => false;
@@ -19,9 +22,6 @@ const noGateSessionOnServer = () => false;
  * While the session is still resolving, gates that care about signed-out state
  * render nothing so there's no signed-out flash on hard reload.
  */
-
-/** Where `RedirectToSignIn` sends signed-out visitors. Create this route. */
-export const SIGN_IN_PATH = "/login";
 
 /** Render children only when a user is present (real session, or the disabled-auth dev user). */
 export function SignedIn({ children }: { children: ReactNode }) {
@@ -54,13 +54,7 @@ export function RedirectToSignIn({ to = SIGN_IN_PATH }: { to?: string }) {
   );
 }
 
-export function SignInGate({
-  children,
-  fallback,
-}: {
-  children: ReactNode;
-  fallback?: ReactNode;
-}) {
+export function SignInGate({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) {
   const { user, isPending } = useCurrentUserState();
   const state = resolveSignInGateState({ isPending, hasUser: user !== null });
   if (state === "pending") return null;
@@ -107,11 +101,7 @@ export function UserButton() {
   return (
     <div className="flex items-center gap-2">
       {user.profileImageUrl ? (
-        <img
-          src={user.profileImageUrl}
-          alt=""
-          className="h-8 w-8 rounded-full object-cover"
-        />
+        <img src={user.profileImageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
       ) : (
         <span className="grid h-8 w-8 place-items-center rounded-full bg-surface-2 text-sm font-medium text-fg">
           {label.charAt(0).toUpperCase()}

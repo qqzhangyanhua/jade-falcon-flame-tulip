@@ -1,5 +1,6 @@
 import { AppHeader } from "@/components/app-header";
 import { DownloadPdfButton } from "@/components/download-pdf-button";
+import { BRAND_GUIDE_PRINT_CSS } from "@/lib/project/brand-guide-print";
 import type { BrandGuide, BrandGuideSwatch } from "@/lib/project/dna-export";
 
 const ROLE_LABEL: Record<BrandGuideSwatch["role"], string> = {
@@ -10,23 +11,6 @@ const ROLE_LABEL: Record<BrandGuideSwatch["role"], string> = {
   primary: "主色",
   accent: "强调",
 };
-
-const PRINT_CSS = `
-@page { size: A4; margin: 12mm; }
-@media print {
-  .guide-chrome { display: none !important; }
-  [data-sonner-toaster] { display: none !important; }
-  .guide-swatch { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .guide-figure { break-inside: avoid; }
-  .guide-figure img {
-    width: 100% !important;
-    height: 28mm !important;
-    max-height: 28mm !important;
-    aspect-ratio: auto !important;
-    object-fit: contain;
-  }
-}
-`;
 
 export function BrandGuideSheet({
   guide,
@@ -46,11 +30,11 @@ export function BrandGuideSheet({
   const lineName = styleName !== dnaName ? ` · ${styleName}` : "";
 
   return (
-    <div className="min-h-dvh bg-bg text-fg">
-      <style>{PRINT_CSS}</style>
+    <div className="guide-root min-h-dvh bg-bg text-fg">
+      <style>{BRAND_GUIDE_PRINT_CSS}</style>
       <AppHeader className="guide-chrome" />
       <article className="guide-sheet mx-auto max-w-3xl px-5 py-8 md:px-8 md:py-12 print:max-w-none print:px-0 print:py-0">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="guide-chrome flex flex-wrap items-center justify-between gap-3">
           <p className="section-label">品牌规范</p>
           <DownloadPdfButton />
         </div>
@@ -65,7 +49,7 @@ export function BrandGuideSheet({
           {lineName} · rev{rev}
         </p>
 
-        <section className="mt-10 print:mt-4">
+        <section className="guide-block mt-10 print:mt-4">
           <p className="section-label">色板</p>
           <ul className="mt-4 grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-6 print:grid-cols-6">
             {guide.palette.map((swatch) => (
@@ -75,13 +59,13 @@ export function BrandGuideSheet({
                   style={{ backgroundColor: swatch.hex }}
                 />
                 <p className="mt-2 text-xs text-muted">{ROLE_LABEL[swatch.role]}</p>
-                <p className="text-xs tracking-wide text-fg">{swatch.hex}</p>
+                <p className="guide-hex text-xs tracking-wide text-fg">{swatch.hex}</p>
               </li>
             ))}
           </ul>
         </section>
 
-        <div className="mt-10 grid gap-8 sm:grid-cols-2 print:mt-4 print:grid-cols-2 print:gap-6">
+        <div className="guide-block mt-10 grid gap-8 sm:grid-cols-2 print:mt-4 print:grid-cols-2 print:gap-6">
           <section>
             <p className="section-label">字体气质</p>
             <p className="mt-4 font-display text-2xl tracking-tight text-fg">{guide.typeMood}</p>
@@ -108,7 +92,7 @@ export function BrandGuideSheet({
           </section>
         </div>
 
-        <div className="mt-10 grid gap-8 sm:grid-cols-2 print:mt-4 print:grid-cols-2 print:gap-6">
+        <div className="guide-block mt-10 grid gap-8 sm:grid-cols-2 print:mt-4 print:grid-cols-2 print:gap-6">
           <section>
             <p className="section-label">情绪词</p>
             {guide.mood.length > 0 ? (
@@ -142,14 +126,14 @@ export function BrandGuideSheet({
           </section>
         </div>
 
-        <div className="mt-10 grid gap-8 sm:grid-cols-2 print:mt-4 print:grid-cols-2 print:gap-6">
+        <div className="guide-block mt-10 grid gap-8 sm:grid-cols-2 print:mt-4 print:grid-cols-2 print:gap-6">
           <section>
             <p className="section-label">该做</p>
             <ul className="mt-4 flex flex-col">
               {guide.dos.map((line, index) => (
                 <li
                   key={`${line}-${index}`}
-                  className="border-t border-border py-3 text-sm leading-relaxed text-fg print:py-1.5"
+                  className="guide-rule border-t border-border py-3 text-sm leading-relaxed text-fg print:py-1.5"
                 >
                   {line}
                 </li>
@@ -162,7 +146,7 @@ export function BrandGuideSheet({
               {guide.donts.map((line, index) => (
                 <li
                   key={`${line}-${index}`}
-                  className="border-t border-border py-3 text-sm leading-relaxed text-fg print:py-1.5"
+                  className="guide-rule border-t border-border py-3 text-sm leading-relaxed text-fg print:py-1.5"
                 >
                   {line}
                 </li>
@@ -172,9 +156,9 @@ export function BrandGuideSheet({
         </div>
 
         {guide.slots.length > 0 ? (
-          <section className="mt-10 print:mt-4">
+          <section className="guide-block mt-10 print:mt-4">
             <p className="section-label">物料</p>
-            <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-3">
+            <ul className="guide-figures mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 print:grid-cols-3 print:gap-3">
               {guide.slots.map((slot) => (
                 <li key={slot.id}>
                   <figure className="guide-figure">

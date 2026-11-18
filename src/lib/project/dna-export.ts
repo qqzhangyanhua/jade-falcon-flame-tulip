@@ -63,9 +63,9 @@ function cssDeclarations(dna: StyleDna): string {
     `--color-muted: ${muted};`,
     `--color-primary: ${primary};`,
     `--color-accent: ${accent};`,
-    `--radius: ${radiusForGeometry(dna.geometry)};`,
-    `--spacing: ${spacingForDensity(dna.density)};`,
-    `--font-family: ${fontFamilyForTypeMood(dna.typeMood)};`,
+    `--radius-md: ${radiusForGeometry(dna.geometry)};`,
+    `--spacing-brand: ${spacingForDensity(dna.density)};`,
+    `--font-sans: ${fontFamilyForTypeMood(dna.typeMood)};`,
   ]
     .map((line) => `  ${line}`)
     .join("\n");
@@ -278,19 +278,14 @@ export type BrandGuide = {
 
 /**
  * Page data for one style line's viewed rev. Do and don't lines come only from
- * mood, type mood, geometry, density and forbidden styles. No model call.
+ * mood words and forbidden styles. No model call.
  */
 export function brandGuideModel(styleLine: StyleBranch, slots: readonly PromptSlot[]): BrandGuide {
   const dna = currentDna(styleLine);
   const mood = [...dna.mood];
   const forbidden = [...dna.forbidden];
-  const dos = [
-    ...(mood.length > 0 ? [`情绪保持：${mood.join("、")}`] : []),
-    `字体气质：${dna.typeMood}`,
-    `几何与密度：${dna.geometry} / ${dna.density}`,
-  ];
-  const donts =
-    forbidden.length > 0 ? forbidden.map((item) => `避免${item}`) : ["不要偏离这份风格 DNA 的色板"];
+  const dos = mood.length > 0 ? [`情绪保持：${mood.join("、")}`] : [];
+  const donts = forbidden.length > 0 ? forbidden.map((item) => `避免${item}`) : [];
   const shown: BrandGuideSlot[] = [];
   for (const slot of slots) {
     const asset = styleLine.assets[slot.id];
@@ -320,6 +315,23 @@ export function brandGuideModel(styleLine: StyleBranch, slots: readonly PromptSl
     donts,
     slots: shown,
   };
+}
+
+/** Palette hexes in a stable role order. Not a persisted score. */
+export function paletteOfDna(dna: { colors: StyleDna["colors"] }): string[] {
+  return PALETTE_ROLES.map((key) => dna.colors[key]);
+}
+
+/**
+ * Palette of the style rev an image was made with.
+ * A missing rev has no palette in memory, so the badge stays hidden.
+ */
+export function paletteForStyleRev(
+  revs: readonly { rev: number; dna: { colors: StyleDna["colors"] } }[],
+  styleRev: number,
+): string[] | null {
+  const record = revs.find((item) => item.rev === styleRev);
+  return record ? paletteOfDna(record.dna) : null;
 }
 
 /** Share of pixels within ΔE 10 of some palette color, as an integer 0–100. */

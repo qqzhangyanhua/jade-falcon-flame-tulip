@@ -6,7 +6,7 @@ import { UnauthorizedError } from "@/lib/auth/verify.server";
 import { getSql } from "@/lib/db";
 import { loadProjectDocument } from "@/lib/image-jobs/project-document";
 import { createSqlProjectStore } from "@/lib/image-jobs/sql";
-import { resolveBrandGuideAccess } from "@/lib/project/brand-guide-access";
+import { resolveBrandGuideAccess, styleForGuide } from "@/lib/project/brand-guide-access";
 import { brandGuideModel, type PromptSlot } from "@/lib/project/dna-export";
 import { currentDna, type ProjectDocument } from "@/lib/project/schema";
 import { builtinSlot } from "@/lib/project/slots";
@@ -50,10 +50,13 @@ function slotsForGuide(document: ProjectDocument): PromptSlot[] {
 
 export default async function BrandGuidePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ projectId: string; styleId: string }>;
+  searchParams: Promise<{ rev?: string | string[] }>;
 }) {
   const { projectId, styleId } = await params;
+  const { rev: revParam } = await searchParams;
 
   let userId: string | null = null;
   try {
@@ -88,20 +91,21 @@ export default async function BrandGuidePage({
   });
   if (decision !== "show" || !document || !style) notFound();
 
+  const viewed = styleForGuide(style, revParam);
   let dna;
   try {
-    dna = currentDna(style);
+    dna = currentDna(viewed);
   } catch {
     notFound();
   }
-  const guide = brandGuideModel(style, slotsForGuide(document));
+  const guide = brandGuideModel(viewed, slotsForGuide(document));
 
   return (
     <BrandGuideSheet
       guide={guide}
       projectName={document.name}
       styleName={style.name}
-      rev={style.currentRev}
+      rev={viewed.currentRev}
       dnaName={dna.name}
       oneLiner={dna.oneLiner}
     />

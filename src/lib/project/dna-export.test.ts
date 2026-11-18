@@ -5,12 +5,15 @@ import {
   brandGuideModel,
   consistencyScore,
   designTokens,
+  paletteForStyleRev,
+  paletteOfDna,
   fontFamilyForTypeMood,
   promptPack,
   radiusForGeometry,
   spacingForDensity,
 } from "./dna-export.ts";
-import { resolveBrandGuideAccess } from "./brand-guide-access.ts";
+import { brandGuideHref, resolveBrandGuideAccess, styleForGuide } from "./brand-guide-access.ts";
+import { BRAND_GUIDE_PRINT_CSS } from "./brand-guide-print.ts";
 import { sampleDna, sampleStyle } from "./fixtures.ts";
 import { emptyAsset, type ImageRev } from "./schema.ts";
 
@@ -45,15 +48,48 @@ describe("consistencyScore", () => {
   });
 });
 
+describe("palette for a generated image", () => {
+  it("uses the style rev stamped on the image, not a later rev", () => {
+    const first = sampleDna({
+      colors: { ...sampleDna().colors, primary: "#111111" },
+    });
+    const later = sampleDna({
+      colors: { ...sampleDna().colors, primary: "#222222" },
+    });
+    assert.deepEqual(
+      paletteForStyleRev(
+        [
+          { rev: 1, dna: first },
+          { rev: 2, dna: later },
+        ],
+        1,
+      ),
+      ["#0b1020", "#141b30", "#f4f6fb", "#8a94ad", "#111111", "#ffb547"],
+    );
+    assert.equal(paletteForStyleRev([{ rev: 1, dna: first }], 4), null);
+  });
+
+  it("reads a direction candidate's own palette", () => {
+    assert.deepEqual(paletteOfDna(sampleDna()), [
+      "#0b1020",
+      "#141b30",
+      "#f4f6fb",
+      "#8a94ad",
+      "#4f7cff",
+      "#ffb547",
+    ]);
+  });
+});
+
 const DEFAULT_BLOCK = `  --color-bg: #0b1020;
   --color-surface: #141b30;
   --color-text: #f4f6fb;
   --color-muted: #8a94ad;
   --color-primary: #4f7cff;
   --color-accent: #ffb547;
-  --radius: 8px;
-  --spacing: 16px;
-  --font-family: system-ui, sans-serif;`;
+  --radius-md: 8px;
+  --spacing-brand: 16px;
+  --font-sans: system-ui, sans-serif;`;
 
 describe("design token lookup", () => {
   it("maps every named geometry, density and type mood to the contract string", () => {
@@ -129,13 +165,19 @@ describe("designTokens", () => {
       sampleDna({ geometry: "sharp", density: "compact", typeMood: "geometric-sans" }),
     );
     const font = `"Avenir Next", "Century Gothic", sans-serif`;
-    assert.match(tokens.css, /--radius: 0px;/);
-    assert.match(tokens.css, /--spacing: 8px;/);
-    assert.ok(tokens.css.includes(`--font-family: ${font};`));
+    assert.match(tokens.css, /--radius-md: 0px;/);
+    assert.match(tokens.css, /--spacing-brand: 8px;/);
+    assert.ok(tokens.css.includes(`--font-sans: ${font};`));
+    assert.doesNotMatch(tokens.css, /--radius:/);
+    assert.doesNotMatch(tokens.css, /--spacing:/);
+    assert.doesNotMatch(tokens.css, /--font-family:/);
     assert.match(tokens.tailwind, /^@theme \{/);
-    assert.match(tokens.tailwind, /--radius: 0px;/);
-    assert.match(tokens.tailwind, /--spacing: 8px;/);
-    assert.ok(tokens.tailwind.includes(`--font-family: ${font};`));
+    assert.match(tokens.tailwind, /--radius-md: 0px;/);
+    assert.match(tokens.tailwind, /--spacing-brand: 8px;/);
+    assert.ok(tokens.tailwind.includes(`--font-sans: ${font};`));
+    assert.doesNotMatch(tokens.tailwind, /--spacing:/);
+    assert.doesNotMatch(tokens.tailwind, /--radius:/);
+    assert.doesNotMatch(tokens.tailwind, /--font-family:/);
 
     const w3c = JSON.parse(tokens.w3c) as {
       color: Record<string, { $type: string; $value: string }>;
@@ -276,15 +318,11 @@ describe("brandGuideModel", () => {
     assert.equal(guide.spacing, "24px");
     assert.deepEqual(guide.mood, ["冷静", "克制"]);
     assert.deepEqual(guide.forbidden, ["霓虹", "赛博"]);
-    assert.deepEqual(guide.dos, [
-      "情绪保持：冷静、克制",
-      "字体气质：editorial-sans",
-      "几何与密度：sharp / airy",
-    ]);
+    assert.deepEqual(guide.dos, ["情绪保持：冷静、克制"]);
     assert.deepEqual(guide.donts, ["避免霓虹", "避免赛博"]);
   });
 
-  it("omits the mood line when mood is empty and warns about the palette when nothing is forbidden", () => {
+  it("derives no do line from an empty mood and no don't lines from an empty forbidden list", () => {
     const guide = brandGuideModel(
       sampleStyle("a", {
         revs: [
@@ -308,12 +346,8 @@ describe("brandGuideModel", () => {
     assert.equal(guide.density, "宽松");
     assert.equal(guide.radius, "8px");
     assert.equal(guide.spacing, "16px");
-    assert.deepEqual(guide.dos, ["字体气质：几何无衬线", "几何与密度：大圆角 / 宽松"]);
-    assert.equal(
-      guide.dos.some((line) => line.startsWith("情绪保持：")),
-      false,
-    );
-    assert.deepEqual(guide.donts, ["不要偏离这份风格 DNA 的色板"]);
+    assert.deepEqual(guide.dos, []);
+    assert.deepEqual(guide.donts, []);
     assert.deepEqual(
       guide.palette.map((swatch) => swatch.hex),
       ["#0b1020", "#141b30", "#f4f6fb", "#8a94ad", "#4f7cff", "#ffb547"],
@@ -375,6 +409,51 @@ describe("brandGuideModel", () => {
         revId: "img_u2",
       },
     ]);
+  });
+});
+
+describe("styleForGuide", () => {
+  const older = sampleDna({ colors: { ...viewedColors, bg: "#111111" } });
+  const viewed = sampleDna({ colors: viewedColors });
+  const line = sampleStyle("a", {
+    currentRev: 2,
+    revs: [
+      { rev: 1, parentRev: null, dna: older, changeLog: "锁定", createdAt: 1 },
+      { rev: 2, parentRev: 1, dna: viewed, changeLog: "写回", createdAt: 2 },
+    ],
+  });
+
+  it("puts the viewed rev on the guide link and reads that rev when it is on the line", () => {
+    assert.equal(brandGuideHref("prj/1", "style a", 1), "/guide/prj%2F1/style%20a?rev=1");
+    const viewedLine = styleForGuide(line, "1");
+    assert.equal(viewedLine.currentRev, 1);
+    assert.equal(brandGuideModel(viewedLine, []).palette[0]?.hex, "#111111");
+    assert.equal(styleForGuide(line, ["1", "2"]).currentRev, 1);
+  });
+
+  it("keeps the saved current rev when the query rev is absent or not on the line", () => {
+    assert.equal(styleForGuide(line, undefined).currentRev, 2);
+    assert.equal(styleForGuide(line, "").currentRev, 2);
+    assert.equal(styleForGuide(line, "9").currentRev, 2);
+    assert.equal(styleForGuide(line, "1.5").currentRev, 2);
+    assert.equal(styleForGuide(line, "2e0").currentRev, 2);
+    assert.equal(brandGuideModel(styleForGuide(line, "nope"), []).palette[0]?.hex, "#102030");
+  });
+});
+
+describe("brand guide print css", () => {
+  it("compacts a normal guide onto one A4 page without clipping hex values or do/don't text", () => {
+    assert.match(BRAND_GUIDE_PRINT_CSS, /@page \{ size: A4; margin: 12mm; \}/);
+    assert.match(BRAND_GUIDE_PRINT_CSS, /\.guide-chrome \{ display: none !important; \}/);
+    assert.match(BRAND_GUIDE_PRINT_CSS, /\.guide-sheet \{[^}]*font-size: 9pt;/);
+    assert.match(BRAND_GUIDE_PRINT_CSS, /\.guide-figures \{[^}]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+    assert.match(BRAND_GUIDE_PRINT_CSS, /\.guide-figure img \{[^}]*height: 22mm !important;/);
+    assert.match(BRAND_GUIDE_PRINT_CSS, /\.guide-root \{[^}]*min-height: 0 !important;/);
+    assert.doesNotMatch(BRAND_GUIDE_PRINT_CSS, /overflow:\s*hidden/);
+    assert.doesNotMatch(BRAND_GUIDE_PRINT_CSS, /line-clamp/);
+    assert.doesNotMatch(BRAND_GUIDE_PRINT_CSS, /text-overflow:\s*ellipsis/);
+    assert.doesNotMatch(BRAND_GUIDE_PRINT_CSS, /\.guide-hex[^{]*\{[^}]*display:\s*none/);
+    assert.doesNotMatch(BRAND_GUIDE_PRINT_CSS, /\.guide-rule[^{]*\{[^}]*display:\s*none/);
   });
 });
 

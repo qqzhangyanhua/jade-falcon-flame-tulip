@@ -1,7 +1,8 @@
 import { useStudio } from "./store";
 import type { ImageJobAction, ImageJobSlot } from "./image-jobs/types";
-import { BUILTIN_SLOTS } from "./project/slots.ts";
 import type { ImageRev, Slot } from "./types";
+
+export { slotLabel } from "./project/slot-label.ts";
 
 export type OpenFromJobInput = {
   projectId: string;
@@ -60,11 +61,6 @@ export function openStudioFromJob(
 
 export function isLivingStudioProject(projectId: string): boolean {
   return useStudio.getState().projects.some((project) => project.id === projectId);
-}
-
-export function slotLabel(slot: Slot | ImageJobSlot | null): string {
-  if (!slot) return "方向";
-  return BUILTIN_SLOTS.find((item) => item.id === slot)?.name ?? "方向";
 }
 
 export function actionLabel(action: ImageJobAction): string {

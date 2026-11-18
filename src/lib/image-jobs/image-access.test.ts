@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { readImageForUser, readImageForUserByUrl } from "./image-access.ts";
+import { readImageForUser, readImageForUserByUrl, selectReferenceUploadBytes } from "./image-access.ts";
 import { createMemoryGatewayWorld } from "./memory.ts";
-import { uploadWireframe } from "./upload.ts";
+import { MAX_REFERENCE_IMAGE_BYTES, uploadWireframe } from "./upload.ts";
 
 const PNG = new Uint8Array(64);
 PNG.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -77,6 +77,66 @@ describe("reference image read access", () => {
     assert.equal(
       await readImageForUserByUrl(world.blobs, "https://example.com/a.png", world.userId),
       null,
+    );
+  });
+});
+
+function withMagic(size: number, magic: readonly number[]): Uint8Array {
+  const bytes = new Uint8Array(size);
+  bytes.set(magic);
+  return bytes;
+}
+
+const JPEG = withMagic(32, [0xff, 0xd8, 0xff]);
+const GIF = withMagic(16, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+const WEBP = withMagic(16, [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]);
+
+describe("selectReferenceUploadBytes", () => {
+  it("sends only the caller's jpeg or png uploads and skips images that are not theirs", () => {
+    const selected = selectReferenceUploadBytes([
+      null,
+      { kind: "upload", contentType: "image/png", bytes: PNG },
+      null,
+      { kind: "upload", contentType: "image/jpeg", bytes: JPEG },
+    ]);
+    assert.deepEqual(selected, { ok: true, images: [PNG, JPEG] });
+  });
+
+  it("rejects an owned blob that is not an upload, and does not include it", () => {
+    assert.deepEqual(
+      selectReferenceUploadBytes([
+        { kind: "upload", contentType: "image/png", bytes: PNG },
+        { kind: "job", contentType: "image/png", bytes: PNG },
+      ]),
+      { ok: false, error: "invalid_image" },
+    );
+  });
+
+  it("rejects a non-jpeg or non-png upload", () => {
+    assert.deepEqual(
+      selectReferenceUploadBytes([{ kind: "upload", contentType: "image/gif", bytes: GIF }]),
+      { ok: false, error: "invalid_image" },
+    );
+    assert.deepEqual(
+      selectReferenceUploadBytes([{ kind: "upload", contentType: "image/webp", bytes: WEBP }]),
+      { ok: false, error: "invalid_image" },
+    );
+    assert.deepEqual(
+      selectReferenceUploadBytes([{ kind: "upload", contentType: "image/jpeg", bytes: GIF }]),
+      { ok: false, error: "invalid_image" },
+    );
+  });
+
+  it("rejects an upload larger than 20 MiB and accepts one at the cap", () => {
+    const atCap = withMagic(MAX_REFERENCE_IMAGE_BYTES, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const over = withMagic(MAX_REFERENCE_IMAGE_BYTES + 1, [0xff, 0xd8, 0xff]);
+    assert.deepEqual(
+      selectReferenceUploadBytes([{ kind: "upload", contentType: "image/png", bytes: atCap }]),
+      { ok: true, images: [atCap] },
+    );
+    assert.deepEqual(
+      selectReferenceUploadBytes([{ kind: "upload", contentType: "image/jpeg", bytes: over }]),
+      { ok: false, error: "invalid_image" },
     );
   });
 });

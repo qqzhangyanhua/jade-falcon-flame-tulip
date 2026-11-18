@@ -1,6 +1,7 @@
 import { zipSync } from "fflate";
 import { exportManifest } from "./manifest.ts";
 import type { StyleBranch } from "./schema.ts";
+import type { SlotPromptMeta } from "./slots.ts";
 
 const EXTENSION_BY_TYPE: Record<string, string> = {
   "image/png": "png",
@@ -36,12 +37,14 @@ export async function buildExportZip(input: {
   styleLine: StyleBranch;
   fetchImpl?: typeof fetch;
   enabledSlotIds?: readonly string[];
+  customSlots?: readonly SlotPromptMeta[];
   product?: string;
 }): Promise<ExportZip> {
   const { styleLine } = input;
   const fetchImpl = input.fetchImpl ?? fetch;
   const manifest = exportManifest(styleLine, {
     enabledSlotIds: input.enabledSlotIds,
+    customSlots: input.customSlots,
     product: input.product,
   });
   if (manifest.images.length === 0) throw new Error("没有可导出的图片");

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { dnaChangeSchema, styleDnaSchema, type StyleDna } from "./dna.ts";
-import { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS } from "./slots.ts";
+import { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
 
 export { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS };
 
@@ -17,6 +17,15 @@ export function referenceImageUrlsFrom(value: unknown): string[] {
 
 export const slotSchema = z.string().min(1);
 export type Slot = string;
+
+export const customSlotSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(40),
+  aspect: z.enum(SUPPORTED_ASPECTS),
+  purpose: z.string().min(1).max(200),
+  extraPrompt: z.string().max(400).optional(),
+});
+export type CustomSlot = z.infer<typeof customSlotSchema>;
 
 export const imageRevSchema = z.object({
   id: z.string(),
@@ -104,6 +113,8 @@ const projectDocumentObject = z.object({
   currentStyleId: z.string().nullable(),
   currentSlot: slotSchema,
   enabledSlotIds: z.array(z.string().min(1)).min(1),
+  /** Custom deliverables. Missing on old documents, which parse as none. */
+  customSlots: z.array(customSlotSchema).default([]),
   currentImageModelId: z.string(),
   phase: z.enum(["brief", "direction", "studio"]),
   intent: briefIntentSchema.nullable(),
@@ -158,7 +169,8 @@ export function normalizeProjectDocument<T>(input: T): T {
   const styles = Array.isArray(input.styles)
     ? input.styles.map((style) => withEnabledAssets(style, enabledSlotIds))
     : input.styles;
-  return { ...input, enabledSlotIds, currentSlot, styles };
+  const customSlots = input.customSlots === undefined ? [] : input.customSlots;
+  return { ...input, enabledSlotIds, currentSlot, styles, customSlots };
 }
 
 export const projectDocumentSchema = z.preprocess(

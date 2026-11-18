@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
+import { getProjectSync } from "@/components/project-sync";
 import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { JobHistoryLink } from "@/components/job-history-link";
@@ -18,6 +19,7 @@ import {
   StudioSlotList,
   StudioTunePanel,
   TUNE_PRESETS,
+  type StudioSlotChoice,
 } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
@@ -39,6 +41,9 @@ export function StudioView() {
   const setSlot = useStudio((s) => s.setSlot);
   const enableBuiltinSlot = useStudio((s) => s.enableBuiltinSlot);
   const hideBuiltinSlot = useStudio((s) => s.hideBuiltinSlot);
+  const createCustomSlot = useStudio((s) => s.createCustomSlot);
+  const editCustomSlot = useStudio((s) => s.editCustomSlot);
+  const deleteCustomSlot = useStudio((s) => s.deleteCustomSlot);
   const setMode = useStudio((s) => s.setMode);
   const addImageRevs = useStudio((s) => s.addImageRevs);
   const adoptImage = useStudio((s) => s.adoptImage);
@@ -82,13 +87,40 @@ export function StudioView() {
   if (!project || !style || !dna) return null;
 
   const product = project.intent?.productName || project.name;
-  const enabledSlots = project.enabledSlotIds.flatMap((id) => {
-    const entry = BUILTIN_SLOTS.find((item) => item.id === id);
-    return entry ? [entry] : [];
+  const customSlots = project.customSlots ?? [];
+  const enabledSlots: StudioSlotChoice[] = project.enabledSlotIds.flatMap((id) => {
+    const builtin = BUILTIN_SLOTS.find((item) => item.id === id);
+    if (builtin) {
+      return [
+        {
+          id: builtin.id,
+          name: builtin.name,
+          aspect: builtin.aspect,
+          purpose: builtin.purpose,
+        },
+      ];
+    }
+    const custom = customSlots.find((item) => item.id === id);
+    if (!custom) return [];
+    return [
+      {
+        id: custom.id,
+        name: custom.name,
+        aspect: custom.aspect,
+        purpose: custom.purpose,
+        extraPrompt: custom.extraPrompt,
+        custom: true,
+      },
+    ];
   });
   const availableSlots = BUILTIN_SLOTS.filter(
     (item) => !project.enabledSlotIds.includes(item.id),
   ).map((item) => ({ id: item.id, name: item.name }));
+
+  async function flushDocument() {
+    if (!project) return;
+    await getProjectSync()?.flush(project.id);
+  }
 
   async function runGenerate() {
     if (!project || !style || !dna) return;
@@ -97,6 +129,7 @@ export function StudioView() {
       return;
     }
     setMode("generating");
+    await flushDocument();
     setBusyLabel("出图中");
     try {
       const ref = slot === "ui_hero" ? project.prototypeDataUrl : style.candidateUrl;
@@ -185,6 +218,7 @@ export function StudioView() {
     if (!project || !style || !tuneDna || !currentImg) return;
     setBeforeUrl(currentImg.url);
     setMode("generating");
+    await flushDocument();
     setBusyLabel(action === "compose" ? "换构图中" : "微调中");
     try {
       const fn = action === "compose" ? composeImageFn : tuneImageFn;
@@ -273,11 +307,17 @@ export function StudioView() {
         <div className="flex items-center justify-end gap-1">
           <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
           <StudioDownloadLink url={currentImg?.url} slot={slot} />
-          <StudioCopyMenu dna={dna} product={product} enabledSlotIds={project.enabledSlotIds} />
+          <StudioCopyMenu
+            dna={dna}
+            product={product}
+            enabledSlotIds={project.enabledSlotIds}
+            customSlots={customSlots}
+          />
           <StudioExportButton
             projectName={project.name}
             product={product}
             enabledSlotIds={project.enabledSlotIds}
+            customSlots={customSlots}
             styleLine={style}
           />
           <DeleteProjectControl projectId={project.id} compact />
@@ -342,6 +382,9 @@ export function StudioView() {
             onSelect={setSlot}
             onEnable={enableBuiltinSlot}
             onHide={hideBuiltinSlot}
+            onCreate={createCustomSlot}
+            onEdit={editCustomSlot}
+            onDelete={deleteCustomSlot}
           />
         </aside>
 
@@ -483,6 +526,9 @@ export function StudioView() {
               onSlot={setSlot}
               onEnable={enableBuiltinSlot}
               onHide={hideBuiltinSlot}
+              onCreate={createCustomSlot}
+              onEdit={editCustomSlot}
+              onDelete={deleteCustomSlot}
               onContent={setContent}
               onGenerate={() => void runGenerate()}
             />

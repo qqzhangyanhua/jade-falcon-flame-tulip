@@ -1,5 +1,11 @@
-import { BUILTIN_SLOTS, DIRECTION_ASPECT } from "./project/slots.ts";
+import { BUILTIN_SLOTS, customSlotPromptLead, DIRECTION_ASPECT } from "./project/slots.ts";
 import type { Slot, StyleDna } from "./types";
+
+export type SlotPromptFields = {
+  name: string;
+  purpose: string;
+  extraPrompt?: string;
+};
 
 export function candidatePrompt(dna: StyleDna, product: string): string {
   return [
@@ -20,6 +26,7 @@ export function slotPrompt(
   slot: Slot,
   product: string,
   content: string,
+  custom?: SlotPromptFields,
 ): string {
   const extra = content.trim() ? `Headline / offer: "${content.trim()}".` : "";
   const shared = [
@@ -30,10 +37,15 @@ export function slotPrompt(
     `Avoid: ${dna.promptNegative}, ${dna.forbidden.join(", ")}. No real-brand logos, no watermark.`,
   ].join(" ");
 
-  const entry =
-    BUILTIN_SLOTS.find((item) => item.id === slot) ??
-    BUILTIN_SLOTS.find((item) => item.id === "web_home");
-  const lead = (entry?.promptTemplate ?? "").replaceAll("{product}", product);
+  const builtin = BUILTIN_SLOTS.find((item) => item.id === slot);
+  const lead = builtin
+    ? builtin.promptTemplate.replaceAll("{product}", product)
+    : custom
+      ? customSlotPromptLead(custom, product)
+      : (BUILTIN_SLOTS.find((item) => item.id === "web_home")?.promptTemplate ?? "").replaceAll(
+          "{product}",
+          product,
+        );
   return `${lead} ${shared}`;
 }
 

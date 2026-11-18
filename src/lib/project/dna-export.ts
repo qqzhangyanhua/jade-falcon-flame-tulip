@@ -93,7 +93,13 @@ export function designTokens(dna: StyleDna): DesignTokens {
   };
 }
 
-export type PromptSlot = { id: string; name: string; aspect: string; purpose: string };
+export type PromptSlot = {
+  id: string;
+  name: string;
+  aspect: string;
+  purpose: string;
+  extraPrompt?: string;
+};
 
 export type SlotPromptPack = {
   id: string;
@@ -118,9 +124,10 @@ function slotPromptBody(dna: StyleDna, slot: PromptSlot, product: string): strin
   const lead = slot.purpose.trim()
     ? `${slot.name} for "${product}", ${slot.purpose.trim()}.`
     : `${slot.name} for "${product}".`;
+  const extra = slot.extraPrompt?.trim();
   const mood = dna.mood.map((word) => word.trim()).filter(Boolean);
   return [
-    lead,
+    extra ? `${lead} ${extra}` : lead,
     `Visual system: ${dna.promptPositive}.`,
     `Palette: bg ${dna.colors.bg}, surface ${dna.colors.surface}, text ${dna.colors.text}, muted ${dna.colors.muted}, primary ${dna.colors.primary}, accent ${dna.colors.accent}.`,
     `Lighting ${dna.light}, material ${dna.material}, density ${dna.density}, geometry ${dna.geometry}, type ${dna.typeMood}.`,
@@ -134,8 +141,10 @@ function plainLanguage(dna: StyleDna, slot: PromptSlot, product: string, avoid: 
     .filter(Boolean)
     .join("、");
   const avoidText = avoid ? `不要出现：${avoid.replaceAll(", ", "、")}。` : "没有额外的禁用风格。";
+  const extra = slot.extraPrompt?.trim();
   return [
     `请为「${product}」做一张${slot.name}，用途是 ${slot.purpose}，画面比例 ${slot.aspect}。`,
+    ...(extra ? [`补充：${extra}。`] : []),
     `沿用风格「${dna.name}」（${dna.oneLiner}）：${dna.promptPositive}。`,
     `背景色 ${dna.colors.bg}，表面色 ${dna.colors.surface}，文字色 ${dna.colors.text}，次要色 ${dna.colors.muted}，主色 ${dna.colors.primary}，强调色 ${dna.colors.accent}。`,
     `光线为 ${dna.light}，材质为 ${dna.material}，几何为 ${dna.geometry}，密度为 ${dna.density}，字体气质为 ${dna.typeMood}。`,

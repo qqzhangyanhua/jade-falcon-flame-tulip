@@ -53,6 +53,7 @@ describe("projectDocumentSchema", () => {
     const project = sampleProject();
     const { mode: _mode, ...document } = project;
     delete (document as { enabledSlotIds?: unknown }).enabledSlotIds;
+    delete (document as { customSlots?: unknown }).customSlots;
     const rev = {
       id: "img_old",
       parentId: null,
@@ -68,6 +69,7 @@ describe("projectDocumentSchema", () => {
     const parsed = projectDocumentSchema.parse(document);
 
     assert.deepEqual(parsed.enabledSlotIds, ["ui_hero", "kv", "web_home"]);
+    assert.deepEqual(parsed.customSlots, []);
     assert.deepEqual(parsed.styles[0]?.assets.kv.revs, [rev]);
     assert.deepEqual(parsed.styles[0]?.assets.ui_hero.revs, []);
     assert.deepEqual(parsed.styles[0]?.assets.web_home.revs, []);

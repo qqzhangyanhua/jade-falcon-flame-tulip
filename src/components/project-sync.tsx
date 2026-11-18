@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { loadProjectDocumentFn, saveProjectDocumentFn } from "@/app/actions/studio";
 import { IMAGE_JOB_USER_MESSAGES } from "@/lib/image-jobs/errors";
+import { normalizeProjectDocument } from "@/lib/project/schema";
 import { createProjectSync, type ProjectSync } from "@/lib/project-sync";
 import { useStudio } from "@/lib/store";
 
@@ -47,9 +48,11 @@ export function ProjectSync() {
         applyServerDocument(document) {
           useStudio.setState((s) => {
             const existing = s.projects.find((p) => p.id === document.id);
+            const normalized = normalizeProjectDocument(document);
             const next = {
-              ...document,
-              referenceImageUrls: document.referenceImageUrls ?? [],
+              ...normalized,
+              referenceImageUrls: normalized.referenceImageUrls ?? [],
+              customSlots: normalized.customSlots ?? [],
               mode: existing?.mode ?? ("idle" as const),
             };
             return {

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { designTokens, formatPromptPack, promptPack } from "@/lib/project/dna-export";
 import { buildExportZip, extensionOfContentType } from "@/lib/project/export-zip";
 import { exportManifest } from "@/lib/project/manifest";
-import { slotPromptMetas } from "@/lib/project/slots";
+import { slotPromptMetas, type SlotPromptMeta } from "@/lib/project/slots";
 import type { StyleBranch, StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -60,15 +60,17 @@ export function StudioExportButton({
   projectName,
   styleLine,
   enabledSlotIds,
+  customSlots,
   product,
 }: {
   projectName: string;
   styleLine: StyleBranch;
   enabledSlotIds?: readonly string[];
+  customSlots?: readonly SlotPromptMeta[];
   product?: string;
 }) {
   const [busy, setBusy] = useState(false);
-  const empty = exportManifest(styleLine, { enabledSlotIds, product }).images.length === 0;
+  const empty = exportManifest(styleLine, { enabledSlotIds, customSlots, product }).images.length === 0;
   const label = empty ? "导出（还没有图片可导出）" : "导出整套物料";
 
   async function runExport() {
@@ -78,6 +80,7 @@ export function StudioExportButton({
         projectName,
         styleLine,
         enabledSlotIds,
+        customSlots,
         product,
       });
       saveBlob(new Blob([bytes as BlobPart], { type: "application/zip" }), fileName);
@@ -130,15 +133,17 @@ export function StudioCopyMenu({
   dna,
   product,
   enabledSlotIds,
+  customSlots,
 }: {
   dna: StyleDna;
   product: string;
   enabledSlotIds: readonly string[];
+  customSlots?: readonly SlotPromptMeta[];
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const tokens = designTokens(dna);
-  const packs = promptPack(dna, slotPromptMetas(enabledSlotIds), product);
+  const packs = promptPack(dna, slotPromptMetas(enabledSlotIds, customSlots), product);
 
   useEffect(() => {
     if (!open) return;

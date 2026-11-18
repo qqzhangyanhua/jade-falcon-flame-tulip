@@ -8,6 +8,7 @@ import {
   type Slot,
   type StyleBranch,
 } from "./schema.ts";
+import { builtinSlot } from "./slots.ts";
 
 export type ProjectOpDeps = {
   newId?: (prefix: string) => string;
@@ -79,6 +80,41 @@ export function lockCandidate(
     styles: [active, ...standbys],
     mode: "idle",
   };
+}
+
+/**
+ * Shows a built-in slot. Appends the id when it is new and inserts an empty
+ * asset on every style line that does not already have one. Existing images stay.
+ */
+export function enableBuiltinSlot(project: Project, slotId: string): Project {
+  if (!builtinSlot(slotId)) return project;
+  const enabledSlotIds = project.enabledSlotIds.includes(slotId)
+    ? project.enabledSlotIds
+    : [...project.enabledSlotIds, slotId];
+  let changed = enabledSlotIds !== project.enabledSlotIds;
+  const styles = project.styles.map((style) => {
+    if (style.assets[slotId]) return style;
+    changed = true;
+    return {
+      ...style,
+      assets: { ...style.assets, [slotId]: emptyAsset(slotId) },
+    };
+  });
+  if (!changed) return project;
+  return { ...project, enabledSlotIds, styles };
+}
+
+/**
+ * Hides a slot by taking it off the enabled list. Images stay on the style
+ * line. The current slot falls back to the first id still enabled. The last
+ * remaining slot cannot be hidden.
+ */
+export function hideBuiltinSlot(project: Project, slotId: string): Project {
+  if (!project.enabledSlotIds.includes(slotId)) return project;
+  if (project.enabledSlotIds.length <= 1) return project;
+  const enabledSlotIds = project.enabledSlotIds.filter((id) => id !== slotId);
+  const currentSlot = project.currentSlot === slotId ? enabledSlotIds[0] : project.currentSlot;
+  return { ...project, enabledSlotIds, currentSlot };
 }
 
 /** Makes one line the active line; every other live line becomes standby. */

@@ -3,6 +3,17 @@ import { dnaChangeSchema, styleDnaSchema, type StyleDna } from "./dna.ts";
 
 export const SLOT_IDS = ["ui_hero", "kv", "web_home"] as const;
 
+export const MAX_REFERENCE_IMAGES = 3;
+export const STORED_IMAGE_ADDRESS = /^\/api\/images\/[^/]+$/;
+
+/** Keeps at most three `/api/images/<id>` addresses. Anything else, including a missing field, is dropped. */
+export function referenceImageUrlsFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && STORED_IMAGE_ADDRESS.test(item))
+    .slice(0, MAX_REFERENCE_IMAGES);
+}
+
 export const slotSchema = z.enum(SLOT_IDS);
 export type Slot = z.infer<typeof slotSchema>;
 
@@ -87,6 +98,11 @@ export const projectDocumentSchema = z.object({
       message: "prototype must be a stored image address, not a data: URL",
     })
     .nullable(),
+  // Old documents omit this. Bytes stay in image_blobs; only /api/images/<id> is stored.
+  referenceImageUrls: z
+    .array(z.string().regex(STORED_IMAGE_ADDRESS))
+    .max(MAX_REFERENCE_IMAGES)
+    .default([]),
   createdAt: z.number(),
   currentStyleId: z.string().nullable(),
   currentSlot: slotSchema,

@@ -5,16 +5,19 @@ import type { ImageJobGatewayDeps } from "./stores.ts";
 import type { ImageBlobRecord, ImageJobErrorCode } from "./types.ts";
 
 export const MAX_WIREFRAME_BYTES = 4 * 1024 * 1024;
+export const MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024;
 
 const ALLOWED_WIREFRAME_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/webp"];
+const ALLOWED_REFERENCE_TYPES: readonly string[] = ["image/png", "image/jpeg"];
 
 export type UploadWireframeResult =
   | { ok: true; id: string; url: string }
   | { ok: false; code: ImageJobErrorCode };
 
-export async function uploadWireframe(
+async function uploadProjectImage(
   deps: Pick<ImageJobGatewayDeps, "projects" | "blobs" | "now" | "newId">,
   input: { userId: string; projectId: string; dataUrl: string },
+  policy: { maxBytes: number; allowedTypes: readonly string[] },
 ): Promise<UploadWireframeResult> {
   const loaded = await loadOwnedProject(deps.projects, input);
   if (!loaded.ok) return { ok: false, code: loaded.code };
@@ -24,16 +27,16 @@ export async function uploadWireframe(
   const payload = match[1] ?? "";
 
   // Reject before decoding so an oversized payload never gets buffered.
-  if (Math.floor((payload.length * 3) / 4) > MAX_WIREFRAME_BYTES + 2) {
+  if (Math.floor((payload.length * 3) / 4) > policy.maxBytes + 2) {
     return { ok: false, code: "image_too_large" };
   }
   const bytes = Uint8Array.from(Buffer.from(payload, "base64"));
   if (bytes.byteLength === 0) return { ok: false, code: "invalid_image" };
-  if (bytes.byteLength > MAX_WIREFRAME_BYTES) return { ok: false, code: "image_too_large" };
+  if (bytes.byteLength > policy.maxBytes) return { ok: false, code: "image_too_large" };
 
   // The declared content type is client-controlled; only the magic bytes count.
   const contentType = sniffImageType(bytes);
-  if (!contentType || !ALLOWED_WIREFRAME_TYPES.includes(contentType)) {
+  if (!contentType || !policy.allowedTypes.includes(contentType)) {
     return { ok: false, code: "invalid_image" };
   }
 
@@ -50,4 +53,25 @@ export async function uploadWireframe(
   };
   await deps.blobs.put(record);
   return { ok: true, id, url: durableImageUrl(id) };
+}
+
+export async function uploadWireframe(
+  deps: Pick<ImageJobGatewayDeps, "projects" | "blobs" | "now" | "newId">,
+  input: { userId: string; projectId: string; dataUrl: string },
+): Promise<UploadWireframeResult> {
+  return uploadProjectImage(deps, input, {
+    maxBytes: MAX_WIREFRAME_BYTES,
+    allowedTypes: ALLOWED_WIREFRAME_TYPES,
+  });
+}
+
+/** Same upload row as a wireframe, but jpeg/png only and a 20 MiB cap. Webp stays a wireframe format. */
+export async function uploadReferenceImage(
+  deps: Pick<ImageJobGatewayDeps, "projects" | "blobs" | "now" | "newId">,
+  input: { userId: string; projectId: string; dataUrl: string },
+): Promise<UploadWireframeResult> {
+  return uploadProjectImage(deps, input, {
+    maxBytes: MAX_REFERENCE_IMAGE_BYTES,
+    allowedTypes: ALLOWED_REFERENCE_TYPES,
+  });
 }

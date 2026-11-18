@@ -34,6 +34,7 @@ type State = {
   createProject: (input: {
     brief: string;
     prototypeDataUrl: string | null;
+    referenceImageUrls?: string[];
     id?: string;
     currentImageModelId?: string;
   }) => string;
@@ -95,7 +96,13 @@ export const useStudio = create<State>()(
         if (!p?.currentStyleId) return null;
         return p.styles.find((s) => s.id === p.currentStyleId) ?? null;
       },
-      createProject: ({ brief, prototypeDataUrl, id: givenId, currentImageModelId }) => {
+      createProject: ({
+        brief,
+        prototypeDataUrl,
+        referenceImageUrls,
+        id: givenId,
+        currentImageModelId,
+      }) => {
         const id = givenId ?? uid("prj");
         const name = brief.trim().slice(0, 24) || "未命名项目";
         const project: Project = {
@@ -103,6 +110,7 @@ export const useStudio = create<State>()(
           name,
           brief: brief.trim(),
           prototypeDataUrl,
+          referenceImageUrls: referenceImageUrls ?? [],
           createdAt: Date.now(),
           currentStyleId: null,
           currentSlot: "kv",
@@ -200,13 +208,14 @@ export const useStudio = create<State>()(
     }),
     {
       name: "keystone-v1",
-      version: 2,
+      version: 3,
       migrate: (persisted) => {
         const state = persisted as { projects?: Project[]; currentId?: string | null };
         return {
           projects: (state.projects ?? []).map((project) => ({
             ...project,
             currentImageModelId: project.currentImageModelId ?? "",
+            referenceImageUrls: project.referenceImageUrls ?? [],
           })),
           currentId: state.currentId ?? null,
         };

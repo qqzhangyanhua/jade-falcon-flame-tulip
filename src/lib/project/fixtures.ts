@@ -64,6 +64,7 @@ export function sampleProject(patch: Partial<Project> = {}): Project {
     name: "示例",
     brief: "一个示例项目",
     prototypeDataUrl: null,
+    referenceImageUrls: [],
     createdAt: 1,
     currentStyleId: "a",
     currentSlot: "kv",

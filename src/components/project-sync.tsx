@@ -47,7 +47,11 @@ export function ProjectSync() {
         applyServerDocument(document) {
           useStudio.setState((s) => {
             const existing = s.projects.find((p) => p.id === document.id);
-            const next = { ...document, mode: existing?.mode ?? ("idle" as const) };
+            const next = {
+              ...document,
+              referenceImageUrls: document.referenceImageUrls ?? [],
+              mode: existing?.mode ?? ("idle" as const),
+            };
             return {
               projects: existing
                 ? s.projects.map((p) => (p.id === document.id ? next : p))

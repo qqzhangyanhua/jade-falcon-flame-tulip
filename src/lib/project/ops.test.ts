@@ -46,6 +46,37 @@ describe("lockCandidate", () => {
     const project = sampleProject({ candidates: [sampleCandidate("1")] });
     assert.equal(lockCandidate(project, "nope"), project);
   });
+
+  it("locks a reference candidate the same way as any other direction", () => {
+    const reference = sampleCandidate("ref", {
+      presetId: "reference",
+      dna: sampleDna({ name: "参考雾蓝" }),
+    });
+    const project = sampleProject({
+      phase: "direction",
+      currentStyleId: null,
+      styles: [],
+      candidates: [
+        sampleCandidate("1"),
+        sampleCandidate("2"),
+        sampleCandidate("3"),
+        sampleCandidate("4"),
+        reference,
+      ],
+    });
+    const next = lockCandidate(project, "ref", counter());
+    assert.equal(next.phase, "studio");
+    assert.equal(next.currentSlot, "kv");
+    assert.equal(next.styles.length, 3);
+    assert.equal(next.styles[0].status, "active");
+    assert.equal(next.styles[0].name, "参考雾蓝");
+    assert.equal(currentDna(next.styles[0]).name, "参考雾蓝");
+    assert.deepEqual(
+      next.styles.slice(1).map((style) => style.status),
+      ["standby", "standby"],
+    );
+    assert.equal(next.styles[0].revs[0].changeLog, "锁定");
+  });
 });
 
 describe("writebackStyle", () => {

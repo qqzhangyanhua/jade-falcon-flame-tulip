@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowRight, ImagePlus } from "lucide-react";
+import { ArrowRight, ImagePlus, Images } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { AtmosphereGrid } from "@/components/atmosphere-grid";
@@ -12,12 +12,13 @@ import { QuotaMeter } from "@/components/quota-meter";
 import { RecentProjects } from "@/components/recent-projects";
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
-import { parseBrief, tailorDirections } from "@/app/actions/brief";
+import { parseBrief, referenceDirectionFn, tailorDirections } from "@/app/actions/brief";
 import {
   createStudioProjectFn,
   generateCandidate,
   getDailyQuotaFn,
   listImageModelsFn,
+  uploadReferenceImageFn,
   uploadWireframeFn,
 } from "@/app/actions/studio";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -43,6 +44,7 @@ const STEPS = [
 export function BriefView() {
   const [brief, setBrief] = useState("");
   const [proto, setProto] = useState<string | null>(null);
+  const [references, setReferences] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const createProject = useStudio((s) => s.createProject);
   const setIntent = useStudio((s) => s.setIntent);
@@ -72,6 +74,26 @@ export function BriefView() {
     }
   }
 
+  async function onReferences(files: FileList | null) {
+    if (!files?.length) return;
+    const room = 3 - references.length;
+    if (room <= 0) {
+      toast.error("最多三张参考图");
+      return;
+    }
+    const picked = [...files].slice(0, room);
+    if (files.length > room) toast.error("最多三张参考图");
+    const next: string[] = [];
+    for (const file of picked) {
+      try {
+        next.push(await fileToDataUrl(file));
+      } catch {
+        toast.error("图片读取失败");
+      }
+    }
+    if (next.length) setReferences((current) => [...current, ...next].slice(0, 3));
+  }
+
   async function start() {
     if (authPending) return;
     if (!user) {
@@ -93,9 +115,20 @@ export function BriefView() {
       const prototypeUrl = proto
         ? (await uploadWireframeFn({ data: { projectId: created.id, dataUrl: proto } })).url
         : null;
+      const referenceUrls: string[] = [];
+      for (const dataUrl of references) {
+        try {
+          referenceUrls.push(
+            (await uploadReferenceImageFn({ data: { projectId: created.id, dataUrl } })).url,
+          );
+        } catch (err) {
+          toast.error(messageForImageJobError(err));
+        }
+      }
       createProject({
         brief: text,
         prototypeDataUrl: prototypeUrl,
+        referenceImageUrls: referenceUrls,
         id: created.id,
         currentImageModelId: created.currentImageModelId,
       });
@@ -109,8 +142,9 @@ export function BriefView() {
       setCandidates(presetSeeds);
       let product = text;
       let seeds = presetSeeds;
+      let intent: Awaited<ReturnType<typeof parseBrief>> | null = null;
       try {
-        const intent = await parseBrief({ data: { brief: text } });
+        intent = await parseBrief({ data: { brief: text } });
         setIntent(intent);
         product = intent.productName || text;
         setMode("tailoring");
@@ -128,6 +162,31 @@ export function BriefView() {
         setCandidates(seeds);
       } catch {
         /* keep raw brief */
+      }
+      if (referenceUrls.length > 0) {
+        let extracted: Awaited<ReturnType<typeof referenceDirectionFn>> | null = null;
+        if (intent) {
+          try {
+            extracted = await referenceDirectionFn({ data: { intent, imageUrls: referenceUrls } });
+          } catch {
+            extracted = null;
+          }
+        }
+        if (extracted?.ok) {
+          seeds = [
+            ...seeds,
+            {
+              id: uid("can"),
+              presetId: "reference",
+              dna: extracted.dna,
+              url: null,
+              status: "pending" as const,
+            },
+          ];
+          setCandidates(seeds);
+        } else {
+          toast.error("参考图没能提炼成方向");
+        }
       }
       setMode("generating");
       const failures: string[] = [];
@@ -157,15 +216,22 @@ export function BriefView() {
     }
   }
 
+  const hasReferences = references.length > 0;
   const cta = busy
-    ? "正在解析并出四个方向…"
+    ? hasReferences
+      ? "正在解析并出方向…"
+      : "正在解析并出四个方向…"
     : imagesUnavailable
       ? "出图暂不可用"
       : quota && quota.remaining <= 0
         ? "今日额度已用完"
         : !user && !authPending
-          ? "登录后生成四个方向"
-          : "生成四个方向";
+          ? hasReferences
+            ? "登录后生成方向"
+            : "登录后生成四个方向"
+          : hasReferences
+            ? "生成方向（含参考图）"
+            : "生成四个方向";
 
   const blocked =
     busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0);
@@ -202,7 +268,9 @@ export function BriefView() {
                 >
                   <p className="text-xs tabular-nums text-subtle">{step.n}</p>
                   <p className="mt-2 font-medium text-fg">{step.title}</p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted">{step.body}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted">
+                    {step.n === "02" && hasReferences ? "四个预设，外加参考图方向。" : step.body}
+                  </p>
                 </li>
               ))}
             </ol>
@@ -260,6 +328,49 @@ export function BriefView() {
                   />
                 ) : null}
 
+                <label className="mt-4 flex min-h-11 cursor-pointer items-center gap-3 rounded-md border border-dashed border-border px-3 py-2.5 text-sm text-muted transition-colors duration-150 hover:border-accent hover:text-fg">
+                  <Images className="size-4 shrink-0" />
+                  <span>
+                    {references.length >= 3
+                      ? "已选 3 张参考图"
+                      : references.length > 0
+                        ? `已选 ${references.length} 张参考图，还可再加`
+                        : "可选：上传 1～3 张参考图"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      void onReferences(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {references.length > 0 ? (
+                  <ul className="mt-3 grid grid-cols-3 gap-2">
+                    {references.map((src, index) => (
+                      <li key={`${index}-${src.slice(0, 48)}`} className="space-y-1">
+                        <img
+                          src={src}
+                          alt={`参考图 ${index + 1}`}
+                          className="frame aspect-video w-full rounded-md object-cover"
+                        />
+                        <button
+                          type="button"
+                          className="min-h-11 w-full rounded-sm border border-border px-2 text-xs text-muted transition-colors duration-150 hover:border-fg hover:text-fg"
+                          onClick={() =>
+                            setReferences((current) => current.filter((_, i) => i !== index))
+                          }
+                        >
+                          移除
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
                 <Button
                   className="mt-4 w-full"
                   size="lg"
@@ -276,7 +387,9 @@ export function BriefView() {
                   <p className="text-center text-xs leading-relaxed text-subtle">
                     {imagesUnavailable
                       ? "出图暂不可用"
-                      : "解析描述不扣额度；每个方向候选会占用 1 次今日额度。"}
+                      : hasReferences
+                        ? "解析描述和参考图提炼不扣额度；每个方向候选会占用 1 次今日额度。"
+                        : "解析描述不扣额度；每个方向候选会占用 1 次今日额度。"}
                   </p>
                 </div>
               </div>

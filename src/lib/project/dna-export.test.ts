@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DESIGN_TOKEN_TABLE,
+  brandGuideModel,
   consistencyScore,
   designTokens,
   fontFamilyForTypeMood,
@@ -9,7 +10,9 @@ import {
   radiusForGeometry,
   spacingForDensity,
 } from "./dna-export.ts";
-import { sampleDna } from "./fixtures.ts";
+import { resolveBrandGuideAccess } from "./brand-guide-access.ts";
+import { sampleDna, sampleStyle } from "./fixtures.ts";
+import { emptyAsset, type ImageRev } from "./schema.ts";
 
 const white = { r: 255, g: 255, b: 255 };
 const black = { r: 0, g: 0, b: 0 };
@@ -213,5 +216,210 @@ describe("promptPack", () => {
     );
     assert.match(packs[0].midjourney, / --ar 16:9 --no$/);
     assert.equal(packs[0].sdFlux.negative, "");
+  });
+});
+
+const viewedColors = {
+  bg: "#102030",
+  surface: "#203040",
+  text: "#fafafa",
+  muted: "#8899aa",
+  primary: "#3366cc",
+  accent: "#cc6633",
+};
+
+describe("brandGuideModel", () => {
+  it("reads the viewed rev's palette, type, geometry, mood and do/don't lines", () => {
+    const older = sampleDna({
+      colors: { ...viewedColors, bg: "#111111" },
+      geometry: "soft",
+      density: "compact",
+      typeMood: "geometric-sans",
+      mood: ["旧"],
+      forbidden: ["旧禁"],
+    });
+    const viewed = sampleDna({
+      colors: viewedColors,
+      geometry: "sharp",
+      density: "airy",
+      typeMood: "editorial-sans",
+      mood: ["冷静", "克制"],
+      forbidden: ["霓虹", "赛博"],
+    });
+    const line = sampleStyle("a", {
+      currentRev: 2,
+      revs: [
+        { rev: 1, parentRev: null, dna: older, changeLog: "锁定", createdAt: 1 },
+        { rev: 2, parentRev: 1, dna: viewed, changeLog: "写回", createdAt: 2 },
+      ],
+    });
+
+    const guide = brandGuideModel(line, []);
+
+    assert.deepEqual(guide.palette, [
+      { role: "bg", hex: "#102030" },
+      { role: "surface", hex: "#203040" },
+      { role: "text", hex: "#fafafa" },
+      { role: "muted", hex: "#8899aa" },
+      { role: "primary", hex: "#3366cc" },
+      { role: "accent", hex: "#cc6633" },
+    ]);
+    assert.equal(
+      guide.palette.some((swatch) => swatch.hex === "#111111"),
+      false,
+    );
+    assert.equal(guide.typeMood, "editorial-sans");
+    assert.equal(guide.fontFamily, `"Source Sans 3", "Segoe UI", sans-serif`);
+    assert.equal(guide.geometry, "sharp");
+    assert.equal(guide.density, "airy");
+    assert.equal(guide.radius, "0px");
+    assert.equal(guide.spacing, "24px");
+    assert.deepEqual(guide.mood, ["冷静", "克制"]);
+    assert.deepEqual(guide.forbidden, ["霓虹", "赛博"]);
+    assert.deepEqual(guide.dos, [
+      "情绪保持：冷静、克制",
+      "字体气质：editorial-sans",
+      "几何与密度：sharp / airy",
+    ]);
+    assert.deepEqual(guide.donts, ["避免霓虹", "避免赛博"]);
+  });
+
+  it("omits the mood line when mood is empty and warns about the palette when nothing is forbidden", () => {
+    const guide = brandGuideModel(
+      sampleStyle("a", {
+        revs: [
+          {
+            rev: 1,
+            parentRev: null,
+            dna: sampleDna({ mood: [], forbidden: [] }),
+            changeLog: "锁定",
+            createdAt: 1,
+          },
+        ],
+      }),
+      [],
+    );
+
+    assert.deepEqual(guide.mood, []);
+    assert.deepEqual(guide.forbidden, []);
+    assert.equal(guide.typeMood, "几何无衬线");
+    assert.equal(guide.fontFamily, "system-ui, sans-serif");
+    assert.equal(guide.geometry, "大圆角");
+    assert.equal(guide.density, "宽松");
+    assert.equal(guide.radius, "8px");
+    assert.equal(guide.spacing, "16px");
+    assert.deepEqual(guide.dos, ["字体气质：几何无衬线", "几何与密度：大圆角 / 宽松"]);
+    assert.equal(
+      guide.dos.some((line) => line.startsWith("情绪保持：")),
+      false,
+    );
+    assert.deepEqual(guide.donts, ["不要偏离这份风格 DNA 的色板"]);
+    assert.deepEqual(
+      guide.palette.map((swatch) => swatch.hex),
+      ["#0b1020", "#141b30", "#f4f6fb", "#8a94ad", "#4f7cff", "#ffb547"],
+    );
+  });
+
+  it("keeps the adopted image, otherwise the latest, and skips slots with no image", () => {
+    const image = (id: string, url: string): ImageRev => ({
+      id,
+      parentId: null,
+      url,
+      createdAt: 1,
+      action: "generate",
+      diff: "",
+      writeback: "none",
+      styleRev: 1,
+    });
+    const line = sampleStyle("a", {
+      assets: {
+        web_home: emptyAsset("web_home"),
+        kv: {
+          slot: "kv",
+          adoptedId: "img_k1",
+          revs: [image("img_k1", "/api/images/k1"), image("img_k2", "/api/images/k2")],
+        },
+        ui_hero: {
+          slot: "ui_hero",
+          adoptedId: null,
+          revs: [image("img_u1", "/api/images/u1"), image("img_u2", "/api/images/u2")],
+        },
+        poster: {
+          slot: "poster",
+          adoptedId: "img_p",
+          revs: [image("img_p", "/api/images/p")],
+        },
+      },
+    });
+    const slots = [
+      { id: "web_home", name: "官网首屏", aspect: "16:9", purpose: "延展页" },
+      { id: "kv", name: "品牌主视觉", aspect: "16:9", purpose: "KV / 海报" },
+      { id: "ui_hero", name: "产品旗舰页", aspect: "9:16", purpose: "有原型则保结构" },
+    ];
+
+    assert.deepEqual(brandGuideModel(line, slots).slots, [
+      {
+        id: "kv",
+        name: "品牌主视觉",
+        aspect: "16:9",
+        purpose: "KV / 海报",
+        url: "/api/images/k1",
+        revId: "img_k1",
+      },
+      {
+        id: "ui_hero",
+        name: "产品旗舰页",
+        aspect: "9:16",
+        purpose: "有原型则保结构",
+        url: "/api/images/u2",
+        revId: "img_u2",
+      },
+    ]);
+  });
+});
+
+describe("resolveBrandGuideAccess", () => {
+  it("sends a signed-out visitor to sign-in and does not say why a signed-in load failed", () => {
+    assert.equal(
+      resolveBrandGuideAccess({
+        signedIn: false,
+        code: null,
+        hasDocument: false,
+        hasStyle: false,
+      }),
+      "redirect",
+    );
+    assert.equal(
+      resolveBrandGuideAccess({
+        signedIn: false,
+        code: "forbidden",
+        hasDocument: true,
+        hasStyle: true,
+      }),
+      "redirect",
+    );
+
+    const hidden = ["forbidden", "not_found", "project_deleted", "unauthorized"] as const;
+    const outcomes = hidden.map((code) =>
+      resolveBrandGuideAccess({ signedIn: true, code, hasDocument: true, hasStyle: true }),
+    );
+    assert.deepEqual(outcomes, ["not_found", "not_found", "not_found", "not_found"]);
+    assert.equal(
+      resolveBrandGuideAccess({
+        signedIn: true,
+        code: "ok",
+        hasDocument: false,
+        hasStyle: false,
+      }),
+      "not_found",
+    );
+    assert.equal(
+      resolveBrandGuideAccess({ signedIn: true, code: "ok", hasDocument: true, hasStyle: false }),
+      "not_found",
+    );
+    assert.equal(
+      resolveBrandGuideAccess({ signedIn: true, code: "ok", hasDocument: true, hasStyle: true }),
+      "show",
+    );
   });
 });

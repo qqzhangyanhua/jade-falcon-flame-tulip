@@ -24,6 +24,7 @@ import {
 } from "./project/ops.ts";
 import type { DnaChange } from "./project/dna.ts";
 import type { ArchiveResult } from "./project/ops.ts";
+import { DEFAULT_ENABLED_SLOT_IDS, normalizeProjectDocument } from "./project/schema.ts";
 import { uid } from "./utils";
 
 type State = {
@@ -106,6 +107,7 @@ export const useStudio = create<State>()(
           createdAt: Date.now(),
           currentStyleId: null,
           currentSlot: "kv",
+          enabledSlotIds: [...DEFAULT_ENABLED_SLOT_IDS],
           currentImageModelId: currentImageModelId ?? "",
           phase: "direction",
           intent: null,
@@ -200,14 +202,16 @@ export const useStudio = create<State>()(
     }),
     {
       name: "keystone-v1",
-      version: 2,
+      version: 3,
       migrate: (persisted) => {
         const state = persisted as { projects?: Project[]; currentId?: string | null };
         return {
-          projects: (state.projects ?? []).map((project) => ({
-            ...project,
-            currentImageModelId: project.currentImageModelId ?? "",
-          })),
+          projects: (state.projects ?? []).map((project) =>
+            normalizeProjectDocument({
+              ...project,
+              currentImageModelId: project.currentImageModelId ?? "",
+            }),
+          ),
           currentId: state.currentId ?? null,
         };
       },

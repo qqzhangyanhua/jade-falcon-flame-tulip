@@ -1,5 +1,6 @@
 import { useStudio } from "./store";
 import type { ImageJobAction, ImageJobSlot } from "./image-jobs/types";
+import { BUILTIN_SLOTS } from "./project/slots.ts";
 import type { ImageRev, Slot } from "./types";
 
 export type OpenFromJobInput = {
@@ -32,10 +33,11 @@ export function openStudioFromJob(
   const style = next.currentStyle();
   if (!style) return true;
 
+  const asset = style.assets[slot];
+  if (!asset) return true;
+
   const urls = new Set(input.imageUrls);
-  const match = style.assets[slot].revs.find(
-    (rev) => rev.jobId === input.jobId || urls.has(rev.url),
-  );
+  const match = asset.revs.find((rev) => rev.jobId === input.jobId || urls.has(rev.url));
   if (match) {
     next.adoptImage(style.id, slot, match.id);
     return true;
@@ -61,10 +63,8 @@ export function isLivingStudioProject(projectId: string): boolean {
 }
 
 export function slotLabel(slot: Slot | ImageJobSlot | null): string {
-  if (slot === "ui_hero") return "产品旗舰页";
-  if (slot === "kv") return "品牌主视觉";
-  if (slot === "web_home") return "官网首屏";
-  return "方向";
+  if (!slot) return "方向";
+  return BUILTIN_SLOTS.find((item) => item.id === slot)?.name ?? "方向";
 }
 
 export function actionLabel(action: ImageJobAction): string {

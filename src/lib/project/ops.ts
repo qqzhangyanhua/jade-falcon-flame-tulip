@@ -1,6 +1,7 @@
 import { diffDna, type DnaChange, type StyleDna } from "./dna.ts";
 import {
   currentDna,
+  emptyAsset,
   emptyAssets,
   type ImageRev,
   type Project,
@@ -199,7 +200,7 @@ export function addImageRevs(
 ): { project: Project; ids: string[] } {
   const ids: string[] = [];
   const next = mapStyle(project, input.styleId, (style) => {
-    const asset = style.assets[input.slot];
+    const asset = style.assets[input.slot] ?? emptyAsset(input.slot);
     const added: ImageRev[] = input.urls.map((url) => {
       const id = newId(deps, "img");
       ids.push(id);
@@ -238,7 +239,7 @@ export function adoptImage(
 ): Project {
   return mapStyle(project, styleId, (style) => {
     const asset = style.assets[slot];
-    if (!asset.revs.some((rev) => rev.id === imageId)) return style;
+    if (!asset || !asset.revs.some((rev) => rev.id === imageId)) return style;
     return { ...style, assets: { ...style.assets, [slot]: { ...asset, adoptedId: imageId } } };
   });
 }

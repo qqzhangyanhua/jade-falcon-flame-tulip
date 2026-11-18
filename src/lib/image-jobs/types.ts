@@ -1,4 +1,5 @@
 import type { ProjectDocument } from "../project/schema.ts";
+import { SLOT_IDS } from "../project/slots.ts";
 
 export const IMAGE_JOB_ACTIONS = [
   "direction",
@@ -9,14 +10,16 @@ export const IMAGE_JOB_ACTIONS = [
 
 export type ImageJobAction = (typeof IMAGE_JOB_ACTIONS)[number];
 
-export const IMAGE_JOB_SLOTS = ["ui_hero", "kv", "web_home"] as const;
+/** Built-in slot ids. A job may also store any other non-empty slot string. */
+export const IMAGE_JOB_SLOTS = SLOT_IDS;
 
-export type ImageJobSlot = (typeof IMAGE_JOB_SLOTS)[number];
+export type ImageJobSlot = string;
 
 export const IMAGE_JOB_ERROR_CODES = [
   "unauthorized",
   "forbidden",
   "not_found",
+  "unknown_slot",
   "model_disabled",
   "images_unavailable",
   "capability_denied",
@@ -173,6 +176,7 @@ export type RunImageJobInput = {
   /** Named material slot; direction candidates always persist as null. */
   slot?: ImageJobSlot | null;
   prompt: string;
+  /** Ignored. Slot jobs use the catalog aspect; direction jobs stay 16:9. */
   aspect?: string;
   n?: number;
   imageUrl?: string;

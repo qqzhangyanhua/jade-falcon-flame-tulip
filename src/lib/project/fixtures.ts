@@ -1,4 +1,11 @@
-import { emptyAssets, type Candidate, type Project, type StyleBranch, type StyleDna } from "./schema.ts";
+import {
+  DEFAULT_ENABLED_SLOT_IDS,
+  emptyAssets,
+  type Candidate,
+  type Project,
+  type StyleBranch,
+  type StyleDna,
+} from "./schema.ts";
 
 export function sampleDna(patch: Partial<StyleDna> = {}): StyleDna {
   return {
@@ -67,6 +74,7 @@ export function sampleProject(patch: Partial<Project> = {}): Project {
     createdAt: 1,
     currentStyleId: "a",
     currentSlot: "kv",
+    enabledSlotIds: [...DEFAULT_ENABLED_SLOT_IDS],
     currentImageModelId: "",
     phase: "studio",
     intent: null,

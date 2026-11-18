@@ -12,6 +12,7 @@ export const IMAGE_JOB_USER_MESSAGES: Record<ImageJobErrorCode, string> = {
   quota_exceeded: "今日额度已用完",
   in_flight: "当前有进行中的出图",
   not_found: "项目不存在",
+  unknown_slot: "这个物料槽不在当前项目里",
   upstream_failed: "出图失败",
   project_deleted: "项目已删除",
   invalid_image: "图片格式不支持，请上传 PNG、JPEG 或 WebP",

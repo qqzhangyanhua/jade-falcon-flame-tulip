@@ -40,3 +40,5 @@ export { messageForMergeError } from "./shared.ts";
 export type { MergeError, MergeResult } from "./merge.ts";
 export { tailorDirections } from "./tailor.ts";
 export type { TailoredDirection } from "./tailor.ts";
+export { referenceDirection } from "./reference.ts";
+export type { ReferenceDirectionError, ReferenceDirectionResult } from "./reference.ts";

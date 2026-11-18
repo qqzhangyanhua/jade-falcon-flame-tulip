@@ -1,3 +1,4 @@
+import { parseDurableImageId } from "./durable.ts";
 import type { ImageBlobStore } from "./stores.ts";
 import type { ImageBlobRecord } from "./types.ts";
 
@@ -15,4 +16,15 @@ export async function readImageForUser(
   const blob = await blobs.get(imageId);
   if (!blob || blob.userId !== userId) return null;
   return blob;
+}
+
+/** Reference direction reads by stored address. Another user, a missing row, or a non-address is null. */
+export async function readImageForUserByUrl(
+  blobs: Pick<ImageBlobStore, "get">,
+  imageUrl: string,
+  userId: string | null,
+): Promise<ImageBlobRecord | null> {
+  const imageId = parseDurableImageId(imageUrl);
+  if (!imageId) return null;
+  return readImageForUser(blobs, imageId, userId);
 }

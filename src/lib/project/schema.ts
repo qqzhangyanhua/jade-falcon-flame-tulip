@@ -4,6 +4,17 @@ import { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS } from "./slots.ts";
 
 export { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS };
 
+export const MAX_REFERENCE_IMAGES = 3;
+export const STORED_IMAGE_ADDRESS = /^\/api\/images\/[^/]+$/;
+
+/** Keeps at most three `/api/images/<id>` addresses. Anything else, including a missing field, is dropped. */
+export function referenceImageUrlsFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && STORED_IMAGE_ADDRESS.test(item))
+    .slice(0, MAX_REFERENCE_IMAGES);
+}
+
 export const slotSchema = z.string().min(1);
 export type Slot = string;
 
@@ -84,6 +95,11 @@ const projectDocumentObject = z.object({
       message: "prototype must be a stored image address, not a data: URL",
     })
     .nullable(),
+  // Old documents omit this. Bytes stay in image_blobs; only /api/images/<id> is stored.
+  referenceImageUrls: z
+    .array(z.string().regex(STORED_IMAGE_ADDRESS))
+    .max(MAX_REFERENCE_IMAGES)
+    .default([]),
   createdAt: z.number(),
   currentStyleId: z.string().nullable(),
   currentSlot: slotSchema,

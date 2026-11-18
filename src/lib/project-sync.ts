@@ -1,5 +1,5 @@
 import type { ImageJobErrorCode, ProjectDocumentSnapshot } from "./image-jobs/types.ts";
-import type { Project, ProjectDocument } from "./project/schema.ts";
+import { referenceImageUrlsFrom, type Project, type ProjectDocument } from "./project/schema.ts";
 
 export type SyncSnapshot = ProjectDocumentSnapshot;
 
@@ -48,6 +48,7 @@ export function toDocument(project: Project): ProjectDocument {
     prototypeDataUrl: document.prototypeDataUrl?.toLowerCase().startsWith("data:")
       ? null
       : document.prototypeDataUrl,
+    referenceImageUrls: referenceImageUrlsFrom(document.referenceImageUrls),
   };
 }
 

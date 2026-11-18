@@ -117,6 +117,26 @@ describe("toDocument", () => {
     const doc = toDocument(sampleProject({ prototypeDataUrl: "/api/images/img_1" }));
     assert.equal(doc.prototypeDataUrl, "/api/images/img_1");
   });
+
+  it("keeps stored reference addresses and drops anything else", () => {
+    const doc = toDocument(
+      sampleProject({
+        referenceImageUrls: [
+          "/api/images/img_a",
+          "data:image/png;base64,AAAA",
+          "https://example.com/a.png",
+          "/api/images/img_b",
+        ],
+      }),
+    );
+    assert.deepEqual(doc.referenceImageUrls, ["/api/images/img_a", "/api/images/img_b"]);
+  });
+
+  it("sends an empty reference list when an old project has none", () => {
+    const legacy = sampleProject();
+    delete (legacy as { referenceImageUrls?: string[] }).referenceImageUrls;
+    assert.deepEqual(toDocument(legacy).referenceImageUrls, []);
+  });
 });
 
 describe("project sync: saving", () => {

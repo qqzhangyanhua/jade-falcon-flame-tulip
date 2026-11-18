@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { readImageForUser } from "./image-access.ts";
+import { readImageForUser, readImageForUserByUrl } from "./image-access.ts";
 import { createMemoryGatewayWorld } from "./memory.ts";
 import { uploadWireframe } from "./upload.ts";
 
@@ -40,5 +40,43 @@ describe("image read access", () => {
   it("treats a missing image as not found", async () => {
     const { world } = await uploaded();
     assert.equal(await readImageForUser(world.blobs, "img_00000000", world.userId), null);
+  });
+});
+
+describe("reference image read access", () => {
+  it("returns the owner's bytes for a stored image address", async () => {
+    const { world, id } = await uploaded();
+    const blob = await readImageForUserByUrl(world.blobs, `/api/images/${id}`, world.userId);
+    assert.equal(blob?.id, id);
+    assert.equal(blob?.userId, world.userId);
+    assert.ok(blob && blob.bytes.byteLength > 0);
+  });
+
+  it("returns null for someone else's image", async () => {
+    const { world, id } = await uploaded();
+    assert.equal(
+      await readImageForUserByUrl(world.blobs, `/api/images/${id}`, "someone-else"),
+      null,
+    );
+  });
+
+  it("returns null for a missing image", async () => {
+    const { world } = await uploaded();
+    assert.equal(
+      await readImageForUserByUrl(world.blobs, "/api/images/img_00000000", world.userId),
+      null,
+    );
+  });
+
+  it("returns null for an address that is not a stored image", async () => {
+    const { world, id } = await uploaded();
+    assert.equal(
+      await readImageForUserByUrl(world.blobs, `data:image/png;base64,${id}`, world.userId),
+      null,
+    );
+    assert.equal(
+      await readImageForUserByUrl(world.blobs, "https://example.com/a.png", world.userId),
+      null,
+    );
   });
 });

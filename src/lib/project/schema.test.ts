@@ -113,4 +113,47 @@ describe("projectDocumentSchema", () => {
     );
     assert.deepEqual(added.project.styles[0]?.assets.ui_hero.revs, [hidden]);
   });
+
+  it("defaults missing reference images to an empty list", () => {
+    const { mode: _mode, referenceImageUrls: _urls, ...legacy } = sampleProject();
+    const parsed = projectDocumentSchema.parse(legacy);
+    assert.deepEqual(parsed.referenceImageUrls, []);
+  });
+
+  it("keeps up to three stored reference image addresses", () => {
+    const { mode: _mode, ...document } = sampleProject();
+    const urls = ["/api/images/img_a", "/api/images/img_b", "/api/images/img_c"];
+    const parsed = projectDocumentSchema.parse({ ...document, referenceImageUrls: urls });
+    assert.deepEqual(parsed.referenceImageUrls, urls);
+  });
+
+  it("rejects data urls and a fourth reference image", () => {
+    const { mode: _mode, ...document } = sampleProject();
+    assert.equal(
+      projectDocumentSchema.safeParse({
+        ...document,
+        referenceImageUrls: ["data:image/png;base64,AAAA"],
+      }).success,
+      false,
+    );
+    assert.equal(
+      projectDocumentSchema.safeParse({
+        ...document,
+        referenceImageUrls: ["https://example.com/api/images/img_a"],
+      }).success,
+      false,
+    );
+    assert.equal(
+      projectDocumentSchema.safeParse({
+        ...document,
+        referenceImageUrls: [
+          "/api/images/img_a",
+          "/api/images/img_b",
+          "/api/images/img_c",
+          "/api/images/img_d",
+        ],
+      }).success,
+      false,
+    );
+  });
 });

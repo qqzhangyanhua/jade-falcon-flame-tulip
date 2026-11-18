@@ -614,7 +614,7 @@ describe("parallel limits", () => {
     assert.equal(world.calls.length, 2);
   });
 
-  it("lets four direction candidates run together and lock that project", async () => {
+  it("lets five direction candidates run together and lock that project", async () => {
     const hold = holdUpstream();
     const world = createMemoryGatewayWorld({
       cap: 10,
@@ -628,17 +628,17 @@ describe("parallel limits", () => {
       deletedAt: null,
     });
 
-    const pending = [0, 1, 2, 3].map(() =>
+    const pending = [0, 1, 2, 3, 4].map(() =>
       runImageJob(world, jobInput(world, { action: "direction", n: 1 })),
     );
-    await hold.waitForStarts(4);
-    assert.equal(world.calls.length, 4);
-    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 4);
+    await hold.waitForStarts(5);
+    assert.equal(world.calls.length, 5);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 5);
 
-    const fifth = await runImageJob(world, jobInput(world, { action: "direction", n: 1 }));
-    assert.equal(fifth.ok, false);
-    if (!fifth.ok) assert.equal(fifth.code, "in_flight");
-    assert.equal(world.calls.length, 4);
+    const sixth = await runImageJob(world, jobInput(world, { action: "direction", n: 1 }));
+    assert.equal(sixth.ok, false);
+    if (!sixth.ok) assert.equal(sixth.code, "in_flight");
+    assert.equal(world.calls.length, 5);
 
     const otherProject = await runImageJob(
       world,
@@ -646,8 +646,8 @@ describe("parallel limits", () => {
     );
     assert.equal(otherProject.ok, false);
     if (!otherProject.ok) assert.equal(otherProject.code, "in_flight");
-    assert.equal(world.calls.length, 4);
-    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 4);
+    assert.equal(world.calls.length, 5);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 5);
 
     hold.release();
     const results = await Promise.all(pending);

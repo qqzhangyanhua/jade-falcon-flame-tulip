@@ -1,6 +1,6 @@
 import type { ImageJobAction, ImageJobSlot } from "./types.ts";
 
-export const MAX_PARALLEL_DIRECTION_JOBS = 4;
+export const MAX_PARALLEL_DIRECTION_JOBS = 5;
 
 export type RunningJobRef = {
   projectId: string;

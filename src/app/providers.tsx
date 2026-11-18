@@ -15,7 +15,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <ProjectSync />
         <LocalMigration />
         {children}
-        <Toaster theme="dark" position="bottom-right" />
+        <Toaster theme="light" position="bottom-right" />
       </AuthProvider>
     </>
   );

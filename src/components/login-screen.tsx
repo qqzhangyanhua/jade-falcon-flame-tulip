@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient, authEnabled, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
@@ -33,6 +33,10 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (user) router.replace("/studio");
+  }, [user, router]);
+
   if (isPending) {
     return (
       <main className="grid min-h-dvh place-items-center bg-bg">
@@ -41,7 +45,6 @@ export function LoginScreen() {
     );
   }
   if (user) {
-    router.replace("/studio");
     return (
       <main className="grid min-h-dvh place-items-center bg-bg">
         <div className="h-10 w-40 animate-pulse rounded-md bg-surface-2" />

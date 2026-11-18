@@ -84,7 +84,7 @@ export function CatalogScreen() {
       <AppHeader />
       <main className="mx-auto flex max-w-2xl flex-col gap-6 px-5 pb-16 pt-6">
         <div>
-          <p className="text-xs uppercase tracking-kicker text-subtle">Models</p>
+          <p className="section-label">模型</p>
           <h1 className="mt-2 font-display text-3xl tracking-tight text-fg">模型目录</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             管理员可改显示名、开关模型，并把一个出图模型设为新项目默认。上游 ID 只读。

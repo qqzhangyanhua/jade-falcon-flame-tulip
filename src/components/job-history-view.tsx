@@ -77,7 +77,7 @@ export function JobHistoryView() {
       <AppHeader />
       <main className="mx-auto flex max-w-2xl flex-col gap-6 px-5 pb-16 pt-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-subtle">Jobs</p>
+          <p className="section-label">作业</p>
           <h1 className="mt-2 font-display text-3xl tracking-tight text-fg">我的作业历史</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             只列你自己的出图作业，按时间倒序。模型名是当时写下的快照；「已停用」看当前目录。

@@ -3,7 +3,7 @@ import { PRESETS } from "@/lib/presets";
 export function AtmosphereGrid({ className = "" }: { className?: string }) {
   return (
     <div className={className}>
-      <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">四个正交方向</p>
+      <p className="mb-3 section-label">四个正交方向</p>
       <div className="grid grid-cols-2 gap-2">
         {PRESETS.map((preset) => {
           const { dna } = preset;

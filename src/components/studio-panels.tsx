@@ -8,7 +8,7 @@ export function StyleCard({ dna, lineName }: { dna: StyleDna; lineName?: string 
   return (
     <div>
       {lineName && lineName !== dna.name ? (
-        <p className="mb-1 text-xs uppercase tracking-kicker text-subtle">{lineName}</p>
+        <p className="mb-1 section-label">{lineName}</p>
       ) : null}
       <h2 className="font-display text-xl leading-tight tracking-tight">{dna.name}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">{dna.oneLiner}</p>

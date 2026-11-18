@@ -40,7 +40,7 @@ export function StyleLineActions({
 
   return (
     <div>
-      <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">风格线操作</p>
+      <p className="mb-3 section-label">风格线操作</p>
       <div className="flex flex-col gap-1">
         <button
           type="button"

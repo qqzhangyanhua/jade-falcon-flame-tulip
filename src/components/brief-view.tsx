@@ -185,7 +185,7 @@ export function BriefView() {
         <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-16">
           <section className="order-2 space-y-8 lg:order-1">
             <div className="animate-rise space-y-4">
-              <p className="text-xs uppercase tracking-kicker text-subtle">定调工作台</p>
+              <p className="section-label">定调工作台</p>
               <h1 className="font-display text-4xl leading-none tracking-tight text-fg md:text-5xl">
                 先锁方向，再出同一品牌的图
               </h1>
@@ -230,7 +230,7 @@ export function BriefView() {
                       key={ex}
                       type="button"
                       onClick={() => setBrief(ex)}
-                      className="min-h-11 rounded-full border border-border px-3 text-xs text-muted transition-colors duration-150 hover:border-accent hover:text-fg"
+                      className="min-h-11 rounded-sm border border-border px-3 text-xs text-muted transition-colors duration-150 hover:border-fg hover:text-fg"
                     >
                       {ex}
                     </button>

@@ -2,10 +2,11 @@ import { cn } from "@/lib/utils";
 import type { ButtonHTMLAttributes } from "react";
 
 const variants = {
-  primary: "bg-accent text-accent-fg hover:opacity-90 disabled:opacity-40",
+  primary: "btn btn-ink",
   ghost: "bg-transparent text-fg hover:bg-surface-2 disabled:opacity-40",
-  outline: "border border-border bg-transparent text-fg hover:bg-surface-2 disabled:opacity-40",
-  danger: "bg-danger text-fg hover:opacity-90 disabled:opacity-40",
+  outline:
+    "border border-fg/25 bg-transparent text-fg hover:border-fg hover:bg-surface disabled:opacity-40",
+  danger: "bg-danger text-bg hover:opacity-90 disabled:opacity-40",
 };
 
 const sizes = {
@@ -27,7 +28,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-md font-medium tracking-tight transition-[opacity,transform,background-color] duration-150 ease-smooth active:scale-[0.96]",
+        "inline-flex items-center justify-center gap-2 rounded-xs font-medium tracking-wide transition-[color,background-color,border-color,opacity] duration-150 ease-smooth enabled:active:translate-y-px",
         variants[variant],
         sizes[size],
         className,

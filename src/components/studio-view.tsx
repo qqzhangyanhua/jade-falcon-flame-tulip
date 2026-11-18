@@ -289,7 +289,7 @@ export function StudioView() {
           <StyleCard dna={dna} lineName={style?.name} />
           {standby.length > 0 ? (
             <div>
-              <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">备选风格</p>
+              <p className="mb-3 section-label">备选风格</p>
               <div className="flex gap-2">
                 {standby.map((s) => (
                   <button
@@ -312,7 +312,7 @@ export function StudioView() {
           ) : null}
           <StyleLineActions styles={project.styles} style={style} disabled={generating} />
           <div>
-            <p className="mb-3 text-xs uppercase tracking-kicker text-subtle">物料槽</p>
+            <p className="mb-3 section-label">物料槽</p>
             <div className="flex flex-col gap-1">
               {SLOTS.map((s) => (
                 <button
@@ -460,14 +460,14 @@ export function StudioView() {
       </div>
 
       {confirmWrite ? (
-        <div className="fixed inset-0 z-50 grid place-items-end bg-bg/70 p-4 md:place-items-center">
+        <div className="fixed inset-0 z-50 grid place-items-end bg-fg/40 p-4 md:place-items-center">
           <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-surface p-6 shadow-border">
             <h2 className="font-display text-2xl tracking-tight">写回风格？</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
               会基于 rev{confirmWrite.fromRev} 生成新的风格版本，影响这条风格线以后出的新图。已采用的图不会自动变。
             </p>
             <div className="mt-4 max-h-64 overflow-y-auto rounded-md bg-bg p-3 shadow-border">
-              <p className="mb-2 text-xs uppercase tracking-kicker text-subtle">
+              <p className="mb-2 section-label">
                 将改动 {confirmWrite.changes.length} 个字段
               </p>
               <DnaChangeList changes={confirmWrite.changes} />

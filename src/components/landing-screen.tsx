@@ -1,51 +1,17 @@
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { Diamond, Lock } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { AuthSlot } from "@/components/auth-slot";
-import { KeystoneMark, Wordmark } from "@/components/wordmark";
+import { CASES, SLOTS, order, shot } from "@/components/landing-data";
+import { HeroShowcase } from "@/components/landing-showcase";
+import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "#product", label: "产品" },
+  { href: "#how", label: "方法" },
   { href: "#cases", label: "案例" },
   { href: "#pricing", label: "定价" },
-] as const;
-
-const FAMILIES = [
-  {
-    name: "暖工作室 · Atelier",
-    tones: ["atm-paper", "atm-warm", "atm-gold", "atm-warm"] as const,
-  },
-  {
-    name: "账本商务 · Ledger",
-    tones: ["atm-cool", "atm-teal", "atm-cool", "atm-teal"] as const,
-  },
-  {
-    name: "夜场片场 · Nocturne",
-    tones: ["atm-night", "atm-violet", "atm-violet", "atm-night"] as const,
-  },
-  {
-    name: "纸上留白 · Paper",
-    tones: ["atm-paper", "atm-gold", "atm-paper", "atm-gold"] as const,
-  },
-] as const;
-
-const STEPS = [
-  {
-    title: "选方向",
-    body: "从情绪板里挑出你想要的视觉气质，而不是写一条漫长的 prompt。",
-    tones: ["atm-cool", "atm-gold", "atm-night", "atm-warm"] as const,
-  },
-  {
-    title: "锁 DNA",
-    body: "把色温、材质、构图偏好固化成品牌 DNA——之后所有生成都沿着这条线。",
-    node: true,
-  },
-  {
-    title: "同风格出图",
-    body: "批量仍保持同一调性。海报、社媒、产品图终于不再各说各话。",
-    strips: ["atm-paper", "atm-gold", "atm-warm"] as const,
-  },
 ] as const;
 
 export function LandingScreen() {
@@ -54,12 +20,9 @@ export function LandingScreen() {
       <LandingNav />
       <main>
         <Hero />
-        <DnaGraph />
-        <ProductSection />
-        <Capabilities />
+        <HowItWorks />
         <Cases />
-        <Pricing />
-        <FinalCta />
+        <PricingCta />
       </main>
       <Footer />
     </div>
@@ -68,25 +31,21 @@ export function LandingScreen() {
 
 function LandingNav() {
   return (
-    <header className="sticky top-0 z-20 border-b border-border bg-landing">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 md:px-8">
-        <Link href="/" className="min-h-11">
+    <header className="sticky top-0 z-20 border-b border-border bg-bg">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-5 md:px-8">
+        <Link href="/" className="flex min-h-11 items-center" aria-label="Keystone 首页">
           <Wordmark />
         </Link>
-        <nav className="hidden items-center md:flex" aria-label="页面章节">
+        <nav className="hidden items-center gap-1 md:flex" aria-label="页面章节">
           {NAV.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="inline-flex h-11 items-center px-3 text-sm text-muted transition-colors duration-150 hover:text-fg"
-            >
+            <a key={item.href} href={item.href} className="nav-link">
               {item.label}
             </a>
           ))}
         </nav>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <AuthSlot compact />
-          <StartLink className="h-11 rounded-full px-4 text-sm">开始使用</StartLink>
+          <StartLink className="h-10 px-4">开始使用</StartLink>
         </div>
       </div>
     </header>
@@ -94,397 +53,295 @@ function LandingNav() {
 }
 
 function Hero() {
+  const lines: ReactNode[] = [
+    "先锁定品牌方向，",
+    <>
+      再出一整套<em className="not-italic text-seal">同风格</em>
+    </>,
+    "的品牌图。",
+  ];
   return (
-    <section className="mx-auto max-w-3xl px-5 pb-10 pt-16 text-center md:pb-14 md:pt-24">
-      <p className="landing-kicker animate-rise inline-flex items-center gap-2">
-        <Diamond className="size-2.5 fill-subtle text-subtle" aria-hidden />
-        Creative AI · Brand DNA First
-      </p>
-      <h1 className="landing-title animate-rise mt-6 text-fg">
-        先锁品牌方向，再出
-        <span className="block">同一 DNA 的图</span>
-      </h1>
-      <p className="animate-rise mx-auto mt-6 max-w-md text-sm leading-relaxed text-muted md:text-base">
-        把视觉方向定死，再批量生成——每一张都带着你的风格基因，不再每次从零猜风格。
-      </p>
-      <div className="animate-rise mt-8 flex flex-wrap items-center justify-center gap-3">
-        <StartLink className="h-12 rounded-full px-6">免费开始</StartLink>
-        <a
-          href="#product"
-          className="inline-flex h-12 items-center justify-center rounded-full border border-border px-6 text-sm font-medium text-fg transition-[background-color,transform] duration-150 ease-smooth hover:bg-surface-2 active:scale-[0.96]"
+    <section className="mx-auto grid max-w-6xl gap-12 px-5 pb-20 pt-12 md:px-8 md:pt-20 lg:grid-cols-12 lg:items-center lg:gap-10 lg:pb-28">
+      <div className="lg:col-span-5">
+        <h1 className="landing-title">
+          {lines.map((line, i) => (
+            <span key={i} className="line-mask">
+              <span style={order(i)}>{line}</span>
+            </span>
+          ))}
+        </h1>
+        <p
+          className="hero-fade mt-6 max-w-md text-base leading-relaxed text-muted"
+          style={order(0)}
         >
-          看怎么工作
-        </a>
-      </div>
-    </section>
-  );
-}
-
-function DnaGraph() {
-  return (
-    <section className="mx-auto max-w-5xl px-5 pb-20 pt-6 md:pb-28" aria-label="品牌 DNA 如何锁定">
-      <div className="flex flex-col items-center gap-6 lg:hidden">
-        <div className="grid w-full max-w-sm grid-cols-2 gap-3">
-          <AtmCard tone="atm-paper" caption="暖工作室 · Paper" />
-          <AtmCard tone="atm-warm" caption="暖工作室 · Warm" />
+          Keystone 把视觉方向固化成一份风格
+          DNA：色板、光线、材质、构图。之后的主视觉、产品图、官网首屏，都从这份 DNA
+          生成，不再每次重新猜风格。
+        </p>
+        <div className="hero-fade mt-8 flex flex-wrap items-center gap-6" style={order(1)}>
+          <StartLink>
+            免费开始
+            <ArrowRight className="btn-arrow size-4" aria-hidden />
+          </StartLink>
+          <a href="#cases" className="link-line text-sm font-medium text-fg">
+            看三组案例
+          </a>
         </div>
-        <DnaNode />
-        <AtmCard tone="atm-gold" caption="同风格成品" badge="DNA locked" className="w-full max-w-sm" />
-      </div>
-
-      <div className="hidden items-center justify-center gap-1 lg:flex">
-        <div className="flex flex-col gap-6">
-          <AtmCard tone="atm-paper" caption="暖工作室 · Paper" />
-          <AtmCard tone="atm-warm" caption="暖工作室 · Warm" />
-        </div>
-        <svg width="96" height="176" viewBox="0 0 96 176" className="shrink-0 text-border" aria-hidden>
-          <path
-            d="M0 40 C 48 40, 44 88, 96 88"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1"
-          />
-          <path
-            d="M0 136 C 48 136, 44 88, 96 88"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1"
-          />
-        </svg>
-        <DnaNode />
-        <div className="h-px w-14 shrink-0 bg-border" aria-hidden />
-        <AtmCard tone="atm-gold" caption="同风格成品" badge="DNA locked" />
-      </div>
-    </section>
-  );
-}
-
-function ProductSection() {
-  return (
-    <section id="product" className="scroll-mt-20 px-5 py-16 md:py-24">
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="landing-kicker">Product</p>
-        <h2 className="mt-4 font-display text-3xl tracking-tight text-fg md:text-4xl">
-          方向盘一转，风格就锁死
-        </h2>
-        <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted">
-          像选调色盘一样选视觉方向，锁定后所有生成都沿同一条 DNA 线走。
+        <p className="hero-fade mt-8 text-sm text-subtle" style={order(2)}>
+          每日免费出图额度 · 无需信用卡
         </p>
       </div>
-      <div className="mx-auto mt-12 max-w-5xl">
-        <DirectionMock />
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
-          <Chip icon={<Lock className="size-3.5" aria-hidden />} label="锁 DNA" hint="色温 · 材质 · 构图同框" />
-          <Chip label="批量同风格" hint="一次方向，一整列" />
-        </div>
+
+      <HeroShowcase />
+    </section>
+  );
+}
+
+function HowItWorks() {
+  return (
+    <section id="how" className="scroll-mt-16 border-t border-border">
+      <div className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
+        <SectionHeading label="方法" title="三步，让风格不再漂移" />
+        <ol className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
+          <Step
+            index="01"
+            title="描述你的品牌"
+            body="一句话或一份简报都行。Keystone 解析出受众、调性和要做的物料，解析不扣出图额度。"
+          >
+            <blockquote className="border-l-2 border-seal bg-surface p-4 text-sm leading-relaxed text-muted">
+              “一家做手作陶器的小工作室，想要安静、温暖、有留白感的视觉。”
+            </blockquote>
+          </Step>
+          <Step
+            index="02"
+            title="选一个方向，锁定"
+            body="对比几个方向候选的预览板，挑中一个锁定。它会成为这个项目的风格线，其余方向留作备选。"
+          >
+            <div className="grid grid-cols-3 gap-2">
+              {CASES.map((c, i) => (
+                <div key={c.id} className="relative">
+                  <Photo
+                    image={shot(c.id, "key")}
+                    alt={`${c.name} 方向候选`}
+                    className={cn(
+                      "aspect-4/5",
+                      i === 0 ? "outline-2 outline-offset-2 outline-seal" : "opacity-55 grayscale",
+                    )}
+                    sizes="120px"
+                  />
+                  {i === 0 ? (
+                    <span className="seal seal-sm absolute -right-1 -top-2">锁定</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </Step>
+          <Step
+            index="03"
+            title="沿 DNA 出全套物料"
+            body="主视觉、产品图、官网首屏都从同一份 DNA 生成。想微调就写回，生成新的风格版本，后面的图一起跟上。"
+          >
+            <div className="grid grid-cols-3 gap-2">
+              {SLOTS.map((slot) => (
+                <Photo
+                  key={slot.id}
+                  image={shot("atelier", slot.id)}
+                  alt={`Atelier ${slot.label}`}
+                  className="aspect-4/5"
+                  sizes="120px"
+                />
+              ))}
+            </div>
+          </Step>
+        </ol>
       </div>
     </section>
   );
 }
 
-function Capabilities() {
+function Step({
+  index,
+  title,
+  body,
+  children,
+}: {
+  index: string;
+  title: string;
+  body: string;
+  children: ReactNode;
+}) {
   return (
-    <section className="px-5 py-16 md:py-24">
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="landing-kicker">Capabilities</p>
-        <h2 className="mt-4 font-display text-3xl tracking-tight text-fg md:text-4xl">
-          三步，把品牌视觉打死
-        </h2>
-      </div>
-      <ul className="mx-auto mt-12 grid max-w-5xl gap-4 md:grid-cols-3">
-        {STEPS.map((step) => (
-          <li key={step.title} className="overflow-hidden rounded-xl bg-surface p-2 shadow-border">
-            <div className="overflow-hidden rounded-lg bg-bg">
-              {"tones" in step && step.tones ? (
-                <div className="grid h-40 grid-cols-2 gap-1 p-3">
-                  {step.tones.map((tone) => (
-                    <div key={tone} className={cn("atm-field min-h-0 rounded-md", tone)} />
-                  ))}
-                </div>
-              ) : null}
-              {"node" in step && step.node ? (
-                <div className="grid h-40 place-items-center">
-                  <DnaNode compact />
-                </div>
-              ) : null}
-              {"strips" in step && step.strips ? (
-                <div className="grid h-40 grid-cols-3 gap-1 p-3">
-                  {step.strips.map((tone) => (
-                    <div key={tone} className={cn("atm-field h-full rounded-md", tone)} />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div className="px-3 pb-4 pt-4">
-              <h3 className="font-medium text-fg">{step.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{step.body}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <li className="reveal flex flex-col border-t border-fg pt-5">
+      <span className="font-display text-sm text-seal">{index}</span>
+      <h3 className="mt-3 text-xl text-fg">{title}</h3>
+      <p className="mt-3 text-sm leading-relaxed text-muted">{body}</p>
+      <div className="mt-6 md:mt-auto md:pt-6">{children}</div>
+    </li>
   );
 }
 
 function Cases() {
   return (
-    <section id="cases" className="scroll-mt-20 px-5 py-16 md:py-24">
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="landing-kicker">Consistency</p>
-        <h2 className="mt-4 font-display text-3xl tracking-tight text-fg md:text-4xl">
-          同一方向，成片一致
-        </h2>
-      </div>
-      <div className="mx-auto mt-12 grid max-w-5xl gap-8 sm:grid-cols-2 lg:grid-cols-4">
-        {FAMILIES.map((family) => (
-          <figure key={family.name}>
-            <figcaption className="mb-3 text-xs text-muted">{family.name}</figcaption>
-            <div className="grid grid-cols-2 gap-2">
-              {family.tones.map((tone, i) => (
-                <div
-                  key={`${tone}-${i}`}
-                  className={cn("atm-field aspect-square rounded-lg shadow-border", tone)}
-                />
-              ))}
-            </div>
-          </figure>
-        ))}
+    <section id="cases" className="scroll-mt-16 border-t border-border bg-surface">
+      <div className="mx-auto max-w-6xl px-5 py-20 md:px-8 md:py-28">
+        <SectionHeading
+          label="案例"
+          title="同一份 DNA，一整套物料"
+          body="每一组都由同一份风格 DNA 生成。换物料、换构图，色温和材质不跑偏。"
+        />
+        <div className="mt-14 space-y-16 md:space-y-20">
+          {CASES.map((c, i) => (
+            <article key={c.id} className="grid gap-6 lg:grid-cols-12 lg:gap-10">
+              <div className="reveal lg:col-span-4">
+                <p className="font-display text-sm text-seal">{`0${i + 1}`}</p>
+                <h3 className="mt-2 text-3xl text-fg">
+                  {c.name} <span className="text-xl text-muted">{c.zh}</span>
+                </h3>
+                <p className="mt-2 text-sm text-muted">{c.brand}</p>
+                <div className="reveal-swatches mt-5 flex h-6" aria-hidden>
+                  {c.palette.map((color) => (
+                    <span key={color} className="flex-1" style={{ background: color }} />
+                  ))}
+                </div>
+                <ul className="mt-5 flex flex-wrap gap-2" aria-label={`${c.name} 的 DNA 关键词`}>
+                  {c.dna.map((word) => (
+                    <li key={word} className="border border-border px-2.5 py-1 text-xs text-muted">
+                      {word}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:col-span-8">
+                {SLOTS.map((slot) => (
+                  <figure key={slot.id} className="group">
+                    <Photo
+                      image={shot(c.id, slot.id)}
+                      alt={`${c.name} ${slot.label}`}
+                      className="reveal-wipe aspect-4/5"
+                      imageClassName="transition-transform duration-700 ease-smooth group-hover:scale-105"
+                      sizes="(min-width: 1024px) 22vw, 33vw"
+                    />
+                    <figcaption className="mt-2 text-xs text-subtle">{slot.label}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
 }
 
-function Pricing() {
+function PricingCta() {
+  const facts = ["每天都有免费出图额度", "解析品牌简报不扣额度", "无需信用卡，登录即用"];
   return (
-    <section id="pricing" className="scroll-mt-20 px-5 py-16 md:py-20">
-      <div className="mx-auto max-w-lg rounded-xl bg-surface px-6 py-10 text-center shadow-border md:px-10">
-        <p className="landing-kicker">Pricing</p>
-        <h2 className="mt-4 font-display text-3xl tracking-tight text-fg">免费试用，按日出图</h2>
-        <p className="mt-4 text-sm leading-relaxed text-muted">
-          登录即可锁定方向并生成。每日有出图额度，无需信用卡。解析描述不扣额度。
-        </p>
-        <StartLink className="mt-8 h-12 rounded-full px-6">免费开始</StartLink>
+    <section id="pricing" className="scroll-mt-16 bg-fg text-bg">
+      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-20 md:px-8 md:py-28 lg:grid-cols-12 lg:items-end">
+        <div className="reveal lg:col-span-7">
+          <p className="section-label text-bg/60">定价</p>
+          <h2 className="mt-4 text-3xl leading-tight md:text-5xl">
+            免费开始，
+            <span className="block">
+              <span className="inline-block">锁定你的</span>
+              <span className="inline-block">第一份品牌 DNA。</span>
+            </span>
+          </h2>
+        </div>
+        <div className="reveal lg:col-span-5">
+          <ul className="divide-y divide-bg/15 border-y border-bg/15">
+            {facts.map((fact, i) => (
+              <li key={fact} className="flex items-baseline gap-4 py-3 text-sm text-bg/80">
+                <span className="font-display text-xs text-bg/50">{`0${i + 1}`}</span>
+                {fact}
+              </li>
+            ))}
+          </ul>
+          <Link href="/studio" className="btn btn-paper mt-8">
+            进入工作台
+            <ArrowRight className="btn-arrow size-4" aria-hidden />
+          </Link>
+        </div>
       </div>
-    </section>
-  );
-}
-
-function FinalCta() {
-  return (
-    <section className="px-5 py-20 text-center md:py-28">
-      <h2 className="font-display text-3xl tracking-tight text-fg md:text-4xl">开始锁定你的品牌 DNA</h2>
-      <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-muted">
-        免费试用。无需信用卡。几分钟内完成第一次同风格出图。
-      </p>
-      <StartLink className="mt-8 h-12 rounded-full px-6">免费开始</StartLink>
     </section>
   );
 }
 
 function Footer() {
+  const links = [
+    { href: "#how", label: "方法" },
+    { href: "#cases", label: "案例" },
+    { href: "/studio", label: "工作台" },
+    { href: "/login", label: "登录" },
+    { href: "/account", label: "账户" },
+  ];
   return (
     <footer className="border-t border-border">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 md:grid-cols-[minmax(0,1.4fr)_1fr_1fr] md:px-8">
-        <div>
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 md:flex-row md:items-center md:justify-between md:px-8">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
           <Wordmark />
-          <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
-            先锁品牌视觉方向，再生出同一 DNA 的图。
-          </p>
+          <p className="text-sm text-subtle">先锁品牌方向，再出同一 DNA 的图。</p>
         </div>
-        <div>
-          <p className="text-xs font-medium text-fg">产品</p>
-          <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li>
-              <a href="#product" className="inline-flex min-h-11 items-center hover:text-fg">
-                功能
+        <nav aria-label="页脚" className="-mx-3 flex flex-wrap">
+          {links.map((link) =>
+            link.href.startsWith("#") ? (
+              <a key={link.href} href={link.href} className="nav-link">
+                {link.label}
               </a>
-            </li>
-            <li>
-              <a href="#pricing" className="inline-flex min-h-11 items-center hover:text-fg">
-                定价
-              </a>
-            </li>
-            <li>
-              <Link href="/studio" className="inline-flex min-h-11 items-center hover:text-fg">
-                工作台
+            ) : (
+              <Link key={link.href} href={link.href} className="nav-link">
+                {link.label}
               </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-fg">账户</p>
-          <ul className="mt-3 space-y-2 text-sm text-muted">
-            <li>
-              <Link href="/login" className="inline-flex min-h-11 items-center hover:text-fg">
-                登录
-              </Link>
-            </li>
-            <li>
-              <Link href="/account" className="inline-flex min-h-11 items-center hover:text-fg">
-                账户
-              </Link>
-            </li>
-            <li>
-              <a href="#cases" className="inline-flex min-h-11 items-center hover:text-fg">
-                案例
-              </a>
-            </li>
-          </ul>
-        </div>
+            ),
+          )}
+        </nav>
       </div>
-      <div className="border-t border-border">
-        <p className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5 text-xs text-subtle md:px-8">
-          <span>© 2026 Keystone</span>
-          <span className="hidden sm:inline">Made for locked-in creative AI</span>
-        </p>
-      </div>
+      <p className="mx-auto max-w-6xl px-5 pb-8 text-xs text-subtle md:px-8">© 2026 Keystone</p>
     </footer>
   );
 }
 
-function StartLink({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
+function SectionHeading({ label, title, body }: { label: string; title: string; body?: string }) {
   return (
-    <Link
-      href="/studio"
-      className={cn(
-        "inline-flex items-center justify-center bg-accent text-sm font-medium text-accent-fg",
-        "transition-[opacity,transform] duration-150 ease-smooth hover:opacity-90 active:scale-[0.96]",
-        className,
-      )}
-    >
+    <div className="reveal max-w-2xl">
+      <p className="section-label">{label}</p>
+      <h2 className="mt-4 text-3xl leading-tight text-fg md:text-5xl">{title}</h2>
+      {body ? <p className="mt-4 max-w-lg text-base leading-relaxed text-muted">{body}</p> : null}
+    </div>
+  );
+}
+
+function StartLink({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <Link href="/studio" className={cn("btn btn-ink", className)}>
       {children}
     </Link>
   );
 }
 
-function AtmCard({
-  tone,
-  caption,
-  badge,
+function Photo({
+  image,
+  alt,
   className,
+  imageClassName,
+  sizes,
 }: {
-  tone: string;
-  caption: string;
-  badge?: string;
+  image: { src: string; width: number; height: number };
+  alt: string;
   className?: string;
+  imageClassName?: string;
+  sizes: string;
 }) {
   return (
-    <figure className={cn("w-full overflow-hidden rounded-lg bg-surface shadow-border lg:w-44", className)}>
-      <div className={cn("atm-field h-24 w-full", tone)} />
-      <figcaption className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="truncate text-xs text-muted">{caption}</span>
-        {badge ? <span className="shrink-0 text-xs text-subtle">{badge}</span> : null}
-      </figcaption>
-    </figure>
-  );
-}
-
-function DnaNode({ compact = false }: { compact?: boolean }) {
-  return (
-    <div className={cn("relative grid place-items-center", compact ? "size-24" : "size-28")}>
-      <span className="dna-ring absolute inset-0 rounded-full border border-border" aria-hidden />
-      <div
-        className={cn(
-          "relative grid place-items-center rounded-full bg-surface shadow-border",
-          compact ? "size-16" : "size-20",
-        )}
-      >
-        <div className="flex flex-col items-center gap-1">
-          <span className="grid size-7 place-items-center rounded-md bg-surface-2 text-fg">
-            <KeystoneMark className="size-3.5" />
-          </span>
-          {compact ? null : <span className="text-xs text-muted">品牌 DNA</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Chip({
-  icon,
-  label,
-  hint,
-}: {
-  icon?: ReactNode;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <div className="inline-flex min-h-11 items-center gap-3 rounded-lg bg-surface px-4 py-2 shadow-border">
-      {icon ? <span className="text-muted">{icon}</span> : null}
-      <span>
-        <span className="block text-sm text-fg">{label}</span>
-        <span className="block text-xs text-subtle">{hint}</span>
-      </span>
-    </div>
-  );
-}
-
-function DirectionMock() {
-  return (
-    <div className="rounded-xl bg-surface p-2 shadow-border">
-      <div className="overflow-hidden rounded-lg bg-bg">
-        <div className="flex h-10 items-center gap-2 border-b border-border px-3">
-          <span className="size-2 rounded-full bg-subtle" aria-hidden />
-          <span className="size-2 rounded-full bg-muted" aria-hidden />
-          <span className="size-2 rounded-full bg-fg/40" aria-hidden />
-          <p className="ml-2 truncate text-xs text-subtle">Keystone — Direction Picker</p>
-        </div>
-        <div className="grid gap-3 p-3 lg:grid-cols-3">
-          <div className="atm-field min-h-44 rounded-lg atm-gold lg:min-h-72">
-            <span className="absolute bottom-3 left-3 z-10 text-xs text-fg">暖工作室 · 主方向</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <MockTile tone="atm-night" label="夜宴流光" locked />
-            <MockTile tone="atm-cool" label="冷极简盘" />
-            <MockTile tone="atm-violet" label="紫调夜色" />
-            <MockTile tone="atm-teal" label="冰蓝工具" />
-          </div>
-          <div className="flex h-full min-w-0 flex-col rounded-lg bg-surface p-3 shadow-border">
-            <p className="text-xs text-subtle">Prompt</p>
-            <p className="mt-2 text-xs leading-relaxed text-muted">
-              一只陶瓷咖啡杯放在品牌桌上，暖光、浅金木、品牌衬纸。DNA：暖工作室气质 · 奶油底色。
-            </p>
-            <div className="mt-4 rounded-md bg-bg px-3 py-3">
-              <p className="text-xs text-subtle">暖工作室 DNA</p>
-              <p className="mt-1 text-sm text-fg">LOCKED · 12 refs</p>
-            </div>
-            <Link
-              href="/studio"
-              className="mt-auto inline-flex h-11 items-center justify-center rounded-md bg-accent text-sm font-medium text-accent-fg transition-[opacity,transform] duration-150 ease-smooth hover:opacity-90 active:scale-[0.96]"
-            >
-              生成同风格图像
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MockTile({
-  tone,
-  label,
-  locked,
-}: {
-  tone: string;
-  label: string;
-  locked?: boolean;
-}) {
-  return (
-    <div className={cn("atm-field relative min-h-24 rounded-lg lg:min-h-32", tone)}>
-      {locked ? (
-        <span className="absolute right-2 top-2 z-10 grid size-6 place-items-center rounded-full bg-bg/70 text-fg">
-          <Lock className="size-3" aria-hidden />
-        </span>
-      ) : null}
-      <span className="absolute bottom-2 left-2 z-10 text-xs text-fg">{label}</span>
+    <div className={cn("relative overflow-hidden bg-surface-2", className)}>
+      <Image
+        src={image.src}
+        alt={alt}
+        width={image.width}
+        height={image.height}
+        sizes={sizes}
+        className={cn("size-full object-cover", imageClassName)}
+      />
     </div>
   );
 }

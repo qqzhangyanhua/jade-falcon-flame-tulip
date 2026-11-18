@@ -91,7 +91,7 @@ export function AccountScreen() {
       <AppHeader />
       <main className="mx-auto flex max-w-xl flex-col gap-6 px-5 pb-16 pt-6">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-subtle">Account</p>
+          <p className="section-label">账户</p>
           <h1 className="mt-2 font-display text-3xl tracking-tight text-fg">用户信息</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             登录身份来自当前会话。下方资料只属于你，保存后会写入账户记录。
@@ -235,7 +235,7 @@ export function AccountScreen() {
             </p>
             <Link
               href="/models"
-              className="mt-4 inline-flex h-11 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-fg transition-[opacity,transform] duration-150 ease-smooth hover:opacity-90 active:scale-[0.96]"
+              className="btn btn-ink mt-4 h-11 px-4"
             >
               打开模型目录
             </Link>

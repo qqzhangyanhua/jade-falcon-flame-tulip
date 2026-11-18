@@ -56,7 +56,7 @@ export function RecentProjects() {
 
   return (
     <section className="mt-16" aria-label="最近项目">
-      <p className="mb-4 text-xs uppercase tracking-kicker text-subtle">最近项目</p>
+      <p className="mb-4 section-label">最近项目</p>
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((p) => (
           <li key={p.id} className="overflow-hidden rounded-lg bg-surface shadow-border">

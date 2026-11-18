@@ -10,7 +10,12 @@ export function QuotaMeter({
 }) {
   if (!quota) {
     return (
-      <div className={cn("inline-flex h-11 items-center rounded-full border border-border px-3 text-xs text-subtle", className)}>
+      <div
+        className={cn(
+          "inline-flex h-11 items-center rounded-sm border border-border px-3 text-xs text-subtle",
+          className,
+        )}
+      >
         额度…
       </div>
     );
@@ -22,14 +27,17 @@ export function QuotaMeter({
   return (
     <div
       className={cn(
-        "inline-flex h-11 items-center gap-2 rounded-full border border-border px-3",
+        "inline-flex h-11 items-center gap-2 rounded-sm border border-border px-3",
         className,
       )}
       title={`北京时间 ${quota.beijingDay}`}
     >
       <span className="relative h-1 w-10 overflow-hidden rounded-full bg-surface-2">
         <span
-          className={cn("absolute inset-y-0 left-0 rounded-full", depleted ? "bg-danger" : "bg-accent")}
+          className={cn(
+            "absolute inset-y-0 left-0 rounded-full",
+            depleted ? "bg-danger" : "bg-accent",
+          )}
           style={{ width: `${pct}%` }}
         />
       </span>

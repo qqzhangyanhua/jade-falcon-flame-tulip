@@ -135,3 +135,14 @@ export function builtinSlot(id: string): BuiltinSlot | undefined {
 export function catalogAspect(id: string): string | undefined {
   return builtinSlot(id)?.aspect;
 }
+
+export type SlotPromptMeta = { id: string; name: string; aspect: string; purpose: string };
+
+/** Catalog name, aspect and purpose. An unknown id keeps its id as the name. */
+export function slotPromptMetas(ids: readonly string[]): SlotPromptMeta[] {
+  return ids.map((id) => {
+    const slot = builtinSlot(id);
+    if (!slot) return { id, name: id, aspect: "1:1", purpose: "" };
+    return { id: slot.id, name: slot.name, aspect: slot.aspect, purpose: slot.purpose };
+  });
+}

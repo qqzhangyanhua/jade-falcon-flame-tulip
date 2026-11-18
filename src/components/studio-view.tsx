@@ -10,7 +10,7 @@ import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
-import { StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
+import { StudioCopyMenu, StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
 import { StyleLineActions } from "@/components/style-line-actions";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
 import {
@@ -273,7 +273,13 @@ export function StudioView() {
         <div className="flex items-center justify-end gap-1">
           <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
           <StudioDownloadLink url={currentImg?.url} slot={slot} />
-          <StudioExportButton projectName={project.name} styleLine={style} />
+          <StudioCopyMenu dna={dna} product={product} enabledSlotIds={project.enabledSlotIds} />
+          <StudioExportButton
+            projectName={project.name}
+            product={product}
+            enabledSlotIds={project.enabledSlotIds}
+            styleLine={style}
+          />
           <DeleteProjectControl projectId={project.id} compact />
           <JobHistoryLink compact />
           <AuthSlot compact />

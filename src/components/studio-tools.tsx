@@ -1,8 +1,12 @@
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { RangeSlider } from "@/components/ui/slider";
 import type { StudioImageState } from "@/lib/image-jobs";
+import { customSlotIssue, type CustomSlotDraft } from "@/lib/project/ops";
+import { SUPPORTED_ASPECTS } from "@/lib/project/slots";
 import type { Slot } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +15,11 @@ export type StudioSlotChoice = {
   name: string;
   aspect: string;
   purpose: string;
+  extraPrompt?: string;
+  custom?: boolean;
 };
+
+const ASPECT_ITEMS = SUPPORTED_ASPECTS.map((aspect) => ({ value: aspect, label: aspect }));
 
 export const TUNE_PRESETS = [
   {
@@ -131,6 +139,138 @@ export function StudioTunePanel({
   );
 }
 
+function SlotMenuButton({
+  text,
+  label,
+  disabled,
+  onClick,
+}: {
+  text: string;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+      className="h-11 shrink-0 self-center rounded-md px-2 text-xs text-muted hover:bg-surface hover:text-fg"
+    >
+      {text}
+    </button>
+  );
+}
+
+function CustomSlotEditor({
+  disabled,
+  editing,
+  onCreate,
+  onEdit,
+  onClose,
+}: {
+  disabled: boolean;
+  editing: StudioSlotChoice | null;
+  onCreate: (draft: CustomSlotDraft) => void;
+  onEdit: (id: string, draft: CustomSlotDraft) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(editing?.name ?? "");
+  const [aspect, setAspect] = useState(editing?.aspect ?? "");
+  const [purpose, setPurpose] = useState(editing?.purpose ?? "");
+  const [extra, setExtra] = useState(editing?.extraPrompt ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const fieldClass =
+    "mt-1 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-base leading-relaxed text-fg outline-none placeholder:text-subtle focus:border-accent";
+
+  function submit() {
+    const draft = { name, aspect, purpose, extraPrompt: extra };
+    const issue = customSlotIssue(draft);
+    if (issue) {
+      setError(issue);
+      return;
+    }
+    if (editing) onEdit(editing.id, draft);
+    else onCreate(draft);
+    onClose();
+  }
+
+  return (
+    <form
+      className="mt-2 flex flex-col gap-2 rounded-md bg-surface-2 p-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <p className="text-sm text-fg">{editing ? "编辑自定义物料槽" : "新建自定义物料槽"}</p>
+      <label className="block text-xs text-muted">
+        名称
+        <Input
+          value={name}
+          disabled={disabled}
+          maxLength={40}
+          placeholder="例如：电梯海报"
+          className="mt-1"
+          onChange={(event) => setName(event.target.value)}
+        />
+      </label>
+      <div>
+        <p className="mb-1 text-xs text-muted">比例</p>
+        <SelectField
+          label="比例"
+          value={aspect}
+          disabled={disabled}
+          placeholder="选择比例"
+          items={ASPECT_ITEMS}
+          onValueChange={setAspect}
+        />
+      </div>
+      <label className="block text-xs text-muted">
+        用途说明
+        <textarea
+          value={purpose}
+          disabled={disabled}
+          rows={2}
+          maxLength={200}
+          placeholder="这个物料槽用来做什么"
+          className={fieldClass}
+          onChange={(event) => setPurpose(event.target.value)}
+        />
+      </label>
+      <label className="block text-xs text-muted">
+        补充提示词（可选）
+        <textarea
+          value={extra}
+          disabled={disabled}
+          rows={2}
+          maxLength={400}
+          placeholder="可选，会写进出图提示词"
+          className={fieldClass}
+          onChange={(event) => setExtra(event.target.value)}
+        />
+      </label>
+      {error ? <p className="text-xs text-danger">{error}</p> : null}
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" className="min-h-11 flex-1" disabled={disabled}>
+          {editing ? "保存" : "创建"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="min-h-11"
+          disabled={disabled}
+          onClick={onClose}
+        >
+          取消
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function StudioSlotList({
   slots,
   available,
@@ -140,6 +280,9 @@ export function StudioSlotList({
   onSelect,
   onEnable,
   onHide,
+  onCreate,
+  onEdit,
+  onDelete,
 }: {
   slots: StudioSlotChoice[];
   available: { id: string; name: string }[];
@@ -149,8 +292,15 @@ export function StudioSlotList({
   onSelect: (id: string) => void;
   onEnable: (id: string) => void;
   onHide: (id: string) => void;
+  onCreate: (draft: CustomSlotDraft) => void;
+  onEdit: (id: string, draft: CustomSlotDraft) => void;
+  onDelete: (id: string) => void;
 }) {
-  const canHide = slots.length > 1;
+  const [editor, setEditor] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const canRemove = slots.length > 1;
+  const editing = slots.find((slot) => slot.id === editor && slot.custom) ?? null;
+  const pendingDelete = slots.find((slot) => slot.id === pendingDeleteId && slot.custom) ?? null;
   const add =
     available.length > 0 ? (
       <SelectField
@@ -165,46 +315,141 @@ export function StudioSlotList({
       />
     ) : null;
 
+  function openCreate() {
+    setPendingDeleteId(null);
+    setEditor("new");
+  }
+
+  function openEdit(slot: StudioSlotChoice) {
+    setPendingDeleteId(null);
+    setEditor(slot.id);
+  }
+
+  const extras = (
+    <>
+      {pendingDelete ? (
+        <div className="rounded-md bg-surface-2 px-3 py-2">
+          <p className="text-xs leading-relaxed text-muted">
+            删除「{pendingDelete.name}」后，这个物料槽不再显示。它们会留在文档里但不再显示。
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="danger"
+              className="min-h-11"
+              disabled={disabled}
+              onClick={() => {
+                onDelete(pendingDelete.id);
+                setPendingDeleteId(null);
+                if (editor === pendingDelete.id) setEditor(null);
+              }}
+            >
+              确认删除
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="min-h-11"
+              disabled={disabled}
+              onClick={() => setPendingDeleteId(null)}
+            >
+              取消
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {editor ? (
+        <CustomSlotEditor
+          key={editor}
+          disabled={disabled}
+          editing={editing}
+          onCreate={onCreate}
+          onEdit={onEdit}
+          onClose={() => setEditor(null)}
+        />
+      ) : (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={openCreate}
+          className="min-h-11 rounded-md px-3 text-left text-sm text-muted hover:bg-surface hover:text-fg"
+        >
+          新建自定义物料槽
+        </button>
+      )}
+    </>
+  );
+
+  function actions(slot: StudioSlotChoice) {
+    if (slot.custom) {
+      return (
+        <>
+          <SlotMenuButton
+            text="编辑"
+            label={`编辑${slot.name}`}
+            disabled={disabled}
+            onClick={() => openEdit(slot)}
+          />
+          {canRemove ? (
+            <SlotMenuButton
+              text="删除"
+              label={`删除${slot.name}`}
+              disabled={disabled}
+              onClick={() => {
+                setEditor(null);
+                setPendingDeleteId(slot.id);
+              }}
+            />
+          ) : null}
+        </>
+      );
+    }
+    if (!canRemove) return null;
+    return (
+      <SlotMenuButton
+        text="隐藏"
+        label={`隐藏${slot.name}`}
+        disabled={disabled}
+        onClick={() => onHide(slot.id)}
+      />
+    );
+  }
+
   if (layout === "row") {
     return (
-      <div className="flex min-w-0 items-center gap-1 md:hidden">
-        <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
-          {slots.map((slot) => (
-            <div key={slot.id} className="flex shrink-0 items-stretch gap-1">
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onSelect(slot.id)}
-                className={cn(
-                  "flex min-h-11 shrink-0 flex-col items-start justify-center rounded-md px-3 py-1.5 text-left",
-                  current === slot.id ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
-                )}
-              >
-                <span className="whitespace-nowrap text-sm">{slot.name}</span>
-                <span
-                  className={cn(
-                    "whitespace-nowrap text-xs",
-                    current === slot.id ? "text-accent-fg" : "text-subtle",
-                  )}
-                >
-                  {slot.aspect} · {slot.purpose}
-                </span>
-              </button>
-              {canHide ? (
+      <div className="flex min-w-0 flex-col gap-2 md:hidden">
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
+            {slots.map((slot) => (
+              <div key={slot.id} className="flex shrink-0 items-stretch gap-1">
                 <button
                   type="button"
                   disabled={disabled}
-                  onClick={() => onHide(slot.id)}
-                  aria-label={`隐藏${slot.name}`}
-                  className="h-11 shrink-0 rounded-md px-3 text-xs text-muted"
+                  onClick={() => onSelect(slot.id)}
+                  className={cn(
+                    "flex min-h-11 max-w-40 shrink-0 flex-col items-start justify-center rounded-md px-3 py-1.5 text-left",
+                    current === slot.id ? "bg-accent text-accent-fg" : "bg-surface-2 text-muted",
+                  )}
                 >
-                  隐藏
+                  <span className="w-full truncate text-sm">{slot.name}</span>
+                  <span
+                    className={cn(
+                      "w-full truncate text-xs",
+                      current === slot.id ? "text-accent-fg" : "text-subtle",
+                    )}
+                  >
+                    {slot.aspect} · {slot.purpose}
+                  </span>
                 </button>
-              ) : null}
-            </div>
-          ))}
+                {actions(slot)}
+              </div>
+            ))}
+          </div>
+          {add}
         </div>
-        {add}
+        {extras}
       </div>
     );
   }
@@ -231,21 +476,12 @@ export function StudioSlotList({
                 {slot.aspect} · {slot.purpose}
               </span>
             </button>
-            {canHide ? (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => onHide(slot.id)}
-                aria-label={`隐藏${slot.name}`}
-                className="h-11 shrink-0 self-center rounded-md px-2 text-xs text-muted hover:bg-surface hover:text-fg"
-              >
-                隐藏
-              </button>
-            ) : null}
+            {actions(slot)}
           </div>
         ))}
       </div>
       {add}
+      {extras}
     </div>
   );
 }
@@ -262,6 +498,9 @@ export function StudioGenerateBar({
   onSlot,
   onEnable,
   onHide,
+  onCreate,
+  onEdit,
+  onDelete,
   onContent,
   onGenerate,
 }: {
@@ -276,6 +515,9 @@ export function StudioGenerateBar({
   onSlot: (slot: Slot) => void;
   onEnable: (slotId: string) => void;
   onHide: (slotId: string) => void;
+  onCreate: (draft: CustomSlotDraft) => void;
+  onEdit: (slotId: string, draft: CustomSlotDraft) => void;
+  onDelete: (slotId: string) => void;
   onContent: (value: string) => void;
   onGenerate: () => void;
 }) {
@@ -290,6 +532,9 @@ export function StudioGenerateBar({
         onSelect={onSlot}
         onEnable={onEnable}
         onHide={onHide}
+        onCreate={onCreate}
+        onEdit={onEdit}
+        onDelete={onDelete}
       />
       <div className="min-w-0">
         <input

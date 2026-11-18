@@ -15,6 +15,9 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  createCustomSlot,
+  deleteCustomSlot,
+  editCustomSlot,
   enableBuiltinSlot,
   forkStyle,
   hideBuiltinSlot,
@@ -25,7 +28,7 @@ import {
   writebackStyle,
 } from "./project/ops.ts";
 import type { DnaChange } from "./project/dna.ts";
-import type { ArchiveResult } from "./project/ops.ts";
+import type { ArchiveResult, CustomSlotDraft } from "./project/ops.ts";
 import { DEFAULT_ENABLED_SLOT_IDS, normalizeProjectDocument } from "./project/schema.ts";
 import { uid } from "./utils";
 
@@ -51,6 +54,9 @@ type State = {
   setSlot: (slot: Slot) => void;
   enableBuiltinSlot: (slotId: string) => void;
   hideBuiltinSlot: (slotId: string) => void;
+  createCustomSlot: (draft: CustomSlotDraft) => void;
+  editCustomSlot: (slotId: string, draft: CustomSlotDraft) => void;
+  deleteCustomSlot: (slotId: string) => void;
   setMode: (mode: Project["mode"]) => void;
   addImageRevs: (opts: {
     styleId: string;
@@ -120,6 +126,7 @@ export const useStudio = create<State>()(
           currentStyleId: null,
           currentSlot: "kv",
           enabledSlotIds: [...DEFAULT_ENABLED_SLOT_IDS],
+          customSlots: [],
           currentImageModelId: currentImageModelId ?? "",
           phase: "direction",
           intent: null,
@@ -183,6 +190,11 @@ export const useStudio = create<State>()(
       },
       enableBuiltinSlot: (slotId) => update(set, get, (p) => enableBuiltinSlot(p, slotId)),
       hideBuiltinSlot: (slotId) => update(set, get, (p) => hideBuiltinSlot(p, slotId)),
+      createCustomSlot: (draft) =>
+        update(set, get, (p) => createCustomSlot(p, draft, { newId: uid })),
+      editCustomSlot: (slotId, draft) =>
+        update(set, get, (p) => editCustomSlot(p, slotId, draft)),
+      deleteCustomSlot: (slotId) => update(set, get, (p) => deleteCustomSlot(p, slotId)),
       setMode: (mode) => {
         const id = get().currentId;
         if (!id) return;
@@ -225,7 +237,7 @@ export const useStudio = create<State>()(
     }),
     {
       name: "keystone-v1",
-      version: 3,
+      version: 4,
       migrate: (persisted) => {
         const state = persisted as { projects?: Project[]; currentId?: string | null };
         return {

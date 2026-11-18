@@ -1,6 +1,6 @@
 import { designTokens, promptPack, promptsMarkdown } from "./dna-export.ts";
 import { adoptedRev, currentDna, type Slot, type StyleBranch } from "./schema.ts";
-import { DEFAULT_ENABLED_SLOT_IDS, slotPromptMetas } from "./slots.ts";
+import { DEFAULT_ENABLED_SLOT_IDS, slotPromptMetas, type SlotPromptMeta } from "./slots.ts";
 
 export type ExportImage = { slot: Slot; fileName: string; url: string };
 
@@ -18,6 +18,8 @@ export type ExportManifest = {
 export type ExportManifestOptions = {
   /** Enabled slot ids, in display order. Hidden slots are left out even if they still have images. */
   enabledSlotIds?: readonly string[];
+  /** Custom slot definitions so the prompt pack does not invent a name or aspect. */
+  customSlots?: readonly SlotPromptMeta[];
   /** Product name pasted into the prompt pack. Defaults to the style line's name. */
   product?: string;
 };
@@ -57,7 +59,7 @@ export function exportManifest(
   const prompts = promptsMarkdown(
     product,
     dna.name,
-    promptPack(dna, slotPromptMetas(enabledSlotIds), product),
+    promptPack(dna, slotPromptMetas(enabledSlotIds, options?.customSlots), product),
   );
   return {
     images,

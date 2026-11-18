@@ -297,7 +297,12 @@ export async function generateSlotFn(input: {
 }): Promise<ImageJobFnResult> {
   const { userId } = await requireActionUser();
   const data = input.data;
-  const prompt = slotPrompt(data.dna, data.slot, data.product, data.content);
+  const deps = await createSqlGatewayDeps();
+  const loaded = await loadProjectDocument(deps, { userId, projectId: data.projectId });
+  const custom = loaded.ok
+    ? loaded.value.document?.customSlots?.find((item) => item.id === data.slot)
+    : undefined;
+  const prompt = slotPrompt(data.dna, data.slot, data.product, data.content, custom);
   const ref =
     data.refUrl && !data.refUrl.startsWith("data:image/svg") ? data.refUrl : undefined;
   return runOwnedImageJob(userId, {

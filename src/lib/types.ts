@@ -11,6 +11,7 @@ export type {
   Asset,
   BriefIntent,
   Candidate,
+  CustomSlot,
   ImageRev,
   Project,
   Slot,

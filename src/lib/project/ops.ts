@@ -3,12 +3,13 @@ import {
   currentDna,
   emptyAsset,
   emptyAssets,
+  type CustomSlot,
   type ImageRev,
   type Project,
   type Slot,
   type StyleBranch,
 } from "./schema.ts";
-import { builtinSlot } from "./slots.ts";
+import { builtinSlot, isSlotAspect } from "./slots.ts";
 
 export type ProjectOpDeps = {
   newId?: (prefix: string) => string;
@@ -86,6 +87,98 @@ export function lockCandidate(
  * Shows a built-in slot. Appends the id when it is new and inserts an empty
  * asset on every style line that does not already have one. Existing images stay.
  */
+export type CustomSlotDraft = {
+  name: string;
+  aspect: string;
+  purpose: string;
+  extraPrompt?: string;
+};
+
+const CUSTOM_NAME_MAX = 40;
+const CUSTOM_PURPOSE_MAX = 200;
+const CUSTOM_EXTRA_MAX = 400;
+
+/** Why a custom-slot draft cannot be saved, or null when it can. */
+export function customSlotIssue(draft: CustomSlotDraft): string | null {
+  const name = draft.name.trim();
+  const purpose = draft.purpose.trim();
+  const extra = (draft.extraPrompt ?? "").trim();
+  if (name.length < 1 || name.length > CUSTOM_NAME_MAX) return "名称需要 1–40 个字";
+  if (purpose.length < 1 || purpose.length > CUSTOM_PURPOSE_MAX) return "用途说明需要 1–200 个字";
+  if (extra.length > CUSTOM_EXTRA_MAX) return "补充提示词最多 400 个字";
+  if (!isSlotAspect(draft.aspect)) return "比例只能从支持的列表里选";
+  return null;
+}
+
+function acceptedCustomFields(draft: CustomSlotDraft): Omit<CustomSlot, "id"> | null {
+  if (customSlotIssue(draft)) return null;
+  const extra = (draft.extraPrompt ?? "").trim();
+  const fields: Omit<CustomSlot, "id"> = {
+    name: draft.name.trim(),
+    aspect: draft.aspect as CustomSlot["aspect"],
+    purpose: draft.purpose.trim(),
+  };
+  if (extra) fields.extraPrompt = extra;
+  return fields;
+}
+
+function withSlotAsset(project: Project, slotId: string): StyleBranch[] {
+  return project.styles.map((style) => {
+    if (style.assets[slotId]) return style;
+    return { ...style, assets: { ...style.assets, [slotId]: emptyAsset(slotId) } };
+  });
+}
+
+/**
+ * Adds a custom slot: definition, enabled id, and an empty asset on every
+ * style line. Invalid drafts leave the project unchanged.
+ */
+export function createCustomSlot(
+  project: Project,
+  draft: CustomSlotDraft,
+  deps?: ProjectOpDeps,
+): Project {
+  const fields = acceptedCustomFields(draft);
+  if (!fields) return project;
+  const id = newId(deps, "cslot");
+  const customSlots = [...(project.customSlots ?? []), { id, ...fields }];
+  const enabledSlotIds = project.enabledSlotIds.includes(id)
+    ? project.enabledSlotIds
+    : [...project.enabledSlotIds, id];
+  return { ...project, customSlots, enabledSlotIds, styles: withSlotAsset(project, id) };
+}
+
+/** Replaces a custom slot's name, aspect, purpose, and extra prompt. The id and images stay. */
+export function editCustomSlot(project: Project, slotId: string, draft: CustomSlotDraft): Project {
+  const fields = acceptedCustomFields(draft);
+  if (!fields) return project;
+  const current = project.customSlots ?? [];
+  if (!current.some((slot) => slot.id === slotId)) return project;
+  return {
+    ...project,
+    customSlots: current.map((slot) => (slot.id === slotId ? { id: slotId, ...fields } : slot)),
+  };
+}
+
+/**
+ * Removes a custom slot's definition and takes it off the enabled list.
+ * Images stay on the style line. The current slot falls back to the first id
+ * still enabled. The last remaining slot cannot be deleted.
+ */
+export function deleteCustomSlot(project: Project, slotId: string): Project {
+  const current = project.customSlots ?? [];
+  if (!current.some((slot) => slot.id === slotId)) return project;
+  if (project.enabledSlotIds.includes(slotId) && project.enabledSlotIds.length <= 1) return project;
+  const enabledSlotIds = project.enabledSlotIds.filter((id) => id !== slotId);
+  const currentSlot = project.currentSlot === slotId ? enabledSlotIds[0] : project.currentSlot;
+  return {
+    ...project,
+    customSlots: current.filter((slot) => slot.id !== slotId),
+    enabledSlotIds,
+    currentSlot,
+  };
+}
+
 export function enableBuiltinSlot(project: Project, slotId: string): Project {
   if (!builtinSlot(slotId)) return project;
   const enabledSlotIds = project.enabledSlotIds.includes(slotId)

@@ -1376,4 +1376,79 @@ describe("slot catalog on the gateway", () => {
     const finished = await Promise.all([first, other]);
     assert.ok(finished.every((result) => result.ok));
   });
+
+  it("sends the custom slot aspect stored on the project when the client sends a different one", async () => {
+    const world = createMemoryGatewayWorld();
+    const { mode: _mode, ...raw } = sampleProject({ id: world.projectId, currentSlot: "kv" });
+    raw.customSlots = [
+      {
+        id: "cslot_tall",
+        name: "电梯海报",
+        aspect: "1:2",
+        purpose: "竖向张贴",
+        extraPrompt: "底部留白",
+      },
+    ];
+    raw.enabledSlotIds = ["kv", "cslot_tall"];
+    const saved = await world.projects.saveDocument(
+      world.projectId,
+      projectDocumentSchema.parse(raw),
+      0,
+      1,
+    );
+    assert.equal(saved.status, "saved");
+
+    const result = await runImageJob(
+      world,
+      jobInput(world, { slot: "cslot_tall", aspect: "16:9", n: 1 }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.slot, "cslot_tall");
+    assert.equal(world.calls[0]?.aspect, "1:2");
+  });
+
+  it("rejects an unknown custom slot id before reserving quota", async () => {
+    const world = createMemoryGatewayWorld();
+    const { mode: _mode, ...raw } = sampleProject({ id: world.projectId, currentSlot: "kv" });
+    raw.customSlots = [
+      { id: "cslot_tall", name: "电梯海报", aspect: "1:2", purpose: "竖向张贴" },
+    ];
+    raw.enabledSlotIds = ["kv", "cslot_tall"];
+    const saved = await world.projects.saveDocument(
+      world.projectId,
+      projectDocumentSchema.parse(raw),
+      0,
+      1,
+    );
+    assert.equal(saved.status, "saved");
+
+    const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    const missing = await runImageJob(world, jobInput(world, { slot: "cslot_missing", n: 1 }));
+    assert.equal(missing.ok, false);
+    if (missing.ok) return;
+    assert.equal(missing.code, "unknown_slot");
+    assert.equal(missing.job, undefined);
+
+    const orphan = { ...raw, enabledSlotIds: ["kv", "cslot_orphan"] };
+    const orphanSaved = await world.projects.saveDocument(
+      world.projectId,
+      projectDocumentSchema.parse(orphan),
+      1,
+      2,
+    );
+    assert.equal(orphanSaved.status, "saved");
+    const undefinedSlot = await runImageJob(
+      world,
+      jobInput(world, { slot: "cslot_orphan", aspect: "16:9", n: 1 }),
+    );
+    assert.equal(undefinedSlot.ok, false);
+    if (undefinedSlot.ok) return;
+    assert.equal(undefinedSlot.code, "unknown_slot");
+    assert.equal(undefinedSlot.job, undefined);
+    assert.equal(world.calls.length, 0);
+    assert.equal((await world.jobs.listByUser(world.userId)).length, 0);
+    const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(after.used, before.used);
+  });
 });

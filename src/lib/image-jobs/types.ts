@@ -176,7 +176,7 @@ export type RunImageJobInput = {
   /** Named material slot; direction candidates always persist as null. */
   slot?: ImageJobSlot | null;
   prompt: string;
-  /** Ignored. Slot jobs use the catalog aspect; direction jobs stay 16:9. */
+  /** Ignored. Slot jobs use the built-in catalog or the project's custom slot; direction jobs stay 16:9. */
   aspect?: string;
   n?: number;
   imageUrl?: string;

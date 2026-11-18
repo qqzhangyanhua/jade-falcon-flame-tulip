@@ -4,6 +4,9 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  createCustomSlot,
+  deleteCustomSlot,
+  editCustomSlot,
   enableBuiltinSlot,
   forkStyle,
   hideBuiltinSlot,
@@ -12,7 +15,7 @@ import {
   setStyleRev,
   writebackStyle,
 } from "./ops.ts";
-import { currentDna } from "./schema.ts";
+import { currentDna, projectDocumentSchema } from "./schema.ts";
 import { BUILTIN_SLOTS, DEFAULT_ENABLED_SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
 import { slotPrompt } from "../prompts.ts";
 import { sampleCandidate, sampleDna, sampleProject, sampleStyle } from "./fixtures.ts";
@@ -469,5 +472,209 @@ describe("enableBuiltinSlot and hideBuiltinSlot", () => {
     assert.deepEqual(next.enabledSlotIds, ["kv"]);
     assert.equal(next.currentSlot, "kv");
     assert.equal(style(next, "a").assets.kv.slot, "kv");
+  });
+});
+
+describe("createCustomSlot", () => {
+  it("appends a custom slot definition, enables it, and puts an empty asset on every style line", () => {
+    const next = createCustomSlot(
+      sampleProject(),
+      {
+        name: " 电梯海报 ",
+        aspect: "1:2",
+        purpose: " 竖向张贴 ",
+        extraPrompt: " 底部留白 ",
+      },
+      counter(),
+    );
+
+    assert.deepEqual(next.customSlots, [
+      {
+        id: "cslot_1",
+        name: "电梯海报",
+        aspect: "1:2",
+        purpose: "竖向张贴",
+        extraPrompt: "底部留白",
+      },
+    ]);
+    assert.equal(next.customSlots[0]?.id.startsWith("cslot_"), true);
+    assert.deepEqual(next.enabledSlotIds, ["ui_hero", "kv", "web_home", "cslot_1"]);
+    assert.equal(next.currentSlot, "kv");
+    for (const line of next.styles) {
+      assert.deepEqual(line.assets.cslot_1, { slot: "cslot_1", adoptedId: null, revs: [] });
+    }
+    const { mode: _mode, ...document } = next;
+    assert.equal(projectDocumentSchema.safeParse(document).success, true);
+  });
+
+  it("omits an empty extra prompt and rejects drafts outside the limits", () => {
+    const project = sampleProject();
+    const plain = createCustomSlot(
+      project,
+      { name: "贴纸", aspect: "1:1", purpose: "封口", extraPrompt: "   " },
+      counter(),
+    );
+    assert.equal("extraPrompt" in (plain.customSlots[0] ?? {}), false);
+
+    const atLimit = createCustomSlot(
+      project,
+      {
+        name: "a".repeat(40),
+        aspect: "9:20",
+        purpose: "b".repeat(200),
+        extraPrompt: "c".repeat(400),
+      },
+      counter(),
+    );
+    assert.equal(atLimit.customSlots[0]?.name.length, 40);
+    assert.equal(atLimit.customSlots[0]?.purpose.length, 200);
+    assert.equal(atLimit.customSlots[0]?.extraPrompt?.length, 400);
+    assert.equal(atLimit.customSlots[0]?.aspect, "9:20");
+
+    const rejected = [
+      { name: "", aspect: "1:1", purpose: "封口" },
+      { name: "   ", aspect: "1:1", purpose: "封口" },
+      { name: "a".repeat(41), aspect: "1:1", purpose: "封口" },
+      { name: "贴纸", aspect: "1:1", purpose: "" },
+      { name: "贴纸", aspect: "1:1", purpose: "b".repeat(201) },
+      { name: "贴纸", aspect: "1:1", purpose: "封口", extraPrompt: "c".repeat(401) },
+      { name: "贴纸", aspect: "auto", purpose: "封口" },
+      { name: "贴纸", aspect: "7:1", purpose: "封口" },
+    ];
+    for (const draft of rejected) {
+      assert.equal(createCustomSlot(project, draft, counter()), project);
+    }
+  });
+});
+
+describe("editCustomSlot", () => {
+  it("updates the definition and keeps the id and existing images", () => {
+    const created = createCustomSlot(
+      sampleProject(),
+      { name: "电梯海报", aspect: "1:2", purpose: "竖向张贴", extraPrompt: "底部留白" },
+      counter(),
+    );
+    const id = created.customSlots[0]?.id ?? "";
+    const added = addImageRevs(
+      created,
+      {
+        styleId: "a",
+        slot: id,
+        urls: ["/api/images/tall"],
+        action: "generate",
+        diff: "电梯",
+        parentId: null,
+      },
+      counter(),
+    );
+    const edited = editCustomSlot(added.project, id, {
+      name: " 门厅海报 ",
+      aspect: "9:16",
+      purpose: " 入户展示 ",
+      extraPrompt: "",
+    });
+
+    assert.deepEqual(edited.customSlots, [
+      { id, name: "门厅海报", aspect: "9:16", purpose: "入户展示" },
+    ]);
+    assert.equal("extraPrompt" in (edited.customSlots[0] ?? {}), false);
+    assert.deepEqual(edited.enabledSlotIds, created.enabledSlotIds);
+    assert.equal(edited.currentSlot, "kv");
+    assert.equal(style(edited, "a").assets[id]?.revs[0]?.url, "/api/images/tall");
+    assert.equal(style(edited, "a").assets[id]?.adoptedId, added.ids[0]);
+    assert.equal(style(edited, "b").assets[id]?.revs.length, 0);
+  });
+
+  it("leaves the project unchanged when the id is unknown or the draft is invalid", () => {
+    const created = createCustomSlot(
+      sampleProject(),
+      { name: "电梯海报", aspect: "1:2", purpose: "竖向张贴" },
+      counter(),
+    );
+    const id = created.customSlots[0]?.id ?? "";
+    assert.equal(
+      editCustomSlot(created, "cslot_missing", { name: "别的", aspect: "1:1", purpose: "别的用途" }),
+      created,
+    );
+    assert.equal(
+      editCustomSlot(created, id, { name: "", aspect: "16:9", purpose: "竖向张贴" }),
+      created,
+    );
+    assert.equal(created.customSlots[0]?.aspect, "1:2");
+  });
+});
+
+describe("deleteCustomSlot", () => {
+  it("drops the definition and the enabled id but keeps the images", () => {
+    const created = createCustomSlot(
+      sampleProject(),
+      { name: "电梯海报", aspect: "1:2", purpose: "竖向张贴" },
+      counter(),
+    );
+    const id = created.customSlots[0]?.id ?? "";
+    const added = addImageRevs(
+      { ...created, currentSlot: id },
+      {
+        styleId: "a",
+        slot: id,
+        urls: ["/api/images/tall"],
+        action: "generate",
+        diff: "电梯",
+        parentId: null,
+      },
+      counter(),
+    );
+    const deleted = deleteCustomSlot(added.project, id);
+
+    assert.deepEqual(deleted.customSlots, []);
+    assert.deepEqual(deleted.enabledSlotIds, ["ui_hero", "kv", "web_home"]);
+    assert.equal(deleted.enabledSlotIds.includes(id), false);
+    assert.equal(deleted.currentSlot, "ui_hero");
+    assert.equal(style(deleted, "a").assets[id]?.revs[0]?.url, "/api/images/tall");
+    assert.equal(style(deleted, "b").assets[id]?.revs.length, 0);
+  });
+
+  it("refuses to delete the last enabled slot or an unknown id", () => {
+    const only = sampleProject({
+      enabledSlotIds: ["cslot_only"],
+      currentSlot: "cslot_only",
+      customSlots: [{ id: "cslot_only", name: "只剩", aspect: "1:1", purpose: "唯一" }],
+    });
+    assert.equal(deleteCustomSlot(only, "cslot_only"), only);
+    const project = sampleProject();
+    assert.equal(deleteCustomSlot(project, "cslot_missing"), project);
+  });
+});
+
+describe("custom slot prompt", () => {
+  it("uses one generic template plus the name, purpose, and extra prompt", () => {
+    const dna = sampleDna();
+    const tall = slotPrompt(dna, "cslot_1", "Northwind", "春季", {
+      name: "竖条海报",
+      purpose: "电梯间张贴",
+      extraPrompt: "留出底部二维码",
+    });
+    const sticker = slotPrompt(dna, "cslot_2", "Northwind", "春季", {
+      name: "方形贴纸",
+      purpose: "包装封口",
+    });
+
+    assert.equal(
+      tall.startsWith(
+        'Custom brand deliverable "竖条海报" for "Northwind". Purpose: 电梯间张贴. 留出底部二维码',
+      ),
+      true,
+    );
+    assert.equal(
+      sticker.startsWith('Custom brand deliverable "方形贴纸" for "Northwind". Purpose: 包装封口.'),
+      true,
+    );
+    assert.equal(sticker.includes("留出底部二维码"), false);
+    assert.equal(tall.includes("方形贴纸"), false);
+    assert.match(tall, /Headline \/ offer: "春季"/);
+    assert.match(tall, /Visual system: calm blue interface/);
+    assert.equal(tall.includes("Brand key visual poster"), false);
+    assert.equal(sticker.includes("centered graphic symbol"), false);
+    assert.equal(sticker.includes("Website homepage hero"), false);
   });
 });

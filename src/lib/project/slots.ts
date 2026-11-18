@@ -19,6 +19,10 @@ export const SUPPORTED_ASPECTS = [
 
 export type SlotAspect = (typeof SUPPORTED_ASPECTS)[number];
 
+export function isSlotAspect(value: string): value is SlotAspect {
+  return (SUPPORTED_ASPECTS as readonly string[]).includes(value);
+}
+
 export type BuiltinSlot = {
   id: string;
   name: string;
@@ -132,17 +136,49 @@ export function builtinSlot(id: string): BuiltinSlot | undefined {
   return BUILTIN_SLOTS.find((slot) => slot.id === id);
 }
 
+/** One lead for every custom slot. Not a per-id branch. */
+export const CUSTOM_SLOT_PROMPT_LEAD =
+  'Custom brand deliverable "{name}" for "{product}". Purpose: {purpose}.';
+
+export function customSlotPromptLead(
+  slot: { name: string; purpose: string; extraPrompt?: string },
+  product: string,
+): string {
+  const lead = CUSTOM_SLOT_PROMPT_LEAD.replaceAll("{name}", slot.name)
+    .replaceAll("{product}", product)
+    .replaceAll("{purpose}", slot.purpose);
+  const extra = slot.extraPrompt?.trim();
+  return extra ? `${lead} ${extra}` : lead;
+}
+
 export function catalogAspect(id: string): string | undefined {
   return builtinSlot(id)?.aspect;
 }
 
-export type SlotPromptMeta = { id: string; name: string; aspect: string; purpose: string };
+export type SlotPromptMeta = {
+  id: string;
+  name: string;
+  aspect: string;
+  purpose: string;
+  extraPrompt?: string;
+};
 
-/** Catalog name, aspect and purpose. An unknown id keeps its id as the name. */
-export function slotPromptMetas(ids: readonly string[]): SlotPromptMeta[] {
+/** Catalog or custom-slot name, aspect and purpose. An unknown id keeps its id as the name. */
+export function slotPromptMetas(
+  ids: readonly string[],
+  customSlots: readonly SlotPromptMeta[] = [],
+): SlotPromptMeta[] {
   return ids.map((id) => {
     const slot = builtinSlot(id);
-    if (!slot) return { id, name: id, aspect: "1:1", purpose: "" };
-    return { id: slot.id, name: slot.name, aspect: slot.aspect, purpose: slot.purpose };
+    if (slot) return { id: slot.id, name: slot.name, aspect: slot.aspect, purpose: slot.purpose };
+    const custom = customSlots.find((item) => item.id === id);
+    if (!custom) return { id, name: id, aspect: "1:1", purpose: "" };
+    return {
+      id: custom.id,
+      name: custom.name,
+      aspect: custom.aspect,
+      purpose: custom.purpose,
+      ...(custom.extraPrompt ? { extraPrompt: custom.extraPrompt } : {}),
+    };
   });
 }

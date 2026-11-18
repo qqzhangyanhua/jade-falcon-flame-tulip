@@ -3,6 +3,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { ConsistencyBadge } from "@/components/color-consistency-badge";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
+import { paletteOfDna } from "@/lib/project/dna-export";
 import { useStudio } from "@/lib/store";
 
 export function DirectionView() {
@@ -86,6 +88,14 @@ export function DirectionView() {
                       )}
                     </div>
                   )}
+                  {c.url ? (
+                    <ConsistencyBadge
+                      className="absolute inset-x-2 bottom-2 z-10"
+                      url={c.url}
+                      palette={paletteOfDna(c.dna)}
+                      offerTune={false}
+                    />
+                  ) : null}
                   <div className="absolute left-3 top-3 flex gap-1.5">
                     {Object.values(c.dna.colors)
                       .slice(0, 5)

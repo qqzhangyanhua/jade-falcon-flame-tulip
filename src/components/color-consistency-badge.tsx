@@ -129,6 +129,7 @@ function ScoreChip({
   onLikeStyle,
   disabled,
   disabledReason,
+  offerTune,
   className,
 }: {
   url: string;
@@ -136,6 +137,7 @@ function ScoreChip({
   onLikeStyle: () => void;
   disabled: boolean;
   disabledReason: string | null;
+  offerTune: boolean;
   className?: string;
 }) {
   const score = useConsistencyScore(url, palette.join("\n"));
@@ -149,7 +151,7 @@ function ScoreChip({
       >
         色彩一致性 {score}
       </span>
-      {score < LOW_SCORE ? (
+      {offerTune && score < LOW_SCORE ? (
         <Button
           type="button"
           size="sm"
@@ -163,6 +165,38 @@ function ScoreChip({
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/** Score chip only. The score stays in memory; a failed pixel read renders nothing. */
+export function ConsistencyBadge({
+  url,
+  palette,
+  onLikeStyle,
+  disabled = false,
+  disabledReason = null,
+  offerTune = true,
+  className,
+}: {
+  url: string;
+  palette: readonly string[] | null;
+  onLikeStyle?: () => void;
+  disabled?: boolean;
+  disabledReason?: string | null;
+  offerTune?: boolean;
+  className?: string;
+}) {
+  if (!palette || palette.length === 0) return null;
+  return (
+    <ScoreChip
+      className={className}
+      url={url}
+      palette={palette}
+      onLikeStyle={onLikeStyle ?? (() => {})}
+      disabled={disabled}
+      disabledReason={disabledReason}
+      offerTune={offerTune && Boolean(onLikeStyle)}
+    />
   );
 }
 
@@ -195,7 +229,7 @@ export function ConsistencyImage({
       </div>
       {palette && box ? (
         <div className="pointer-events-none absolute" style={box}>
-          <ScoreChip
+          <ConsistencyBadge
             className="pointer-events-auto absolute inset-x-2 bottom-2"
             url={url}
             palette={palette}

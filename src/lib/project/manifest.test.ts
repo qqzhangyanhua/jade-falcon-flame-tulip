@@ -115,10 +115,11 @@ describe("exportManifest", () => {
     assert.equal(latest.tokens.tailwind.fileName, "tailwind.css");
     assert.equal(latest.tokens.w3c.fileName, "tokens.json");
     assert.equal(latest.prompts.fileName, "prompts.md");
-    assert.match(latest.tokens.css.content, /--radius: 0px;/);
+    assert.match(latest.tokens.css.content, /--radius-md: 0px;/);
     assert.match(latest.tokens.css.content, /--color-primary: #112233;/);
     assert.match(latest.tokens.tailwind.content, /@theme \{/);
-    assert.match(latest.tokens.tailwind.content, /--spacing: 16px;/);
+    assert.match(latest.tokens.tailwind.content, /--spacing-brand: 16px;/);
+    assert.doesNotMatch(latest.tokens.tailwind.content, /--spacing:/);
     assert.match(latest.tokens.w3c.content, /"\$type": "fontFamily"/);
     assert.match(latest.tokens.w3c.content, /#112233/);
     assert.match(latest.prompts.content, /云栖/);
@@ -127,7 +128,7 @@ describe("exportManifest", () => {
 
     project = setStyleRev(project, "a", 1);
     const first = exportManifest(styleA(project), { product: "云栖" });
-    assert.match(first.tokens.css.content, /--radius: 8px;/);
+    assert.match(first.tokens.css.content, /--radius-md: 8px;/);
     assert.match(first.tokens.css.content, /--color-primary: #4f7cff;/);
     assert.doesNotMatch(first.tokens.css.content, /#112233/);
     assert.doesNotMatch(first.prompts.content, /#112233/);

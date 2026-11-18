@@ -2,7 +2,7 @@
 
 import { requireActionUser } from "@/lib/auth/session";
 import { getSql } from "@/lib/db";
-import { readImageForUserByUrl } from "@/lib/image-jobs/image-access";
+import { readImageForUserByUrl, selectReferenceUploadBytes } from "@/lib/image-jobs/image-access";
 import { createSqlBlobStore } from "@/lib/image-jobs/sql";
 import { MAX_REFERENCE_IMAGES } from "@/lib/project/schema";
 import {
@@ -46,10 +46,11 @@ export async function referenceDirectionFn(input: {
         .slice(0, MAX_REFERENCE_IMAGES)
     : [];
   const blobs = createSqlBlobStore(await getSql());
-  const images: Uint8Array[] = [];
+  const loaded: Awaited<ReturnType<typeof readImageForUserByUrl>>[] = [];
   for (const url of urls) {
-    const blob = await readImageForUserByUrl(blobs, url, userId);
-    if (blob) images.push(blob.bytes);
+    loaded.push(await readImageForUserByUrl(blobs, url, userId));
   }
-  return referenceDirectionWithModel(images, intent.data);
+  const selected = selectReferenceUploadBytes(loaded);
+  if (!selected.ok) return selected;
+  return referenceDirectionWithModel(selected.images, intent.data);
 }

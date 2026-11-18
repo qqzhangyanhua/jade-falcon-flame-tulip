@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BookOpen, Copy, Download, Loader2, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
+import { brandGuideHref } from "@/lib/project/brand-guide-access";
 import { designTokens, formatPromptPack, promptPack } from "@/lib/project/dna-export";
 import { buildExportZip, extensionOfContentType } from "@/lib/project/export-zip";
 import { exportManifest } from "@/lib/project/manifest";
@@ -60,13 +61,15 @@ export function StudioDownloadLink({ url, slot }: { url: string | undefined; slo
 export function StudioBrandGuideLink({
   projectId,
   styleId,
+  rev,
 }: {
   projectId: string;
   styleId: string;
+  rev: number;
 }) {
   return (
     <Link
-      href={`/guide/${encodeURIComponent(projectId)}/${encodeURIComponent(styleId)}`}
+      href={brandGuideHref(projectId, styleId, rev)}
       className={iconButton}
       aria-label="品牌规范"
       title="打开品牌规范"

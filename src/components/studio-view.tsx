@@ -32,6 +32,7 @@ import { Wordmark } from "@/components/wordmark";
 import { composeImageFn, generateSlotFn, tuneImageFn } from "@/app/actions/studio";
 import { mergeStyleInstructionFn } from "@/app/actions/writeback";
 import type { DnaChange } from "@/lib/project/dna";
+import { paletteForStyleRev } from "@/lib/project/dna-export";
 import { messageForMergeError } from "@/lib/style-ai/shared";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
@@ -68,7 +69,10 @@ export function StudioView() {
   }>(null);
   const [merging, setMerging] = useState(false);
   const [sliders, setSliders] = useState({ brightness: 50, warmth: 50, contrast: 50 });
-  const [beforeUrl, setBeforeUrl] = useState<string | null>(null);
+  const [beforeFrame, setBeforeFrame] = useState<{
+    url: string;
+    palette: readonly string[] | null;
+  } | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
 
   const style = project?.styles.find((s) => s.id === project.currentStyleId) ?? null;
@@ -221,7 +225,10 @@ export function StudioView() {
     tuneDna: StyleDna | null = dna,
   ) {
     if (!project || !style || !tuneDna || !currentImg) return;
-    setBeforeUrl(currentImg.url);
+    setBeforeFrame({
+      url: currentImg.url,
+      palette: paletteForStyleRev(style.revs, currentImg.styleRev),
+    });
     setMode("generating");
     await flushDocument();
     setBusyLabel(action === "compose" ? "换构图中" : "微调中");
@@ -318,7 +325,7 @@ export function StudioView() {
             enabledSlotIds={project.enabledSlotIds}
             customSlots={customSlots}
           />
-          <StudioBrandGuideLink projectId={project.id} styleId={style.id} />
+          <StudioBrandGuideLink projectId={project.id} styleId={style.id} rev={style.currentRev} />
           <StudioExportButton
             projectName={project.name}
             product={product}
@@ -431,26 +438,28 @@ export function StudioView() {
               <div
                 className={cn(
                   "grid gap-3 md:h-full",
-                  (beforeUrl || pair.length > 1) && "md:grid-cols-2",
+                  (beforeFrame || pair.length > 1) && "md:grid-cols-2",
                 )}
               >
-                {beforeUrl ? (
+                {beforeFrame ? (
                   <figure className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-surface shadow-border">
                     <figcaption className="border-b border-border px-3 py-2 text-xs text-subtle">
                       改前
                     </figcaption>
-                    <div className="grid min-h-0 flex-1 place-items-center p-3">
-                      <img
-                        src={beforeUrl}
-                        alt="改前"
-                        className="frame max-h-full max-w-full object-contain"
-                      />
-                    </div>
+                    <ConsistencyImage
+                      url={beforeFrame.url}
+                      alt="改前"
+                      palette={beforeFrame.palette}
+                      disabled={generating || tuneBlocked}
+                      disabledReason={imageGate?.actions.tune.reason ?? null}
+                      onLikeStyle={() => {
+                        if (!likeTune) return;
+                        void runTune(likeTune.instruction, false, likeTune.action);
+                      }}
+                    />
                   </figure>
                 ) : null}
                 {pair.map((rev, i) => {
-                  // Stamped when the image was made. Later style revs must not rescore it.
-                  const recorded = style.revs.find((record) => record.rev === rev.styleRev);
                   return (
                     <figure
                       key={rev.id}
@@ -474,7 +483,7 @@ export function StudioView() {
                       <ConsistencyImage
                         url={rev.url}
                         alt={`变体 ${i + 1}`}
-                        palette={recorded ? Object.values(recorded.dna.colors) : null}
+                        palette={paletteForStyleRev(style.revs, rev.styleRev)}
                         disabled={generating || tuneBlocked}
                         disabledReason={imageGate?.actions.tune.reason ?? null}
                         onLikeStyle={() => {

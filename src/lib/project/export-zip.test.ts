@@ -87,7 +87,7 @@ describe("buildExportZip", () => {
     assert.deepEqual(files["web_home.png"], PNG);
     assert.equal(JSON.parse(strFromU8(files["dna.json"])).name, "风格 a");
     assert.match(strFromU8(files["tokens.css"]), /--color-bg: #0b1020;/);
-    assert.match(strFromU8(files["tokens.css"]), /--radius: 8px;/);
+    assert.match(strFromU8(files["tokens.css"]), /--radius-md: 8px;/);
     assert.match(strFromU8(files["tailwind.css"]), /@theme \{/);
     assert.match(strFromU8(files["tokens.json"]), /"\$type": "dimension"/);
     assert.match(strFromU8(files["prompts.md"]), / --ar 16:9 --no 霓虹, neon/);
@@ -143,7 +143,7 @@ describe("buildExportZip", () => {
     assert.match(strFromU8(files["prompts.md"]), /品牌主视觉/);
     assert.match(strFromU8(files["prompts.md"]), /云栖/);
     assert.doesNotMatch(strFromU8(files["prompts.md"]), /官网首屏/);
-    assert.match(strFromU8(files["tokens.css"]), /--font-family: system-ui, sans-serif;/);
+    assert.match(strFromU8(files["tokens.css"]), /--font-sans: system-ui, sans-serif;/);
   });
 
   it("rejects when no slot has an image", async () => {

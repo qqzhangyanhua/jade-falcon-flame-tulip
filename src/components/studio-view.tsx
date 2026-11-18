@@ -12,28 +12,19 @@ import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
 import { StudioDownloadLink, StudioExportButton } from "@/components/studio-export";
 import { StyleLineActions } from "@/components/style-line-actions";
-import { StudioGenerateBar, StudioTunePanel } from "@/components/studio-tools";
+import { ConsistencyImage } from "@/components/color-consistency-badge";
+import { StudioGenerateBar, StudioTunePanel, TUNE_PRESETS } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { Wordmark } from "@/components/wordmark";
-import {
-  composeImageFn,
-  generateSlotFn,
-  tuneImageFn,
-} from "@/app/actions/studio";
+import { composeImageFn, generateSlotFn, tuneImageFn } from "@/app/actions/studio";
 import { mergeStyleInstructionFn } from "@/app/actions/writeback";
 import type { DnaChange } from "@/lib/project/dna";
 import { messageForMergeError } from "@/lib/style-ai/shared";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { useStudio } from "@/lib/store";
-import {
-  SLOTS,
-  adoptedRev,
-  currentDna,
-  type Slot,
-  type StyleDna,
-} from "@/lib/types";
+import { SLOTS, adoptedRev, currentDna, type Slot, type StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function StudioView() {
@@ -70,6 +61,8 @@ export function StudioView() {
   const generating = project?.mode === "generating" || merging;
   const generateBlocked = Boolean(imageGate && !imageGate.actions.generate.enabled);
   const generateReason = imageGate?.actions.generate.reason ?? null;
+  const likeTune = TUNE_PRESETS.find((preset) => preset.id === "like");
+  const tuneBlocked = Boolean(imageGate && !imageGate.actions.tune.enabled);
 
   const pair = useMemo(() => {
     if (!asset) return [];
@@ -221,7 +214,11 @@ export function StudioView() {
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
       <header className="grid min-h-16 shrink-0 grid-cols-[auto_1fr] items-center gap-3 border-b border-border px-3 py-2 md:grid-cols-[auto_minmax(0,1fr)_auto] md:px-4">
-        <button type="button" className="min-h-11 text-left" onClick={() => useStudio.setState({ currentId: null })}>
+        <button
+          type="button"
+          className="min-h-11 text-left"
+          onClick={() => useStudio.setState({ currentId: null })}
+        >
           <Wordmark />
         </button>
         <div className="hidden min-w-0 items-center gap-2 overflow-x-auto md:flex">
@@ -301,7 +298,11 @@ export function StudioView() {
                     title={s.name}
                   >
                     {s.candidateUrl ? (
-                      <img src={s.candidateUrl} alt={s.name} className="frame h-14 w-20 object-cover" />
+                      <img
+                        src={s.candidateUrl}
+                        alt={s.name}
+                        className="frame h-14 w-20 object-cover"
+                      />
                     ) : (
                       <span className="block h-14 w-20 bg-surface-2" />
                     )}
@@ -322,7 +323,9 @@ export function StudioView() {
                   onClick={() => setSlot(s.id)}
                   className={cn(
                     "rounded-md px-3 py-2.5 text-left transition-colors duration-150",
-                    slot === s.id ? "bg-surface-2 text-fg" : "text-muted hover:bg-surface hover:text-fg",
+                    slot === s.id
+                      ? "bg-surface-2 text-fg"
+                      : "text-muted hover:bg-surface hover:text-fg",
                   )}
                 >
                   <span className="text-sm">{s.label}</span>
@@ -334,10 +337,7 @@ export function StudioView() {
         </aside>
 
         <section
-          className={cn(
-            "flex min-w-0 flex-1 flex-col",
-            mobile === "history" && "hidden md:flex",
-          )}
+          className={cn("flex min-w-0 flex-1 flex-col", mobile === "history" && "hidden md:flex")}
         >
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:hidden">
             <p className="min-w-0 flex-1 truncate text-sm text-fg">{product}</p>
@@ -352,7 +352,12 @@ export function StudioView() {
             />
           </div>
 
-          <div className={cn("relative min-h-0 flex-1 overflow-auto p-4", mobile !== "canvas" && "hidden md:block")}>
+          <div
+            className={cn(
+              "relative min-h-0 flex-1 overflow-auto p-4",
+              mobile !== "canvas" && "hidden md:block",
+            )}
+          >
             {pair.length === 0 && !currentImg ? (
               <div className="flex h-full min-h-72 flex-col items-center justify-center rounded-lg bg-surface text-center shadow-border">
                 <ImageIcon className="mb-4 size-6 text-subtle" />
@@ -360,40 +365,68 @@ export function StudioView() {
                 <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted">
                   选物料槽，填一句内容，出两张变体。
                 </p>
-                {generateReason ? <p className="mt-3 text-xs text-danger">{generateReason}</p> : null}
+                {generateReason ? (
+                  <p className="mt-3 text-xs text-danger">{generateReason}</p>
+                ) : null}
               </div>
             ) : (
-              <div className={cn("grid gap-3 md:h-full", (beforeUrl || pair.length > 1) && "md:grid-cols-2")}>
+              <div
+                className={cn(
+                  "grid gap-3 md:h-full",
+                  (beforeUrl || pair.length > 1) && "md:grid-cols-2",
+                )}
+              >
                 {beforeUrl ? (
                   <figure className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-surface shadow-border">
-                    <figcaption className="border-b border-border px-3 py-2 text-xs text-subtle">改前</figcaption>
+                    <figcaption className="border-b border-border px-3 py-2 text-xs text-subtle">
+                      改前
+                    </figcaption>
                     <div className="grid min-h-0 flex-1 place-items-center p-3">
-                      <img src={beforeUrl} alt="改前" className="frame max-h-full max-w-full object-contain" />
+                      <img
+                        src={beforeUrl}
+                        alt="改前"
+                        className="frame max-h-full max-w-full object-contain"
+                      />
                     </div>
                   </figure>
                 ) : null}
-                {pair.map((rev, i) => (
-                  <figure key={rev.id} className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-surface shadow-border">
-                    <figcaption className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-subtle">
-                      <span className="truncate">
-                        {rev.diff} · rev{rev.styleRev}
-                        {asset?.adoptedId === rev.id ? " · 采用" : ""}
-                      </span>
-                      {asset?.adoptedId !== rev.id ? (
-                        <button
-                          type="button"
-                          className="h-8 shrink-0 rounded-md px-2 text-sm text-fg hover:bg-surface-2"
-                          onClick={() => adoptImage(style.id, slot, rev.id)}
-                        >
-                          采用
-                        </button>
-                      ) : null}
-                    </figcaption>
-                    <div className="grid min-h-0 flex-1 place-items-center p-3">
-                      <img src={rev.url} alt={`变体 ${i + 1}`} className="frame max-h-full max-w-full object-contain" />
-                    </div>
-                  </figure>
-                ))}
+                {pair.map((rev, i) => {
+                  // Stamped when the image was made. Later style revs must not rescore it.
+                  const recorded = style.revs.find((record) => record.rev === rev.styleRev);
+                  return (
+                    <figure
+                      key={rev.id}
+                      className="flex min-h-0 flex-col overflow-hidden rounded-lg bg-surface shadow-border"
+                    >
+                      <figcaption className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-xs text-subtle">
+                        <span className="truncate">
+                          {rev.diff} · rev{rev.styleRev}
+                          {asset?.adoptedId === rev.id ? " · 采用" : ""}
+                        </span>
+                        {asset?.adoptedId !== rev.id ? (
+                          <button
+                            type="button"
+                            className="h-8 shrink-0 rounded-md px-2 text-sm text-fg hover:bg-surface-2"
+                            onClick={() => adoptImage(style.id, slot, rev.id)}
+                          >
+                            采用
+                          </button>
+                        ) : null}
+                      </figcaption>
+                      <ConsistencyImage
+                        url={rev.url}
+                        alt={`变体 ${i + 1}`}
+                        palette={recorded ? Object.values(recorded.dna.colors) : null}
+                        disabled={generating || tuneBlocked}
+                        disabledReason={imageGate?.actions.tune.reason ?? null}
+                        onLikeStyle={() => {
+                          if (!likeTune) return;
+                          void runTune(likeTune.instruction, false, likeTune.action);
+                        }}
+                      />
+                    </figure>
+                  );
+                })}
               </div>
             )}
             {generating ? (
@@ -414,7 +447,9 @@ export function StudioView() {
                 hasImage={Boolean(currentImg)}
                 sliders={sliders}
                 onSlider={(key, value) => setSliders((s) => ({ ...s, [key]: value }))}
-                onTune={(instruction, writeback, action) => void runTune(instruction, writeback, action)}
+                onTune={(instruction, writeback, action) =>
+                  void runTune(instruction, writeback, action)
+                }
               />
             </div>
           ) : null}
@@ -461,15 +496,18 @@ export function StudioView() {
 
       {confirmWrite ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-fg/40 p-4 md:place-items-center">
-          <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-surface p-6 shadow-border">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-xl bg-surface p-6 shadow-border"
+          >
             <h2 className="font-display text-2xl tracking-tight">写回风格？</h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              会基于 rev{confirmWrite.fromRev} 生成新的风格版本，影响这条风格线以后出的新图。已采用的图不会自动变。
+              会基于 rev{confirmWrite.fromRev}{" "}
+              生成新的风格版本，影响这条风格线以后出的新图。已采用的图不会自动变。
             </p>
             <div className="mt-4 max-h-64 overflow-y-auto rounded-md bg-bg p-3 shadow-border">
-              <p className="mb-2 section-label">
-                将改动 {confirmWrite.changes.length} 个字段
-              </p>
+              <p className="mb-2 section-label">将改动 {confirmWrite.changes.length} 个字段</p>
               <DnaChangeList changes={confirmWrite.changes} />
             </div>
             <div className="mt-6 flex gap-2">

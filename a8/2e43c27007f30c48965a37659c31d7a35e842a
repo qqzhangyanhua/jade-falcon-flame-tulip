@@ -1,0 +1,61 @@
+src/components/landing-screen.tsx
+  s_75f988874252b6::t_59df7bb9fefb75 2,4,6-8,12,23,25,34-36,39,41,46,48,56-62,64-75,77-79,81-88,90-92,94-95,100,102-134,136,138-153,155-157,162-172,174-179,183,185-230,236-237,239-265,271-277,280-281,283,285-289,291-293,295-297,299,304,306-309,314,316-318,322-327,329-333,336-344
+src/components/quota-meter.tsx
+  s_75f988874252b6::t_29fad6dd6d5b24 13-18,30,37-40
+src/app/error.tsx
+  s_75f988874252b6::t_d98bb5131ea209 15-16,19-20
+src/app/globals.css
+  s_75f988874252b6::t_9e803da48def96 8-22,24-26,70,74,80,84-166,168-212,215-217,219-273,275-284,288-338,347-354
+src/app/layout.tsx
+  s_75f988874252b6::t_7ef5f21607008a 20
+src/app/not-found.tsx
+  s_75f988874252b6::t_9dcd5e0f1e1f89 7,10
+src/app/providers.tsx
+  s_75f988874252b6::t_4bfc50e5983638 18
+src/components/account-screen.tsx
+  s_75f988874252b6::t_8f822836134226 94,238
+src/components/atmosphere-grid.tsx
+  s_75f988874252b6::t_45670a463681f3 6
+src/components/brief-view.tsx
+  s_75f988874252b6::t_3a9d81c9b34d4b 188,233
+src/components/catalog-screen.tsx
+  s_75f988874252b6::t_67bf93b3fd2907 87
+src/components/direction-view.tsx
+  s_75f988874252b6::t_a88c8b97d1e279 51
+src/components/job-history-view.tsx
+  s_75f988874252b6::t_c9f32f915b5e44 80
+src/components/landing-data.ts
+  s_75f988874252b6::t_80c1927abef4ce 1-72
+src/components/landing-showcase.tsx
+  s_75f988874252b6::t_0c8b59ebbd4786 1-152
+src/components/login-screen.tsx
+  s_75f988874252b6::t_e385e13f17c079 3,36-39
+src/components/recent-projects.tsx
+  s_75f988874252b6::t_ba93dc52f974eb 59
+src/components/studio-panels.tsx
+  s_75f988874252b6::t_b48b9f8947ed88 11
+src/components/studio-view.tsx
+  s_75f988874252b6::t_a1e64fca7fa5f0 292,315,463,470
+src/components/style-line-actions.tsx
+  s_75f988874252b6::t_6b66d7fd13fbce 43
+src/components/ui/button.tsx
+  s_75f988874252b6::t_fee328ef8ee2e9 5,7-9,31
+src/lib/auth/gates.tsx
+  s_75f988874252b6::t_ebc3eec6f23def 79,81,116
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "development:1.6.23",
+  "base_commit_sha": "a82e43c27007f30c48965a37659c31d7a35e842a",
+  "prompts": {},
+  "sessions": {
+    "s_75f988874252b6": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "20ec3105-4a96-4a0f-a1a1-a162eecdbc59",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "张艳华 <939593210@qq.com>"
+    }
+  }
+}

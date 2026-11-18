@@ -46,7 +46,7 @@ export function JobHistoryView() {
     return (
       <div className="min-h-dvh bg-bg">
         <AppHeader />
-        <main className="mx-auto max-w-2xl px-5 py-10">
+        <main className="mx-auto max-w-6xl px-5 py-10 md:px-8">
           <div className="h-8 w-40 animate-pulse rounded-md bg-surface-2" />
           <div className="mt-6 h-48 animate-pulse rounded-xl bg-surface" />
         </main>
@@ -75,10 +75,12 @@ export function JobHistoryView() {
   return (
     <div className="min-h-dvh bg-bg">
       <AppHeader />
-      <main className="mx-auto flex max-w-2xl flex-col gap-6 px-5 pb-16 pt-6">
-        <div>
+      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-5 pb-20 pt-8 md:px-8 md:pt-12">
+        <div className="max-w-2xl">
           <p className="section-label">作业</p>
-          <h1 className="mt-2 font-display text-3xl tracking-tight text-fg">我的作业历史</h1>
+          <h1 className="mt-3 font-display text-4xl leading-none tracking-tight text-fg md:text-5xl">
+            我的作业历史
+          </h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             只列你自己的出图作业，按时间倒序。模型名是当时写下的快照；「已停用」看当前目录。
           </p>
@@ -100,22 +102,24 @@ export function JobHistoryView() {
                 : "已删除";
               const thumb = job.projectAlive ? job.imageUrls[0] : undefined;
               const body = (
-                <span className="flex items-start gap-3">
+                <span className="flex items-start gap-3 md:items-center md:gap-4">
                   {thumb ? (
                     <img
                       src={thumb}
                       alt=""
-                      className="h-12 w-16 shrink-0 rounded-md border border-border object-cover"
+                      className="h-12 w-16 shrink-0 rounded-md border border-border object-cover md:h-16 md:w-24"
                     />
                   ) : (
-                    <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md border border-border bg-surface-2 text-[10px] text-subtle">
+                    <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md md:h-16 md:w-24 border border-border bg-surface-2 text-[10px] text-subtle">
                       {job.projectAlive ? "无图" : "已删除"}
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center justify-between gap-3">
                       <span className="truncate font-medium text-fg">{projectName}</span>
-                      <time className="shrink-0 text-xs text-subtle">{formatJobTime(job.createdAt)}</time>
+                      <time className="shrink-0 text-xs text-subtle">
+                        {formatJobTime(job.createdAt)}
+                      </time>
                     </span>
                     <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                       <span>{slotLabel(job.slot)}</span>

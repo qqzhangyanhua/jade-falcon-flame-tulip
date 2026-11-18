@@ -180,7 +180,7 @@ export function BriefView() {
         }
       />
 
-      <main className="mx-auto w-full max-w-6xl px-5 pb-20 pt-8 md:pt-14">
+      <main className="mx-auto w-full max-w-6xl px-5 pb-20 pt-8 md:px-8 md:pt-14">
         <LocalMigrationPrompt className="mb-8" />
         <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-16">
           <section className="order-2 space-y-8 lg:order-1">

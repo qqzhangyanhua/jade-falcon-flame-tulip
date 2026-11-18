@@ -70,7 +70,7 @@ export function CatalogScreen() {
     return (
       <div className="min-h-dvh bg-bg">
         <AppHeader />
-        <main className="mx-auto max-w-2xl px-5 py-10">
+        <main className="mx-auto max-w-6xl px-5 py-10 md:px-8">
           <div className="h-8 w-32 animate-pulse rounded-md bg-surface-2" />
           <div className="mt-6 h-40 animate-pulse rounded-xl bg-surface" />
         </main>
@@ -82,10 +82,12 @@ export function CatalogScreen() {
   return (
     <div className="min-h-dvh bg-bg">
       <AppHeader />
-      <main className="mx-auto flex max-w-2xl flex-col gap-6 px-5 pb-16 pt-6">
-        <div>
+      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-5 pb-20 pt-8 md:px-8 md:pt-12">
+        <div className="max-w-2xl">
           <p className="section-label">模型</p>
-          <h1 className="mt-2 font-display text-3xl tracking-tight text-fg">模型目录</h1>
+          <h1 className="mt-3 font-display text-4xl leading-none tracking-tight text-fg md:text-5xl">
+            模型目录
+          </h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             管理员可改显示名、开关模型，并把一个出图模型设为新项目默认。上游 ID 只读。
           </p>
@@ -94,7 +96,7 @@ export function CatalogScreen() {
         {loading ? (
           <div className="h-40 animate-pulse rounded-xl bg-surface" />
         ) : role !== "admin" ? (
-          <section className="rounded-xl bg-surface p-5 shadow-border">
+          <section className="max-w-xl rounded-xl bg-surface p-5 shadow-border">
             <p className="text-sm leading-relaxed text-muted">仅管理员可配置模型目录。</p>
             <Link
               href="/account"
@@ -104,7 +106,7 @@ export function CatalogScreen() {
             </Link>
           </section>
         ) : (
-          <ul className="space-y-4">
+          <ul className="grid gap-4 md:grid-cols-2">
             {models.map((model) => (
               <li key={model.id}>
                 <ModelCard
@@ -138,7 +140,7 @@ function ModelCard({
   const nameDirty = name.trim() !== model.displayName;
 
   return (
-    <article className="rounded-xl bg-surface p-5 shadow-border">
+    <article className="h-full rounded-xl bg-surface p-5 shadow-border">
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-md bg-surface-2 px-2 py-1 text-xs text-muted">
           {KIND_LABEL[model.kind]}
@@ -147,7 +149,9 @@ function ModelCard({
           <span className="rounded-md bg-accent px-2 py-1 text-xs text-accent-fg">默认</span>
         ) : null}
         {!model.enabled ? (
-          <span className="rounded-md border border-border px-2 py-1 text-xs text-subtle">已停用</span>
+          <span className="rounded-md border border-border px-2 py-1 text-xs text-subtle">
+            已停用
+          </span>
         ) : null}
       </div>
 
@@ -171,7 +175,9 @@ function ModelCard({
                 onChange(next);
                 toast.success("显示名已保存");
               })
-              .catch((err) => toast.error(err instanceof Error ? err.message : messageForImageJobError(err)))
+              .catch((err) =>
+                toast.error(err instanceof Error ? err.message : messageForImageJobError(err)),
+              )
               .finally(() => setSavingName(false));
           }}
         >
@@ -188,7 +194,9 @@ function ModelCard({
                 onChange(next);
                 toast.success(next.enabled ? "已启用" : "已停用");
               })
-              .catch((err) => toast.error(err instanceof Error ? err.message : messageForImageJobError(err)))
+              .catch((err) =>
+                toast.error(err instanceof Error ? err.message : messageForImageJobError(err)),
+              )
               .finally(() => setBusy(false));
           }}
         >
@@ -206,7 +214,9 @@ function ModelCard({
                   onChange(next);
                   toast.success("已设为新项目默认出图模型");
                 })
-                .catch((err) => toast.error(err instanceof Error ? err.message : messageForImageJobError(err)))
+                .catch((err) =>
+                  toast.error(err instanceof Error ? err.message : messageForImageJobError(err)),
+                )
                 .finally(() => setBusy(false));
             }}
           >

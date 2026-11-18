@@ -26,7 +26,11 @@ export function DirectionView() {
     <div className="page-shell">
       <AppHeader
         leading={
-          <button type="button" className="min-h-11 text-left" onClick={() => useStudio.setState({ currentId: null })}>
+          <button
+            type="button"
+            className="min-h-11 text-left"
+            onClick={() => useStudio.setState({ currentId: null })}
+          >
             <Wordmark />
           </button>
         }
@@ -46,10 +50,12 @@ export function DirectionView() {
           </div>
         }
       />
-      <main className="mx-auto max-w-6xl px-5 pb-20 pt-8 md:pt-12">
+      <main className="mx-auto max-w-6xl px-5 pb-20 pt-8 md:px-8 md:pt-12">
         <div className="mb-10 max-w-2xl">
           <p className="section-label">第一步 · 锁定方向</p>
-          <h1 className="mt-3 font-display text-4xl leading-none tracking-tight md:text-5xl">{project.name}</h1>
+          <h1 className="mt-3 font-display text-4xl leading-none tracking-tight md:text-5xl">
+            {project.name}
+          </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">
             四个正交方向，同一主题。锁定一张作为当前工作风格，其余最多保留两条备选。
           </p>

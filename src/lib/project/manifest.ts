@@ -26,7 +26,9 @@ function extensionOf(url: string): string {
 export function exportManifest(styleLine: StyleBranch): ExportManifest {
   const images: ExportImage[] = [];
   for (const slot of SLOT_IDS) {
-    const rev = adoptedRev(styleLine.assets[slot]);
+    const asset = styleLine.assets[slot];
+    if (!asset) continue;
+    const rev = adoptedRev(asset);
     if (!rev) continue;
     images.push({ slot, fileName: `${slot}.${extensionOf(rev.url)}`, url: rev.url });
   }

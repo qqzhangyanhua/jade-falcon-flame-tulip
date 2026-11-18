@@ -5,6 +5,7 @@ import { beijingCalendarDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES, messageForImageJobError } from "./errors.ts";
 import { DURABLE_IMAGE_PATH_PREFIX, listJobImages, openJobImage } from "./durable.ts";
 import { runImageJob } from "./gateway.ts";
+import { parseSlot } from "./sql.ts";
 import { listUserJobs } from "./list-jobs.ts";
 import {
   DEFAULT_CHAT_MODEL_ID,
@@ -20,6 +21,8 @@ import {
   pickProjectImageModel,
 } from "./projects.ts";
 import { DEFAULT_DAILY_IMAGE_CAP, resolveStudioRole, setGlobalDailyCap } from "./quota.ts";
+import { projectDocumentSchema } from "../project/schema.ts";
+import { sampleProject } from "../project/fixtures.ts";
 import type { CatalogModel, ImageJobAction, RunImageJobInput } from "./types.ts";
 import { IMAGE_JOB_ACTIONS, IMAGE_JOB_ERROR_CODES, IMAGE_JOB_SLOTS } from "./types.ts";
 
@@ -1236,5 +1239,74 @@ describe("delete project keeps the job ledger", () => {
     if (!listed.ok) return;
     assert.equal(listed.jobs[0]?.projectAlive, true);
     assert.equal(listed.jobs[0]?.imageUrls.length, 1);
+  });
+});
+
+describe("slot catalog on the gateway", () => {
+  it("rejects an unknown slot without calling upstream or reserving quota", async () => {
+    const world = createMemoryGatewayWorld();
+    const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    const result = await runImageJob(world, jobInput(world, { slot: "poster", n: 1 }));
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.code, "unknown_slot");
+    assert.equal(result.job, undefined);
+    assert.equal(world.calls.length, 0);
+    assert.equal((await world.jobs.listByUser(world.userId)).length, 0);
+    const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(after.used, before.used);
+    assert.equal(after.used, 0);
+    assert.equal(messageForImageJobError(new Error("unknown_slot")), "这个物料槽不在当前项目里");
+  });
+
+  it("sends the catalog aspect for a slot job and ignores the client aspect", async () => {
+    const world = createMemoryGatewayWorld();
+    const result = await runImageJob(
+      world,
+      jobInput(world, { slot: "ui_hero", aspect: "1:1", n: 1 }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.slot, "ui_hero");
+    assert.equal(world.calls[0]?.aspect, "9:16");
+  });
+
+  it("keeps a direction job slotless at 16:9 when the client sends another aspect", async () => {
+    const world = createMemoryGatewayWorld();
+    const result = await runImageJob(
+      world,
+      jobInput(world, { action: "direction", slot: "ui_hero", aspect: "9:16", n: 1 }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.slot, null);
+    assert.equal(world.calls[0]?.aspect, "16:9");
+  });
+
+  it("rejects a catalog slot the project has not enabled", async () => {
+    const world = createMemoryGatewayWorld();
+    const { mode: _mode, ...raw } = sampleProject({ id: world.projectId, currentSlot: "kv" });
+    raw.enabledSlotIds = ["kv"];
+    const saved = await world.projects.saveDocument(
+      world.projectId,
+      projectDocumentSchema.parse(raw),
+      0,
+      1,
+    );
+    assert.equal(saved.status, "saved");
+    const blocked = await runImageJob(world, jobInput(world, { slot: "ui_hero", n: 1 }));
+    assert.equal(blocked.ok, false);
+    if (blocked.ok) return;
+    assert.equal(blocked.code, "unknown_slot");
+    assert.equal(blocked.job, undefined);
+    assert.equal(world.calls.length, 0);
+    assert.equal((await world.quota.snapshot(world.userId, world.now?.() ?? 0)).used, 0);
+  });
+
+  it("reads a stored slot of kv or any other non-empty string back unchanged", () => {
+    assert.equal(parseSlot("kv"), "kv");
+    assert.equal(parseSlot("poster"), "poster");
+    assert.equal(parseSlot(""), null);
+    assert.equal(parseSlot(null), null);
   });
 });

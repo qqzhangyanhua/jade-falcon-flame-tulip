@@ -1,3 +1,5 @@
+import { projectDocumentSchema } from "../project/schema.ts";
+import { catalogAspect, DEFAULT_ENABLED_SLOT_IDS, DIRECTION_ASPECT } from "../project/slots.ts";
 import { persistDurableCopies, resolveUpstreamImageUrl } from "./durable.ts";
 import { newEntityId } from "./ids.ts";
 import { evaluateImageAction } from "./availability.ts";
@@ -15,6 +17,18 @@ import type {
 
 function fail(code: ImageJobErrorCode, job?: ImageJobRecord): RunImageJobResult {
   return job ? { ok: false, code, job } : { ok: false, code };
+}
+
+/** Enabled ids on the parsed document, or the original three when there is none. */
+async function enabledSlotIdsFor(
+  deps: ImageJobGatewayDeps,
+  projectId: string,
+): Promise<readonly string[]> {
+  const snapshot = await deps.projects.getDocument(projectId);
+  if (!snapshot?.document) return DEFAULT_ENABLED_SLOT_IDS;
+  const parsed = projectDocumentSchema.safeParse(snapshot.document);
+  if (!parsed.success) return DEFAULT_ENABLED_SLOT_IDS;
+  return parsed.data.enabledSlotIds;
 }
 
 export async function runImageJob(
@@ -46,6 +60,12 @@ export async function runImageJob(
     imageUrl = resolved;
   }
 
+  const slot = resolveJobSlot(input.action, input.slot);
+  if (input.action !== "direction") {
+    const enabled = await enabledSlotIdsFor(deps, input.projectId);
+    if (!slot || !enabled.includes(slot)) return fail("unknown_slot");
+  }
+
   const now = deps.now?.() ?? Date.now();
   const newId = deps.newId ?? newEntityId;
   const reserved = await deps.jobs.insertReserved({
@@ -53,7 +73,7 @@ export async function runImageJob(
     userId: input.userId,
     projectId: input.projectId,
     action: input.action,
-    slot: resolveJobSlot(input.action, input.slot),
+    slot,
     catalogModelId: verdict.model.id,
     upstreamModelId: verdict.model.upstreamId,
     displayNameSnapshot: verdict.model.displayName,
@@ -71,7 +91,10 @@ export async function runImageJob(
       action: input.action,
       upstreamModelId: verdict.model.upstreamId,
       prompt: input.prompt,
-      aspect: input.aspect ?? "16:9",
+      aspect:
+        input.action === "direction" || !slot
+          ? DIRECTION_ASPECT
+          : (catalogAspect(slot) ?? DIRECTION_ASPECT),
       n: input.n ?? 1,
       imageUrl,
     });

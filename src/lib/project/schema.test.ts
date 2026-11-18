@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { addImageRevs } from "./ops.ts";
 import { projectDocumentSchema } from "./schema.ts";
 import { sampleDna, sampleProject } from "./fixtures.ts";
 
@@ -46,5 +47,70 @@ describe("projectDocumentSchema", () => {
   it("drops UI-only mode from the parsed document", () => {
     const parsed = projectDocumentSchema.parse(sampleProject());
     assert.equal("mode" in parsed, false);
+  });
+
+  it("parses an old 3-key document with no enabled slots and keeps its image revs", () => {
+    const project = sampleProject();
+    const { mode: _mode, ...document } = project;
+    delete (document as { enabledSlotIds?: unknown }).enabledSlotIds;
+    const rev = {
+      id: "img_old",
+      parentId: null,
+      url: "/api/images/old-kv",
+      createdAt: 9,
+      action: "generate" as const,
+      diff: "旧主视觉",
+      writeback: "none" as const,
+      styleRev: 1,
+    };
+    document.styles[0].assets.kv.revs = [rev];
+
+    const parsed = projectDocumentSchema.parse(document);
+
+    assert.deepEqual(parsed.enabledSlotIds, ["ui_hero", "kv", "web_home"]);
+    assert.deepEqual(parsed.styles[0]?.assets.kv.revs, [rev]);
+    assert.deepEqual(parsed.styles[0]?.assets.ui_hero.revs, []);
+    assert.deepEqual(parsed.styles[0]?.assets.web_home.revs, []);
+  });
+
+  it("falls back to the first enabled slot and keeps assets that are not enabled", () => {
+    const { mode: _mode, ...document } = sampleProject();
+    const hidden = {
+      id: "img_hidden",
+      parentId: null,
+      url: "/api/images/hidden-hero",
+      createdAt: 4,
+      action: "tune" as const,
+      diff: "未启用",
+      writeback: "none" as const,
+      styleRev: 1,
+    };
+    document.currentSlot = "ui_hero";
+    document.enabledSlotIds = ["web_home", "kv"];
+    document.styles[0].assets = {
+      ui_hero: { slot: "ui_hero", adoptedId: "img_hidden", revs: [hidden] },
+      web_home: { slot: "web_home", adoptedId: null, revs: [] },
+    };
+
+    const parsed = projectDocumentSchema.parse(document);
+
+    assert.equal(parsed.currentSlot, "web_home");
+    assert.deepEqual(parsed.enabledSlotIds, ["web_home", "kv"]);
+    assert.deepEqual(parsed.styles[0]?.assets.ui_hero.revs, [hidden]);
+    assert.deepEqual(parsed.styles[0]?.assets.kv, { slot: "kv", adoptedId: null, revs: [] });
+    const project = { ...parsed, mode: "idle" as const };
+    const added = addImageRevs(project, {
+      styleId: "a",
+      slot: "kv",
+      urls: ["/api/images/new-kv"],
+      action: "generate",
+      diff: "补图",
+      parentId: null,
+    });
+    assert.deepEqual(
+      added.project.styles[0]?.assets.kv.revs.map((rev) => rev.url),
+      ["/api/images/new-kv"],
+    );
+    assert.deepEqual(added.project.styles[0]?.assets.ui_hero.revs, [hidden]);
   });
 });

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   clearUserDailyCapFn,
+  grantUserBoostFn,
   listAdminUsersFn,
   setUserDailyCapFn,
   type AdminUserList,
@@ -102,7 +103,7 @@ export function AdminUsersScreen() {
             用户
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            查看名称、邮箱、今日用量、生效上限和最近活跃。单独上限覆盖全站上限，清除后回到全站上限。
+            查看名称、邮箱、今日用量、生效上限、加量包余额和最近活跃。单独上限覆盖全站上限，清除后回到全站上限。也可以发放不过期的加量包。
           </p>
           {role === "admin" && list ? (
             <p className="mt-2 text-sm text-muted">
@@ -208,7 +209,9 @@ function UserRow({
   onUpdated: (user: AdminUserQuota) => void;
 }) {
   const [draft, setDraft] = useState(user.userCap === null ? "" : String(user.userCap));
-  const [busy, setBusy] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState<"cap" | "boost" | null>(null);
 
   useEffect(() => {
     setDraft(user.userCap === null ? "" : String(user.userCap));
@@ -218,25 +221,40 @@ function UserRow({
 
   function onSet(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
+    setBusy("cap");
     void setUserDailyCapFn({ data: { userId: user.id, cap: Number(draft) } })
       .then((next) => {
         onUpdated(next);
         toast.success(`已把 ${label} 的每日上限设为 ${next.cap}`);
       })
       .catch(toastActionError)
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   }
 
   function onClear() {
-    setBusy(true);
+    setBusy("cap");
     void clearUserDailyCapFn({ data: { userId: user.id } })
       .then((next) => {
         onUpdated(next);
         toast.success(`已清除 ${label} 的单独上限，改用全站上限`);
       })
       .catch(toastActionError)
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
+  }
+
+  function onGrant(event: FormEvent) {
+    event.preventDefault();
+    const parsed = Number(amount);
+    setBusy("boost");
+    void grantUserBoostFn({ data: { userId: user.id, amount: parsed, note } })
+      .then((next) => {
+        onUpdated(next);
+        setAmount("");
+        setNote("");
+        toast.success(`已给 ${label} 发放加量包，余额 ${next.boost}`);
+      })
+      .catch(toastActionError)
+      .finally(() => setBusy(null));
   }
 
   return (
@@ -256,7 +274,7 @@ function UserRow({
         <p className="text-sm text-subtle">最近活跃 {formatLastActive(user.lastActiveAt)}</p>
       </div>
 
-      <dl className="mt-4 grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-2">
+      <dl className="mt-4 grid gap-3 border-t border-border pt-4 text-sm sm:grid-cols-3">
         <div className="flex justify-between gap-4">
           <dt className="text-subtle">今日用量</dt>
           <dd className="text-fg">{user.used}</dd>
@@ -264,6 +282,10 @@ function UserRow({
         <div className="flex justify-between gap-4">
           <dt className="text-subtle">生效上限</dt>
           <dd className="text-fg">{user.cap}</dd>
+        </div>
+        <div className="flex justify-between gap-4">
+          <dt className="text-subtle">加量包</dt>
+          <dd className="text-fg">{user.boost}</dd>
         </div>
       </dl>
 
@@ -278,24 +300,66 @@ function UserRow({
             inputMode="numeric"
             value={draft}
             placeholder={`全站 ${globalCap}`}
-            disabled={busy}
+            disabled={busy !== null}
             onChange={(event) => setDraft(event.target.value)}
           />
         </label>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button type="submit" className="w-full sm:w-auto" disabled={busy || draft.trim() === ""}>
-            {busy ? "保存中…" : "设置上限"}
+          <Button
+            type="submit"
+            className="w-full sm:w-auto"
+            disabled={busy !== null || draft.trim() === ""}
+          >
+            {busy === "cap" ? "保存中…" : "设置上限"}
           </Button>
           <Button
             type="button"
             variant="outline"
             className="w-full sm:w-auto"
-            disabled={busy || user.userCap === null}
+            disabled={busy !== null || user.userCap === null}
             onClick={onClear}
           >
             清除上限
           </Button>
         </div>
+      </form>
+
+      <form
+        className="mt-4 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-end"
+        onSubmit={onGrant}
+      >
+        <label className="block min-w-0 space-y-1.5 sm:w-28">
+          <span className="text-sm text-muted">加量包数量</span>
+          <Input
+            type="number"
+            min={1}
+            max={9999}
+            step={1}
+            inputMode="numeric"
+            value={amount}
+            placeholder="1"
+            disabled={busy !== null}
+            onChange={(event) => setAmount(event.target.value)}
+          />
+        </label>
+        <label className="block min-w-0 flex-1 space-y-1.5">
+          <span className="text-sm text-muted">备注</span>
+          <Input
+            value={note}
+            maxLength={200}
+            autoComplete="off"
+            placeholder="例如：试用客户"
+            disabled={busy !== null}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        </label>
+        <Button
+          type="submit"
+          className="w-full sm:w-auto"
+          disabled={busy !== null || amount.trim() === "" || note.trim() === ""}
+        >
+          {busy === "boost" ? "发放中…" : "发放加量包"}
+        </Button>
       </form>
     </article>
   );

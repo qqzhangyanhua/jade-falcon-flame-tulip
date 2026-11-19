@@ -10,6 +10,7 @@ import type {
   ProjectSummary,
   SaveDocumentOutcome,
   StudioProjectRecord,
+  BoostLedgerEntry,
   StudioQuota,
   StudioRole,
 } from "./types.ts";
@@ -50,7 +51,7 @@ export type ReservedJobInsert =
   { ok: true; job: ImageJobRecord } | { ok: false; code: "quota_exceeded" | "in_flight" };
 
 export type ImageJobStore = {
-  /** Insert a running job and reserve today's cap in one atomic step. */
+  /** Insert a running job and reserve today's cap, then 加量包, in one atomic step. */
   insertReserved: (record: ImageJobRecord) => Promise<ReservedJobInsert>;
   get: (id: string) => Promise<ImageJobRecord | null>;
   /** Current user's jobs only, newest first. */
@@ -66,6 +67,14 @@ export type ImageJobStore = {
   listInRange: (fromMs: number, toMs: number) => Promise<ImageJobRecord[]>;
 };
 
+export type BoostGrantWrite = {
+  userId: string;
+  amount: number;
+  adminId: string;
+  note: string;
+  at: number;
+};
+
 export type QuotaStore = {
   getCap: () => Promise<number>;
   setCap: (cap: number) => Promise<number>;
@@ -74,6 +83,19 @@ export type QuotaStore = {
   setUserCap: (userId: string, cap: number) => Promise<void>;
   /** Drop the per-user cap so the user follows the global cap again. */
   clearUserCap: (userId: string) => Promise<void>;
+  /** Add 加量包 and append the grant ledger row. Returns the new balance. */
+  addBoost: (input: BoostGrantWrite) => Promise<number>;
+  /** Grants and debits for one user, oldest first. */
+  listBoostLedger: (userId: string) => Promise<BoostLedgerEntry[]>;
+  /**
+   * Daily-cap images already spent on each Beijing day in [fromDay, toDay].
+   * Days with no row are omitted. `day` is YYYY-MM-DD.
+   */
+  listDailyUsed: (
+    userId: string,
+    fromDay: string,
+    toDay: string,
+  ) => Promise<{ day: string; used: number }[]>;
 };
 
 export type RoleStore = {

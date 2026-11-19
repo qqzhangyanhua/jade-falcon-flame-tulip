@@ -7,6 +7,7 @@ import { AuthSlot } from "@/components/auth-slot";
 import { getProjectSync } from "@/components/project-sync";
 import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { ProjectCopyControl } from "@/components/project-copy-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
 import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { JobHistoryLink } from "@/components/job-history-link";
@@ -42,7 +43,7 @@ import type { DnaChange } from "@/lib/project/dna";
 import { paletteForStyleRev } from "@/lib/project/dna-export";
 import { latestGenerateRevs } from "@/lib/project/ops";
 import { messageForMergeError } from "@/lib/style-ai/shared";
-import { messageForImageJobError } from "@/lib/image-jobs";
+import { messageForImageJobError, quotaSpendable } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { BUILTIN_SLOTS } from "@/lib/project/slots";
 import { useStudio } from "@/lib/store";
@@ -298,7 +299,7 @@ export function StudioView() {
 
   function startBatch(n: GenerateCount, slotIds: readonly string[]) {
     if (!project || !style || !dna) return;
-    const quotaRemaining = imageGate?.quota.remaining;
+    const quotaRemaining = imageGate ? quotaSpendable(imageGate.quota) : undefined;
     if (quotaRemaining == null) {
       toast.error("还没有拿到剩余额度，无法开始");
       return;
@@ -532,6 +533,11 @@ export function StudioView() {
             customSlots={customSlots}
             styleLine={style}
           />
+          <ProjectCopyControl
+            projectId={project.id}
+            openAfter
+            onCopied={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+          />
           <ProjectRenameControl
             projectId={project.id}
             name={project.name}
@@ -755,7 +761,7 @@ export function StudioView() {
               busyLabel={busyLabel}
               slotPhases={slotPhases}
               runningIds={runningSlotIds()}
-              remaining={imageGate ? imageGate.quota.remaining : null}
+              remaining={imageGate ? quotaSpendable(imageGate.quota) : null}
               onSlot={setSlot}
               onEnable={enableBuiltinSlot}
               onHide={hideBuiltinSlot}

@@ -7,6 +7,7 @@ import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
 import {
+  copyProject,
   loadProjectDocument,
   renameProject,
   saveProjectDocument,
@@ -28,7 +29,13 @@ import {
   unwrapProjectOp,
 } from "@/lib/image-jobs/projects";
 import { createSqlQuotaStore, createSqlRoleStore } from "@/lib/image-jobs/quota-sql";
-import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "@/lib/image-jobs/quota";
+import {
+  listImageUsage,
+  normalizeDailyCap,
+  resolveStudioRole,
+  setGlobalDailyCap,
+  type ImageUsageDay,
+} from "@/lib/image-jobs/quota";
 import {
   createSqlBlobStore,
   createSqlCatalogStore,
@@ -210,6 +217,13 @@ export async function getDailyQuotaFn(): Promise<StudioQuota> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
   return deps.quota.snapshot(userId, deps.now?.() ?? Date.now());
+}
+
+/** Last 30 Beijing days for the signed-in user. No caller-supplied user id. */
+export async function getImageUsageFn(): Promise<ImageUsageDay[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return listImageUsage(deps.quota, { userId, atMs: deps.now?.() ?? Date.now() });
 }
 
 export async function getStudioAccessFn(): Promise<{
@@ -486,6 +500,15 @@ export async function listProjectSummariesFn(input?: {
       offset: data?.offset,
     }),
   );
+}
+
+export async function copyProjectFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<{ id: string; name: string; version: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return copyProject(deps, { userId: ctx.userId, projectId: ctx.projectId });
 }
 
 export async function renameProjectFn(input: {

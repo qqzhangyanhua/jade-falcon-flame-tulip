@@ -158,6 +158,19 @@ export type StudioQuota = {
   beijingDay: string;
 };
 
+/** One row of the admin user list. `cap` is the effective daily cap. */
+export type AdminUserQuota = {
+  id: string;
+  name: string;
+  email: string;
+  used: number;
+  cap: number;
+  /** Null when the user follows the global cap. */
+  userCap: number | null;
+  /** Latest image job or session activity, or null when neither exists. */
+  lastActiveAt: number | null;
+};
+
 export type StudioRole = "user" | "admin";
 
 export type StudioImageState = {

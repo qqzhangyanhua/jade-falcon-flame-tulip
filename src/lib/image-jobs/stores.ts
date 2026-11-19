@@ -68,6 +68,10 @@ export type QuotaStore = {
   getCap: () => Promise<number>;
   setCap: (cap: number) => Promise<number>;
   snapshot: (userId: string, atMs: number) => Promise<StudioQuota>;
+  /** Persist a per-user daily cap. It overrides the global cap, including 0. */
+  setUserCap: (userId: string, cap: number) => Promise<void>;
+  /** Drop the per-user cap so the user follows the global cap again. */
+  clearUserCap: (userId: string) => Promise<void>;
 };
 
 export type RoleStore = {

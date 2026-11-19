@@ -2,7 +2,7 @@ import { beijingCalendarDay } from "./beijing-day.ts";
 import { concurrencyBlock } from "./concurrency.ts";
 import { newEntityId } from "./ids.ts";
 import { cloneModel } from "./availability.ts";
-import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
+import { DEFAULT_DAILY_IMAGE_CAP, effectiveDailyCap, quotaFromParts } from "./quota.ts";
 import { decodeDataUrl } from "./durable.ts";
 import { projectCoverUrl } from "../project/summary.ts";
 import type {
@@ -154,6 +154,9 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
 } {
   let cap = initialCap;
   const used = new Map<string, number>();
+  const userCaps = new Map<string, number>();
+  const capFor = (userId: string) =>
+    effectiveDailyCap(cap, userCaps.has(userId) ? (userCaps.get(userId) ?? null) : null);
   return {
     async getCap() {
       return cap;
@@ -162,15 +165,21 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
       cap = next;
       return cap;
     },
+    async setUserCap(userId, next) {
+      userCaps.set(userId, next);
+    },
+    async clearUserCap(userId) {
+      userCaps.delete(userId);
+    },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);
-      return quotaFromParts(cap, used.get(`${userId}:${day}`) ?? 0, day);
+      return quotaFromParts(capFor(userId), used.get(`${userId}:${day}`) ?? 0, day);
     },
     tryReserve(userId, atMs) {
       const day = beijingCalendarDay(atMs);
       const key = `${userId}:${day}`;
       const current = used.get(key) ?? 0;
-      if (current >= cap) return false;
+      if (current >= capFor(userId)) return false;
       used.set(key, current + 1);
       return true;
     },

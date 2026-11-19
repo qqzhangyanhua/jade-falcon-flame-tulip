@@ -62,6 +62,12 @@ export function applyQuotaToStudioState(
   return { ...state, quota, actions };
 }
 
+/** A set user cap wins, including 0. Null means there is no override. */
+export function effectiveDailyCap(globalCap: number, userCap: number | null): number {
+  if (userCap === null) return Math.max(0, globalCap);
+  return Math.max(0, userCap);
+}
+
 export function parseDailyCap(raw: string | null | undefined): number {
   if (raw === undefined || raw === null) return DEFAULT_DAILY_IMAGE_CAP;
   const trimmed = raw.trim();
@@ -98,4 +104,42 @@ export async function setGlobalDailyCap(
   const cap = normalizeDailyCap(input.cap);
   if (cap === null) return { ok: false, code: "forbidden" };
   return { ok: true, cap: await quota.setCap(cap) };
+}
+
+async function requireCapAdmin(
+  roles: RoleStore,
+  actorId: string,
+): Promise<{ ok: true } | { ok: false; code: ImageJobErrorCode }> {
+  if (!actorId) return { ok: false, code: "unauthorized" };
+  const role = await resolveStudioRole(roles, actorId);
+  if (role !== "admin") return { ok: false, code: "forbidden" };
+  return { ok: true };
+}
+
+export async function setUserDailyCap(
+  roles: RoleStore,
+  quota: QuotaStore,
+  input: { actorId: string; userId: string; cap: number },
+): Promise<{ ok: true; cap: number } | { ok: false; code: ImageJobErrorCode }> {
+  const admin = await requireCapAdmin(roles, input.actorId);
+  if (!admin.ok) return admin;
+  const userId = input.userId.trim();
+  if (!userId) return { ok: false, code: "not_found" };
+  const cap = normalizeDailyCap(input.cap);
+  if (cap === null) return { ok: false, code: "forbidden" };
+  await quota.setUserCap(userId, cap);
+  return { ok: true, cap };
+}
+
+export async function clearUserDailyCap(
+  roles: RoleStore,
+  quota: QuotaStore,
+  input: { actorId: string; userId: string },
+): Promise<{ ok: true } | { ok: false; code: ImageJobErrorCode }> {
+  const admin = await requireCapAdmin(roles, input.actorId);
+  if (!admin.ok) return admin;
+  const userId = input.userId.trim();
+  if (!userId) return { ok: false, code: "not_found" };
+  await quota.clearUserCap(userId);
+  return { ok: true };
 }

@@ -203,15 +203,20 @@ export async function getDailyQuotaFn(): Promise<StudioQuota> {
   return deps.quota.snapshot(userId, deps.now?.() ?? Date.now());
 }
 
-export async function getStudioAccessFn(): Promise<{ role: StudioRole; quota: StudioQuota }> {
+export async function getStudioAccessFn(): Promise<{
+  role: StudioRole;
+  quota: StudioQuota;
+  globalCap: number;
+}> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
   const now = deps.now?.() ?? Date.now();
-  const [role, quota] = await Promise.all([
+  const [role, quota, globalCap] = await Promise.all([
     resolveStudioRole(deps.roles, userId),
     deps.quota.snapshot(userId, now),
+    deps.quota.getCap(),
   ]);
-  return { role, quota };
+  return { role, quota, globalCap };
 }
 
 export async function setDailyImageCapFn(input: { data: { cap: number } }): Promise<{ cap: number }> {

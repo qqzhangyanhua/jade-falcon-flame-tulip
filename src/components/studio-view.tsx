@@ -74,12 +74,23 @@ export function StudioView() {
     palette: readonly string[] | null;
   } | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const [inspecting, setInspecting] = useState<{
+    styleId: string;
+    slot: string;
+    id: string;
+  } | null>(null);
 
   const style = project?.styles.find((s) => s.id === project.currentStyleId) ?? null;
   const dna = style ? currentDna(style) : null;
   const slot: Slot = project?.currentSlot ?? "kv";
   const asset = style?.assets[slot];
   const currentImg = asset ? adoptedRev(asset) : null;
+  const inspectingId =
+    inspecting && style && inspecting.styleId === style.id && inspecting.slot === slot
+      ? inspecting.id
+      : null;
+  const inspectedRev =
+    inspectingId && asset ? (asset.revs.find((rev) => rev.id === inspectingId) ?? null) : null;
   const generating = project?.mode === "generating" || merging;
   const generateBlocked = Boolean(imageGate && !imageGate.actions.generate.enabled);
   const generateReason = imageGate?.actions.generate.reason ?? null;
@@ -88,10 +99,11 @@ export function StudioView() {
 
   const pair = useMemo(() => {
     if (!asset) return [];
+    if (inspectedRev) return [inspectedRev];
     const last = asset.revs.slice(-2);
     if (last.length === 2 && last.every((r) => r.action === "generate")) return last;
     return currentImg ? [currentImg] : last;
-  }, [asset, currentImg]);
+  }, [asset, currentImg, inspectedRev]);
 
   if (!project || !style || !dna) return null;
 
@@ -552,7 +564,7 @@ export function StudioView() {
 
         <aside
           className={cn(
-            "w-full overflow-y-auto border-l border-border md:w-72 md:shrink-0",
+            "w-full min-w-0 overflow-y-auto border-l border-border md:w-72 md:shrink-0",
             mobile !== "history" ? "hidden md:block" : "min-h-0 flex-1",
           )}
         >
@@ -561,8 +573,17 @@ export function StudioView() {
             onTab={setTab}
             assetRevs={asset?.revs ?? []}
             adoptedId={asset?.adoptedId}
+            inspectingId={inspectedRev?.id ?? null}
             style={style}
             onAdopt={(imageId) => adoptImage(style.id, slot, imageId)}
+            onInspect={(imageId) => {
+              if (!imageId) {
+                setInspecting(null);
+                return;
+              }
+              setInspecting({ styleId: style.id, slot, id: imageId });
+              setMobile("canvas");
+            }}
             onStyleRev={(rev) => setStyleRev(style.id, rev)}
           />
         </aside>

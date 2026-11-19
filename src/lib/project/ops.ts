@@ -3,6 +3,7 @@ import {
   currentDna,
   emptyAsset,
   emptyAssets,
+  type Asset,
   type CustomSlot,
   type ImageRev,
   type Project,
@@ -371,4 +372,48 @@ export function adoptImage(
     if (!asset || !asset.revs.some((rev) => rev.id === imageId)) return style;
     return { ...style, assets: { ...style.assets, [slot]: { ...asset, adoptedId: imageId } } };
   });
+}
+
+export type RevTreeNode = {
+  rev: ImageRev;
+  children: RevTreeNode[];
+};
+
+/**
+ * Parent links for one slot. A rev whose parent is null or not in this asset is a root.
+ * Every rev is included once, including revs from older style versions.
+ */
+export function revTree(asset: Asset): RevTreeNode[] {
+  const byId = new Map(asset.revs.map((rev) => [rev.id, rev]));
+  const childIds = new Map<string, string[]>();
+  const roots: ImageRev[] = [];
+
+  for (const rev of asset.revs) {
+    const parentId = rev.parentId;
+    if (parentId && parentId !== rev.id && byId.has(parentId)) {
+      const siblings = childIds.get(parentId);
+      if (siblings) siblings.push(rev.id);
+      else childIds.set(parentId, [rev.id]);
+    } else {
+      roots.push(rev);
+    }
+  }
+
+  const placed = new Set<string>();
+  const build = (rev: ImageRev): RevTreeNode => {
+    placed.add(rev.id);
+    const children: RevTreeNode[] = [];
+    for (const id of childIds.get(rev.id) ?? []) {
+      if (placed.has(id)) continue;
+      const child = byId.get(id);
+      if (child) children.push(build(child));
+    }
+    return { rev, children };
+  };
+
+  const tree = roots.map(build);
+  for (const rev of asset.revs) {
+    if (!placed.has(rev.id)) tree.push(build(rev));
+  }
+  return tree;
 }

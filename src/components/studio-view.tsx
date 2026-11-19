@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { Wordmark } from "@/components/wordmark";
 import { composeImageFn, generateSlotFn, tuneImageFn } from "@/app/actions/studio";
+import { createBatchQueue, planBatch, type BatchTaskStatus } from "@/lib/batch-generate";
 import { mergeStyleInstructionFn } from "@/app/actions/writeback";
 import type { DnaChange } from "@/lib/project/dna";
 import { paletteForStyleRev } from "@/lib/project/dna-export";
@@ -84,6 +85,31 @@ export function StudioView() {
     slot: string;
     id: string;
   } | null>(null);
+  const [slotPhases, setSlotPhases] = useState<Record<string, BatchTaskStatus>>({});
+  const phasesRef = useRef(slotPhases);
+  const queueRef = useRef<ReturnType<typeof createBatchQueue> | null>(null);
+  const mountedRef = useRef(true);
+
+  function batchQueue() {
+    queueRef.current ??= createBatchQueue();
+    return queueRef.current;
+  }
+
+  function setSlotPhase(id: string, status: BatchTaskStatus) {
+    const next = { ...phasesRef.current };
+    if (status === "dropped") delete next[id];
+    else next[id] = status;
+    phasesRef.current = next;
+    setSlotPhases(next);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      queueRef.current?.cancel();
+    };
+  }, []);
 
   const style = project?.styles.find((s) => s.id === project.currentStyleId) ?? null;
   const dna = style ? currentDna(style) : null;
@@ -150,11 +176,14 @@ export function StudioView() {
 
   async function runGenerate(n: GenerateCount) {
     if (!project || !style || !dna) return;
+    const currentPhase = phasesRef.current[slot];
+    if (currentPhase === "queued" || currentPhase === "running") return;
     if (generateBlocked) {
       toast.error(generateReason ?? "出图暂不可用");
       return;
     }
     setMode("generating");
+    setSlotPhase(slot, "running");
     await flushDocument();
     setBusyLabel("出图中");
     try {
@@ -171,14 +200,108 @@ export function StudioView() {
         parentId: currentImg?.id ?? null,
         jobId: res.jobId,
       });
+      if (mountedRef.current) setSlotPhase(slot, "done");
       toast.success(`已生成 ${res.urls.length} 张变体，点「采用」选定`);
     } catch (e) {
+      if (mountedRef.current) setSlotPhase(slot, "failed");
       toast.error(messageForImageJobError(e));
     } finally {
       setMode("idle");
-      setBusyLabel(null);
-      void refresh();
+      if (mountedRef.current) {
+        setBusyLabel(null);
+        void refresh();
+      }
     }
+  }
+
+  function runningSlotIds() {
+    return Object.entries(phasesRef.current)
+      .filter(([, status]) => status === "queued" || status === "running")
+      .map(([id]) => id);
+  }
+
+  // A batch must not set mode to "generating": that overlay hides per-slot progress.
+  function startBatch(n: GenerateCount, slotIds: readonly string[]) {
+    if (!project || !style || !dna) return;
+    const quotaRemaining = imageGate?.quota.remaining;
+    if (quotaRemaining == null) {
+      toast.error("还没有拿到剩余额度，无法开始");
+      return;
+    }
+    const confirmed = new Set(slotIds);
+    const plan = planBatch({
+      enabled: enabledSlots
+        .filter((item) => confirmed.has(item.id))
+        .map((item) => ({ id: item.id, name: item.name })),
+      runningIds: runningSlotIds(),
+      remaining: quotaRemaining,
+    });
+    if (!plan.quotaEnough) {
+      toast.error(`剩余额度 ${quotaRemaining}，不够扣 ${plan.cost} 个。额度不足，无法开始。`);
+      return;
+    }
+    if (plan.start.length === 0) {
+      toast.error("没有可以开始的任务");
+      return;
+    }
+    if (generateBlocked) {
+      toast.error(generateReason ?? "出图暂不可用");
+      return;
+    }
+    const styleId = style.id;
+    const productName = product;
+    const contentText = content;
+    void batchQueue().enqueue(
+      plan.start.map((item) => ({
+        id: item.id,
+        run: async () => {
+          try {
+            const live = useStudio.getState().current();
+            const styleLine = live?.styles.find((entry) => entry.id === styleId);
+            if (!live || !styleLine) throw new Error("missing project");
+            const dnaNow = currentDna(styleLine);
+            const asset = styleLine.assets[item.id];
+            const parent = asset ? adoptedRev(asset) : null;
+            const refUrl = item.id === "ui_hero" ? live.prototypeDataUrl : styleLine.candidateUrl;
+            await getProjectSync()?.flush(live.id);
+            const res = await generateSlotFn({
+              data: {
+                projectId: live.id,
+                dna: dnaNow,
+                slot: item.id,
+                product: productName,
+                content: contentText,
+                refUrl,
+                n,
+              },
+            });
+            const saved = useStudio.getState().current();
+            const savedStyle = saved?.styles.find((entry) => entry.id === styleId);
+            const savedAsset = savedStyle?.assets[item.id];
+            const parentNow = savedAsset ? adoptedRev(savedAsset) : parent;
+            useStudio.getState().addImageRevs({
+              styleId,
+              slot: item.id,
+              urls: res.urls,
+              action: "generate",
+              diff: contentText.trim() || "首次生成",
+              parentId: parentNow?.id ?? null,
+              jobId: res.jobId,
+            });
+            toast.success(`${item.name} 已生成 ${res.urls.length} 张`);
+          } catch (error) {
+            toast.error(`${item.name}：${messageForImageJobError(error)}`);
+            throw error;
+          } finally {
+            if (mountedRef.current) void refresh();
+          }
+        },
+      })),
+      (id, status) => {
+        if (!mountedRef.current) return;
+        setSlotPhase(id, status);
+      },
+    );
   }
 
   async function runTune(instruction: string, writeback: boolean, action: "tune" | "compose") {
@@ -418,6 +541,7 @@ export function StudioView() {
             available={availableSlots}
             current={slot}
             disabled={generating}
+            slotPhases={slotPhases}
             onSelect={setSlot}
             onEnable={enableBuiltinSlot}
             onHide={hideBuiltinSlot}
@@ -573,6 +697,9 @@ export function StudioView() {
               generateBlocked={generateBlocked}
               generateReason={generateReason}
               busyLabel={busyLabel}
+              slotPhases={slotPhases}
+              runningIds={runningSlotIds()}
+              remaining={imageGate ? imageGate.quota.remaining : null}
               onSlot={setSlot}
               onEnable={enableBuiltinSlot}
               onHide={hideBuiltinSlot}
@@ -581,6 +708,7 @@ export function StudioView() {
               onDelete={deleteCustomSlot}
               onContent={setContent}
               onGenerate={(n) => void runGenerate(n)}
+              onStartBatch={startBatch}
             />
           </div>
         </section>

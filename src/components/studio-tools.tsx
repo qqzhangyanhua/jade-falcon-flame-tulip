@@ -4,6 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { RangeSlider } from "@/components/ui/slider";
+import {
+  BATCH_CONCURRENCY,
+  planBatch,
+  type BatchPlan,
+  type BatchTaskStatus,
+} from "@/lib/batch-generate";
 import type { StudioImageState } from "@/lib/image-jobs";
 import {
   canSubmitCopyRewrite,
@@ -31,6 +37,33 @@ const ASPECT_ITEMS = SUPPORTED_ASPECTS.map((aspect) => ({ value: aspect, label: 
 const GENERATE_COUNTS = [1, 2, 4] as const;
 
 export type GenerateCount = (typeof GENERATE_COUNTS)[number];
+
+const SLOT_PHASE_LABEL: Record<Exclude<BatchTaskStatus, "dropped">, string> = {
+  queued: "排队",
+  running: "出图中",
+  done: "完成",
+  failed: "失败",
+};
+
+function SlotPhaseLine({
+  phase,
+  inverted = false,
+}: {
+  phase: BatchTaskStatus | undefined;
+  inverted?: boolean;
+}) {
+  if (!phase || phase === "dropped") return null;
+  return (
+    <span
+      className={cn(
+        "text-xs",
+        phase === "failed" ? "text-danger" : inverted ? "text-accent-fg" : "text-muted",
+      )}
+    >
+      {SLOT_PHASE_LABEL[phase]}
+    </span>
+  );
+}
 
 export const TUNE_PRESETS = [
   {
@@ -335,6 +368,7 @@ export function StudioSlotList({
   current,
   disabled,
   layout,
+  slotPhases = {},
   onSelect,
   onEnable,
   onHide,
@@ -347,6 +381,7 @@ export function StudioSlotList({
   current: string;
   disabled: boolean;
   layout: "stack" | "row";
+  slotPhases?: Record<string, BatchTaskStatus>;
   onSelect: (id: string) => void;
   onEnable: (id: string) => void;
   onHide: (id: string) => void;
@@ -500,6 +535,9 @@ export function StudioSlotList({
                   >
                     {slot.aspect} · {slot.purpose}
                   </span>
+                  {slotPhases[slot.id] ? (
+                    <SlotPhaseLine phase={slotPhases[slot.id]} inverted={current === slot.id} />
+                  ) : null}
                 </button>
                 {actions(slot)}
               </div>
@@ -533,6 +571,11 @@ export function StudioSlotList({
               <span className="mt-0.5 block text-xs text-subtle">
                 {slot.aspect} · {slot.purpose}
               </span>
+              {slotPhases[slot.id] ? (
+                <span className="mt-0.5 block">
+                  <SlotPhaseLine phase={slotPhases[slot.id]} />
+                </span>
+              ) : null}
             </button>
             {actions(slot)}
           </div>
@@ -553,6 +596,9 @@ export function StudioGenerateBar({
   generateBlocked,
   generateReason,
   busyLabel,
+  slotPhases = {},
+  runningIds,
+  remaining,
   onSlot,
   onEnable,
   onHide,
@@ -561,6 +607,7 @@ export function StudioGenerateBar({
   onDelete,
   onContent,
   onGenerate,
+  onStartBatch,
 }: {
   slots: StudioSlotChoice[];
   available: { id: string; name: string }[];
@@ -570,6 +617,9 @@ export function StudioGenerateBar({
   generateBlocked: boolean;
   generateReason: string | null;
   busyLabel: string | null;
+  slotPhases?: Record<string, BatchTaskStatus>;
+  runningIds: readonly string[];
+  remaining: number | null;
   onSlot: (slot: Slot) => void;
   onEnable: (slotId: string) => void;
   onHide: (slotId: string) => void;
@@ -578,73 +628,192 @@ export function StudioGenerateBar({
   onDelete: (slotId: string) => void;
   onContent: (value: string) => void;
   onGenerate: (n: GenerateCount) => void;
+  onStartBatch: (n: GenerateCount, slotIds: readonly string[]) => void;
 }) {
   const [count, setCount] = useState<GenerateCount>(2);
+  const [batchConfirm, setBatchConfirm] = useState<{
+    plan: BatchPlan;
+    count: GenerateCount;
+    remaining: number | null;
+  } | null>(null);
   const controlsDisabled = generating || generateBlocked;
+  const slotPhase = slotPhases[slot];
+  const slotBusy = slotPhase === "queued" || slotPhase === "running";
+  const quotaKnown = batchConfirm?.remaining !== null && batchConfirm?.remaining !== undefined;
+  const canStart = Boolean(
+    batchConfirm &&
+    quotaKnown &&
+    batchConfirm.plan.quotaEnough &&
+    batchConfirm.plan.cost > 0 &&
+    !generateBlocked,
+  );
+
+  function openBatch() {
+    const quotaRemaining = remaining;
+    setBatchConfirm({
+      plan: planBatch({
+        enabled: slots.map((item) => ({ id: item.id, name: item.name })),
+        runningIds,
+        remaining: quotaRemaining ?? Number.POSITIVE_INFINITY,
+      }),
+      count,
+      remaining: quotaRemaining,
+    });
+  }
+
   return (
-    <footer className="grid min-w-0 shrink-0 gap-2 border-t border-border bg-surface p-3 md:grid-cols-[minmax(0,1fr)_auto]">
-      <StudioSlotList
-        layout="row"
-        slots={slots}
-        available={available}
-        current={slot}
-        disabled={generating}
-        onSelect={onSlot}
-        onEnable={onEnable}
-        onHide={onHide}
-        onCreate={onCreate}
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />
-      <div className="min-w-0">
-        <input
-          value={content}
-          onChange={(event) => onContent(event.target.value)}
-          placeholder="一句内容：产品名 / 卖点 / 活动名"
-          disabled={generating || generateBlocked}
-          className="h-11 w-full rounded-md border border-border bg-bg px-3 text-sm outline-none placeholder:text-subtle focus:border-accent"
+    <>
+      <footer className="grid min-w-0 shrink-0 gap-2 border-t border-border bg-surface p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,auto)]">
+        <StudioSlotList
+          layout="row"
+          slots={slots}
+          available={available}
+          current={slot}
+          disabled={generating}
+          slotPhases={slotPhases}
+          onSelect={onSlot}
+          onEnable={onEnable}
+          onHide={onHide}
+          onCreate={onCreate}
+          onEdit={onEdit}
+          onDelete={onDelete}
         />
-        {generateReason ? <p className="mt-1 text-xs text-danger">{generateReason}</p> : null}
-      </div>
-      <div className="flex min-w-0 items-center gap-2">
-        <div
-          role="group"
-          aria-label="出图张数"
-          className="flex h-11 shrink-0 items-center rounded-md border border-border bg-bg p-0.5"
-        >
-          {GENERATE_COUNTS.map((n) => (
-            <button
-              key={n}
-              type="button"
-              aria-pressed={count === n}
-              disabled={controlsDisabled}
-              onClick={() => setCount(n)}
-              className={cn(
-                "h-10 min-w-11 rounded-xs px-2 text-sm disabled:opacity-40",
-                count === n ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
-              )}
-            >
-              {n} 张
-            </button>
-          ))}
+        <div className="min-w-0">
+          <input
+            value={content}
+            onChange={(event) => onContent(event.target.value)}
+            placeholder="一句内容：产品名 / 卖点 / 活动名"
+            disabled={generating || generateBlocked}
+            className="h-11 w-full rounded-md border border-border bg-bg px-3 text-sm outline-none placeholder:text-subtle focus:border-accent"
+          />
+          {generateReason ? <p className="mt-1 text-xs text-danger">{generateReason}</p> : null}
         </div>
-        <Button
-          className="h-11 min-w-28 flex-1"
-          disabled={controlsDisabled}
-          onClick={() => onGenerate(count)}
-        >
-          {generating ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              {busyLabel ?? "生成中"}
-            </>
-          ) : generateBlocked ? (
-            (generateReason ?? "出图暂不可用")
-          ) : (
-            `出 ${count} 张`
-          )}
-        </Button>
-      </div>
-    </footer>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
+          <div
+            role="group"
+            aria-label="出图张数"
+            className="flex h-11 shrink-0 items-center rounded-md border border-border bg-bg p-0.5"
+          >
+            {GENERATE_COUNTS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                aria-pressed={count === n}
+                disabled={controlsDisabled}
+                onClick={() => setCount(n)}
+                className={cn(
+                  "h-10 min-w-11 rounded-xs px-2 text-sm disabled:opacity-40",
+                  count === n ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
+                )}
+              >
+                {n} 张
+              </button>
+            ))}
+          </div>
+          <Button
+            className="h-11 min-w-28 flex-1 md:flex-none"
+            disabled={controlsDisabled || slotBusy}
+            onClick={() => onGenerate(count)}
+          >
+            {generating ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                {busyLabel ?? "生成中"}
+              </>
+            ) : slotPhase === "queued" || slotPhase === "running" ? (
+              SLOT_PHASE_LABEL[slotPhase]
+            ) : generateBlocked ? (
+              (generateReason ?? "出图暂不可用")
+            ) : (
+              `出 ${count} 张`
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11"
+            disabled={slots.length === 0}
+            onClick={openBatch}
+          >
+            所有物料槽各出一套
+          </Button>
+        </div>
+      </footer>
+      {batchConfirm ? (
+        <div className="fixed inset-0 z-50 grid place-items-end bg-fg/40 p-4 md:place-items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="batch-generate-title"
+            className="w-full max-w-md rounded-xl bg-surface p-6 shadow-border"
+          >
+            <h2 id="batch-generate-title" className="font-display text-2xl tracking-tight">
+              所有物料槽各出一套
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted">
+              将开始 {batchConfirm.plan.cost} 个任务，每个任务出 {batchConfirm.count} 张。将扣{" "}
+              {batchConfirm.plan.cost} 个额度。
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              同一时间最多运行 {BATCH_CONCURRENCY}{" "}
+              个，其余排队。离开页面后，还没开始的任务会丢弃，不扣额度。
+            </p>
+            {batchConfirm.plan.cost === 0 ? (
+              <p className="mt-3 text-sm text-fg">没有可以开始的任务。</p>
+            ) : null}
+            {batchConfirm.remaining === null ? (
+              <p className="mt-3 text-sm text-danger">还没有拿到剩余额度，无法开始。</p>
+            ) : null}
+            {batchConfirm.remaining !== null && !batchConfirm.plan.quotaEnough ? (
+              <p className="mt-3 text-sm text-danger">
+                剩余额度 {batchConfirm.remaining}，不够扣 {batchConfirm.plan.cost}{" "}
+                个。额度不足，无法开始。
+              </p>
+            ) : null}
+            {quotaKnown && batchConfirm.plan.quotaEnough && generateBlocked ? (
+              <p className="mt-3 text-sm text-danger">{generateReason ?? "出图暂不可用"}</p>
+            ) : null}
+            <div className="mt-4 max-h-64 overflow-y-auto rounded-md bg-bg p-3 shadow-border">
+              <p className="section-label">跳过的物料槽</p>
+              {batchConfirm.plan.skipped.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">没有因正在运行而跳过的物料槽。</p>
+              ) : (
+                <ul className="mt-2 flex flex-col gap-1 text-sm text-fg">
+                  {batchConfirm.plan.skipped.map((item) => (
+                    <li key={item.id}>{item.name}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="mt-6 flex gap-2">
+              {canStart ? (
+                <Button
+                  type="button"
+                  className="flex-1"
+                  onClick={() => {
+                    const chosen = batchConfirm;
+                    setBatchConfirm(null);
+                    onStartBatch(
+                      chosen.count,
+                      chosen.plan.start.map((item) => item.id),
+                    );
+                  }}
+                >
+                  开始出图
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setBatchConfirm(null)}
+              >
+                {canStart ? "取消" : "关闭"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

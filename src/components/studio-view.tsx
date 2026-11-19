@@ -9,6 +9,7 @@ import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { ProjectCopyControl } from "@/components/project-copy-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
+import { ProjectTagControl } from "@/components/project-tag-control";
 import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
@@ -547,6 +548,15 @@ export function StudioView() {
           <AuthSlot compact />
         </div>
       </header>
+      <div className="border-b border-border px-3 py-3 md:px-4">
+        <div className="max-w-md">
+          <ProjectTagControl
+            projectId={project.id}
+            tags={project.tags ?? []}
+            onChange={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+          />
+        </div>
+      </div>
 
       <div className="flex gap-1 border-b border-border p-2 md:hidden">
         {(["canvas", "style", "history"] as const).map((k) => (

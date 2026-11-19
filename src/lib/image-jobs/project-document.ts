@@ -1,4 +1,10 @@
-import { PROJECT_NAME_MAX, parseProjectName, projectDocumentSchema } from "../project/schema.ts";
+import {
+  PROJECT_NAME_MAX,
+  PROJECT_TAG_MAX_COUNT,
+  parseProjectName,
+  parseProjectTag,
+  projectDocumentSchema,
+} from "../project/schema.ts";
 import { newEntityId } from "./ids.ts";
 import { loadOwnedProject, type ProjectOpResult } from "./projects.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
@@ -59,6 +65,77 @@ export async function renameProject(
   return {
     ok: true,
     value: { name, version: saved.value.version, updatedAt: saved.value.updatedAt },
+  };
+}
+
+export async function addProjectTag(
+  deps: DocumentDeps,
+  input: { userId: string; projectId: string; tag: string },
+): Promise<ProjectOpResult<{ tags: string[]; version: number; updatedAt: number }>> {
+  const loaded = await loadOwnedProject(deps.projects, input);
+  if (!loaded.ok) return loaded;
+
+  const snapshot = await deps.projects.getDocument(loaded.value.id);
+  if (!snapshot?.document) return { ok: false, code: "not_found" };
+
+  const parsed = parseProjectTag(input.tag);
+  if (!parsed.ok) return { ok: false, code: "invalid_document" };
+
+  const current = snapshot.document.tags ?? [];
+  if (current.includes(parsed.tag)) {
+    return {
+      ok: true,
+      value: { tags: [...current], version: snapshot.version, updatedAt: snapshot.updatedAt ?? 0 },
+    };
+  }
+  if (current.length >= PROJECT_TAG_MAX_COUNT) return { ok: false, code: "invalid_document" };
+
+  const tags = [...current, parsed.tag];
+  const saved = await saveProjectDocument(deps, {
+    userId: input.userId,
+    projectId: loaded.value.id,
+    document: { ...snapshot.document, tags },
+    expectedVersion: snapshot.version,
+  });
+  if (!saved.ok) return saved;
+  return {
+    ok: true,
+    value: { tags, version: saved.value.version, updatedAt: saved.value.updatedAt },
+  };
+}
+
+export async function removeProjectTag(
+  deps: DocumentDeps,
+  input: { userId: string; projectId: string; tag: string },
+): Promise<ProjectOpResult<{ tags: string[]; version: number; updatedAt: number }>> {
+  const loaded = await loadOwnedProject(deps.projects, input);
+  if (!loaded.ok) return loaded;
+
+  const snapshot = await deps.projects.getDocument(loaded.value.id);
+  if (!snapshot?.document) return { ok: false, code: "not_found" };
+
+  const parsed = parseProjectTag(input.tag);
+  if (!parsed.ok) return { ok: false, code: "invalid_document" };
+
+  const current = snapshot.document.tags ?? [];
+  if (!current.includes(parsed.tag)) {
+    return {
+      ok: true,
+      value: { tags: [...current], version: snapshot.version, updatedAt: snapshot.updatedAt ?? 0 },
+    };
+  }
+
+  const tags = current.filter((tag) => tag !== parsed.tag);
+  const saved = await saveProjectDocument(deps, {
+    userId: input.userId,
+    projectId: loaded.value.id,
+    document: { ...snapshot.document, tags },
+    expectedVersion: snapshot.version,
+  });
+  if (!saved.ok) return saved;
+  return {
+    ok: true,
+    value: { tags, version: saved.value.version, updatedAt: saved.value.updatedAt },
   };
 }
 

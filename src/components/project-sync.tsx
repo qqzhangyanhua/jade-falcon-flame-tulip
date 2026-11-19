@@ -53,6 +53,7 @@ export function ProjectSync() {
               ...normalized,
               referenceImageUrls: normalized.referenceImageUrls ?? [],
               customSlots: normalized.customSlots ?? [],
+              tags: normalized.tags ?? [],
               mode: existing?.mode ?? ("idle" as const),
             };
             return {

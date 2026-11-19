@@ -116,6 +116,13 @@ describe("projectDocumentSchema", () => {
     assert.deepEqual(added.project.styles[0]?.assets.ui_hero.revs, [hidden]);
   });
 
+  it("parses an old document with no tags as an empty list", () => {
+    const { mode: _mode, ...document } = sampleProject();
+    delete (document as { tags?: unknown }).tags;
+    const parsed = projectDocumentSchema.parse(document);
+    assert.deepEqual(parsed.tags, []);
+  });
+
   it("defaults missing reference images to an empty list", () => {
     const { mode: _mode, referenceImageUrls: _urls, ...legacy } = sampleProject();
     const parsed = projectDocumentSchema.parse(legacy);

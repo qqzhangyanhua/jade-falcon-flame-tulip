@@ -8,6 +8,7 @@ import { OwnedImage } from "@/components/owned-image";
 import { getProjectSync } from "@/components/project-sync";
 import { ProjectCopyControl } from "@/components/project-copy-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
+import { ProjectTagControl, ProjectTagFilter } from "@/components/project-tag-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
@@ -39,6 +40,7 @@ export function RecentProjects() {
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
   const [sort, setSort] = useState<ProjectListSort>("updated");
   const [opening, setOpening] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -51,7 +53,9 @@ export function RecentProjects() {
 
   const refresh = useCallback(() => {
     const id = ++requestId.current;
-    void listProjectSummariesFn({ data: { keyword: appliedKeyword, sort, offset: 0 } })
+    void listProjectSummariesFn({
+      data: { keyword: appliedKeyword, sort, offset: 0, tags: filterTags },
+    })
       .then((page) => {
         if (requestId.current !== id) return;
         setItems(page.items);
@@ -61,7 +65,7 @@ export function RecentProjects() {
         if (requestId.current !== id) return;
         setItems((prev) => prev ?? []);
       });
-  }, [appliedKeyword, sort]);
+  }, [appliedKeyword, filterTags, sort]);
 
   useEffect(() => {
     refresh();
@@ -76,7 +80,7 @@ export function RecentProjects() {
     setLoadingMore(true);
     try {
       const page = await listProjectSummariesFn({
-        data: { keyword: appliedKeyword, sort, offset },
+        data: { keyword: appliedKeyword, sort, offset, tags: filterTags },
       });
       if (requestId.current !== id) return;
       setTotal(page.total);
@@ -110,7 +114,8 @@ export function RecentProjects() {
     }
   }
 
-  const searching = keyword.trim().length > 0 || appliedKeyword.trim().length > 0;
+  const searching =
+    keyword.trim().length > 0 || appliedKeyword.trim().length > 0 || filterTags.length > 0;
   if (!items) return null;
   if (items.length === 0 && total === 0 && !searching) return null;
 
@@ -118,24 +123,29 @@ export function RecentProjects() {
     <section className="mt-16" aria-label="项目">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <p className="section-label">项目</p>
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            type="search"
-            value={keyword}
-            placeholder="搜索项目名称"
-            aria-label="搜索项目名称"
-            className="sm:w-64"
-            onChange={(event) => setKeyword(event.target.value)}
-          />
-          <SelectField
-            label="排序"
-            className="sm:w-36"
-            value={sort}
-            items={SORTS}
-            onValueChange={(value) => {
-              if (isSort(value)) setSort(value);
-            }}
-          />
+        <div className="flex min-w-0 flex-col gap-2 sm:items-end">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              type="search"
+              value={keyword}
+              placeholder="搜索项目名称"
+              aria-label="搜索项目名称"
+              className="sm:w-64"
+              onChange={(event) => setKeyword(event.target.value)}
+            />
+            <SelectField
+              label="排序"
+              className="sm:w-36"
+              value={sort}
+              items={SORTS}
+              onValueChange={(value) => {
+                if (isSort(value)) setSort(value);
+              }}
+            />
+          </div>
+          <div className="w-full sm:w-64">
+            <ProjectTagFilter tags={filterTags} onChange={setFilterTags} />
+          </div>
         </div>
       </div>
       {items.length === 0 ? (
@@ -143,14 +153,14 @@ export function RecentProjects() {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((p) => (
-            <li key={p.id} className="overflow-hidden rounded-lg bg-surface shadow-border">
+            <li key={p.id} className="rounded-lg bg-surface shadow-border">
               <button
                 type="button"
                 className="block w-full text-left disabled:opacity-60"
                 disabled={opening === p.id}
                 onClick={() => void open(p.id)}
               >
-                <div className="aspect-video bg-surface-2">
+                <div className="aspect-video overflow-hidden bg-surface-2">
                   {p.coverUrl ? (
                     <OwnedImage
                       src={p.coverUrl}
@@ -173,6 +183,19 @@ export function RecentProjects() {
                   </span>
                 </div>
               </button>
+              <div className="px-3 pb-3">
+                <ProjectTagControl
+                  projectId={p.id}
+                  tags={p.tags}
+                  onChange={(tags) => {
+                    setItems(
+                      (prev) =>
+                        prev?.map((item) => (item.id === p.id ? { ...item, tags } : item)) ?? prev,
+                    );
+                    window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                  }}
+                />
+              </div>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 py-1">
                 <div className="flex flex-wrap items-center">
                   <ProjectRenameControl

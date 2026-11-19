@@ -9,10 +9,26 @@ export const MAX_REFERENCE_IMAGES = 3;
 /** Project names share the 40-character cap used for style DNA names and catalog display names. */
 export const PROJECT_NAME_MAX = 40;
 
+/** A project keeps a short list of free-form tags. Eight fits a card; twenty characters fits a client or season. */
+export const PROJECT_TAG_MAX_COUNT = 8;
+export const PROJECT_TAG_MAX_LENGTH = 20;
+
 export function parseProjectName(raw: string): { ok: true; name: string } | { ok: false } {
   const name = raw.trim();
   if (!name || name.length > PROJECT_NAME_MAX) return { ok: false };
   return { ok: true, name };
+}
+
+export function parseProjectTag(raw: string): { ok: true; tag: string } | { ok: false } {
+  const tag = raw.trim();
+  if (!tag || tag.length > PROJECT_TAG_MAX_LENGTH) return { ok: false };
+  return { ok: true, tag };
+}
+
+/** Tags as stored on a document. A missing or non-list value is none; non-strings are dropped. */
+export function readProjectTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
 }
 export const STORED_IMAGE_ADDRESS = /^\/api\/images\/[^/]+$/;
 
@@ -124,6 +140,11 @@ const projectDocumentObject = z.object({
   enabledSlotIds: z.array(z.string().min(1)).min(1),
   /** Custom deliverables. Missing on old documents, which parse as none. */
   customSlots: z.array(customSlotSchema).default([]),
+  /** Free-form labels. Missing on old documents, which parse as none. Duplicates collapse. */
+  tags: z
+    .array(z.string().trim().min(1).max(PROJECT_TAG_MAX_LENGTH))
+    .max(PROJECT_TAG_MAX_COUNT)
+    .default([]),
   currentImageModelId: z.string(),
   phase: z.enum(["brief", "direction", "studio"]),
   intent: briefIntentSchema.nullable(),
@@ -179,11 +200,28 @@ export function normalizeProjectDocument<T>(input: T): T {
     ? input.styles.map((style) => withEnabledAssets(style, enabledSlotIds))
     : input.styles;
   const customSlots = input.customSlots === undefined ? [] : input.customSlots;
+  const tags = normalizeTags(input.tags);
   // A product name copied onto the project can be longer than the rename cap.
   // Shorten it here so an older document can still be saved; rename itself rejects overflow.
   const name =
     typeof input.name === "string" ? input.name.trim().slice(0, PROJECT_NAME_MAX) : input.name;
-  return { ...input, name, enabledSlotIds, currentSlot, styles, customSlots };
+  return { ...input, name, enabledSlotIds, currentSlot, styles, customSlots, tags };
+}
+
+/** Missing tags become none. Repeated tags, including ones that differ only by surrounding spaces, collapse. */
+function normalizeTags(value: unknown): unknown {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return value;
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") return value;
+    const tag = item.trim();
+    if (seen.has(tag)) continue;
+    seen.add(tag);
+    tags.push(tag);
+  }
+  return tags;
 }
 
 export const projectDocumentSchema = z.preprocess(normalizeProjectDocument, projectDocumentObject);

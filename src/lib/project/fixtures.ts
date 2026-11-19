@@ -77,6 +77,7 @@ export function sampleProject(patch: Partial<Project> = {}): Project {
     currentSlot: "kv",
     enabledSlotIds: [...DEFAULT_ENABLED_SLOT_IDS],
     customSlots: [],
+    tags: [],
     currentImageModelId: "",
     phase: "studio",
     intent: null,

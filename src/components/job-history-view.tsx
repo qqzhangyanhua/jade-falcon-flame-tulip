@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { OwnedImage } from "@/components/owned-image";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listMyJobsFn } from "@/app/actions/studio";
@@ -104,10 +105,11 @@ export function JobHistoryView() {
               const body = (
                 <span className="flex items-start gap-3 md:items-center md:gap-4">
                   {thumb ? (
-                    <img
+                    <OwnedImage
                       src={thumb}
                       alt=""
                       className="h-12 w-16 shrink-0 rounded-md border border-border object-cover md:h-16 md:w-24"
+                      placeholderClassName="h-12 w-16 shrink-0 rounded-md border border-border px-1 text-center text-xs leading-tight md:h-16 md:w-24"
                     />
                   ) : (
                     <span className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md md:h-16 md:w-24 border border-border bg-surface-2 text-[10px] text-subtle">

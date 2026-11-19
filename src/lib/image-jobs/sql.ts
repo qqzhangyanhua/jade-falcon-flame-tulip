@@ -16,7 +16,11 @@ import type {
   StudioProjectRecord,
 } from "./types.ts";
 import type {
+  GeneratedImageRow,
   ImageBlobStore,
+  ImageHideAction,
+  ImageHideAuditRecord,
+  ImageHideAuditStore,
   ImageJobStore,
   ImageRevStore,
   ModelCatalogStore,
@@ -81,6 +85,7 @@ type BlobRow = {
   content_type: string;
   bytes: unknown;
   created_at_ms: number;
+  hidden: boolean | string | number | null;
 };
 
 /** A stored slot is the text that was written. Only null and "" are empty. */
@@ -187,6 +192,34 @@ function toBytes(value: unknown): Uint8Array {
   return new Uint8Array();
 }
 
+function asHidden(value: BlobRow["hidden"]): boolean {
+  return value === true || value === "t" || value === "true" || value === 1;
+}
+
+type ReviewBlobRow = {
+  id: string;
+  user_id: string;
+  project_id: string;
+  content_type: string;
+  hidden: BlobRow["hidden"];
+  created_at_ms: number;
+  user_name: string | null;
+  user_email: string | null;
+};
+
+function toReviewImage(row: ReviewBlobRow): GeneratedImageRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    projectId: row.project_id,
+    createdAt: Number(row.created_at_ms),
+    hidden: asHidden(row.hidden),
+    contentType: row.content_type,
+  };
+}
+
 function toBlob(row: BlobRow): ImageBlobRecord {
   return {
     id: row.id,
@@ -197,6 +230,7 @@ function toBlob(row: BlobRow): ImageBlobRecord {
     contentType: row.content_type,
     bytes: toBytes(row.bytes),
     createdAt: Number(row.created_at_ms),
+    hidden: asHidden(row.hidden),
   };
 }
 
@@ -641,13 +675,64 @@ export function createSqlRevStore(sql: Sql): ImageRevStore {
   };
 }
 
+type AuditRow = {
+  id: string;
+  image_id: string;
+  action: string;
+  admin_id: string;
+  reason: string | null;
+  created_at_ms: number;
+};
+
+function toAudit(row: AuditRow): ImageHideAuditRecord {
+  const action: ImageHideAction = row.action === "unhide" ? "unhide" : "hide";
+  return {
+    id: row.id,
+    imageId: row.image_id,
+    action,
+    adminId: row.admin_id,
+    at: Number(row.created_at_ms),
+    reason: row.reason,
+  };
+}
+
+export function createSqlHideAudit(sql: Sql): ImageHideAuditStore {
+  return {
+    async append(record) {
+      await sql`
+        insert into image_hide_audit (id, image_id, action, admin_id, reason, created_at)
+        values (
+          ${record.id},
+          ${record.imageId},
+          ${record.action},
+          ${record.adminId},
+          ${record.reason},
+          to_timestamp(${record.at / 1000})
+        )
+      `;
+      return record;
+    },
+    async listByImage(imageId) {
+      const rows = await sql<AuditRow>`
+        select
+          id, image_id, action, admin_id, reason,
+          (extract(epoch from created_at) * 1000) as created_at_ms
+        from image_hide_audit
+        where image_id = ${imageId}
+        order by created_at, id
+      `;
+      return rows.map(toAudit);
+    },
+  };
+}
+
 export function createSqlBlobStore(sql: Sql): ImageBlobStore {
   return {
     async put(record) {
       const payload = Buffer.from(record.bytes);
       const rows = await sql<BlobRow>`
         insert into image_blobs (
-          id, user_id, project_id, job_id, kind, content_type, bytes, created_at
+          id, user_id, project_id, job_id, kind, content_type, bytes, created_at, hidden
         )
         values (
           ${record.id},
@@ -657,10 +742,11 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
           ${record.kind},
           ${record.contentType},
           ${payload},
-          to_timestamp(${record.createdAt / 1000})
+          to_timestamp(${record.createdAt / 1000}),
+          ${record.hidden === true}
         )
         returning
-          id, user_id, project_id, job_id, kind, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes, hidden,
           (extract(epoch from created_at) * 1000) as created_at_ms
       `;
       return rows[0] ? toBlob(rows[0]) : record;
@@ -668,7 +754,7 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
     async get(id) {
       const rows = await sql<BlobRow>`
         select
-          id, user_id, project_id, job_id, kind, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes, hidden,
           (extract(epoch from created_at) * 1000) as created_at_ms
         from image_blobs
         where id = ${id}
@@ -684,6 +770,50 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
         delete from image_blobs
         where project_id = ${projectId}
       `;
+    },
+    async setHidden(id, hidden) {
+      const rows = await sql<{ id: string }>`
+        update image_blobs
+        set hidden = ${hidden}
+        where id = ${id}
+        returning id
+      `;
+      return Boolean(rows[0]);
+    },
+    async listGenerated({ query, limit }) {
+      const trimmed = query.trim();
+      const pattern = `%${trimmed.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+      const rows = await sql<ReviewBlobRow>`
+        select
+          b.id,
+          b.user_id,
+          b.project_id,
+          b.content_type,
+          b.hidden,
+          (extract(epoch from b.created_at) * 1000) as created_at_ms,
+          u.name as user_name,
+          u.email as user_email
+        from image_blobs b
+        left join "user" u on u.id = b.user_id
+        where b.kind = 'job'
+          and (
+            ${trimmed} = ''
+            or b.user_id ilike ${pattern} escape '\\\\'
+            or coalesce(u.name, '') ilike ${pattern} escape '\\\\'
+            or coalesce(u.email, '') ilike ${pattern} escape '\\\\'
+          )
+        order by b.created_at desc, b.id desc
+        limit ${limit}
+      `;
+      return rows.map(toReviewImage);
+    },
+    async listHiddenIds(userId) {
+      const rows = await sql<{ id: string }>`
+        select id
+        from image_blobs
+        where user_id = ${userId} and hidden = true
+      `;
+      return rows.map((row) => row.id);
     },
   };
 }

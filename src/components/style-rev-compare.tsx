@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DnaChangeList } from "@/components/dna-change-list";
+import { OwnedImage } from "@/components/owned-image";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { compareRevs } from "@/lib/project/ops";
@@ -106,7 +107,12 @@ function CompareFrame({ label, image }: { label: string; image: ImageRev | null 
         {label}
       </figcaption>
       {image ? (
-        <img src={image.url} alt="" className="aspect-video w-full object-contain" />
+        <OwnedImage
+          src={image.url}
+          alt=""
+          className="aspect-video w-full object-contain"
+          placeholderClassName="aspect-video w-full"
+        />
       ) : (
         <p className="grid aspect-video place-items-center px-2 text-center text-xs leading-relaxed text-subtle">
           这个版本还没有图

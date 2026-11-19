@@ -121,6 +121,8 @@ export type ImageBlobRecord = {
   contentType: string;
   bytes: Uint8Array;
   createdAt: number;
+  /** Set when an admin has hidden this image. Missing means visible. */
+  hidden?: boolean;
 };
 
 export type DurableImageRef = {

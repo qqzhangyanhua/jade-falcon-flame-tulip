@@ -6,11 +6,17 @@ import { fetchRemoteImage, listJobImages, openJobImage } from "@/lib/image-jobs/
 import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
-import { loadProjectDocument, saveProjectDocument } from "@/lib/image-jobs/project-document";
+import {
+  loadProjectDocument,
+  renameProject,
+  saveProjectDocument,
+} from "@/lib/image-jobs/project-document";
 import {
   importLocalProject,
   listProjectSummaries,
   type ImportLocalResult,
+  type ProjectListPage,
+  type ProjectListSort,
 } from "@/lib/image-jobs/project-list";
 import {
   createStudioProject,
@@ -37,7 +43,6 @@ import type {
   ImageJobHistoryItem,
   PickerImageModel,
   ProjectDocumentSnapshot,
-  ProjectSummary,
   StudioImageState,
   StudioQuota,
   StudioRole,
@@ -73,7 +78,9 @@ function parseProjectId(input: { projectId: string }): { projectId: string } {
 /** The result-returning actions answer a blank id with a code instead of throwing. */
 async function resolveActionContext(input: {
   projectId: string;
-}): Promise<{ ok: true; userId: string; projectId: string } | { ok: false; code: ImageJobErrorCode }> {
+}): Promise<
+  { ok: true; userId: string; projectId: string } | { ok: false; code: ImageJobErrorCode }
+> {
   const userId = await signedInUserId();
   if (!userId) return { ok: false, code: "unauthorized" };
   const projectId = input.projectId.trim();
@@ -214,7 +221,9 @@ export async function getStudioAccessFn(): Promise<{ role: StudioRole; quota: St
   return { role, quota };
 }
 
-export async function setDailyImageCapFn(input: { data: { cap: number } }): Promise<{ cap: number }> {
+export async function setDailyImageCapFn(input: {
+  data: { cap: number };
+}): Promise<{ cap: number }> {
   const { userId } = await requireActionUser();
   const cap = normalizeDailyCap(input.data.cap);
   if (cap === null) throw new Error("额度须为 0–9999 的整数");
@@ -304,8 +313,7 @@ export async function generateSlotFn(input: {
     ? loaded.value.document?.customSlots?.find((item) => item.id === data.slot)
     : undefined;
   const prompt = slotPrompt(data.dna, data.slot, data.product, data.content, custom);
-  const ref =
-    data.refUrl && !data.refUrl.startsWith("data:image/svg") ? data.refUrl : undefined;
+  const ref = data.refUrl && !data.refUrl.startsWith("data:image/svg") ? data.refUrl : undefined;
   return runOwnedImageJob(userId, {
     projectId: data.projectId,
     action: "generate",
@@ -457,10 +465,33 @@ export async function saveProjectDocumentFn(input: {
   });
 }
 
-export async function listProjectSummariesFn(): Promise<ProjectSummary[]> {
+export async function listProjectSummariesFn(input?: {
+  data?: { keyword?: string; sort?: ProjectListSort; offset?: number };
+}): Promise<ProjectListPage> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
-  return unwrapProjectOp(await listProjectSummaries(deps, { userId }));
+  const data = input?.data;
+  return unwrapProjectOp(
+    await listProjectSummaries(deps, {
+      userId,
+      keyword: data?.keyword,
+      sort: data?.sort,
+      offset: data?.offset,
+    }),
+  );
+}
+
+export async function renameProjectFn(input: {
+  data: { projectId: string; name: string };
+}): Promise<ProjectDocumentActionResult<{ name: string; version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return renameProject(deps, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    name: input.data.name,
+  });
 }
 
 export async function importLocalProjectFn(input: {

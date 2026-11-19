@@ -1,4 +1,4 @@
-import { projectDocumentSchema } from "../project/schema.ts";
+import { parseProjectName, projectDocumentSchema } from "../project/schema.ts";
 import { loadOwnedProject, type ProjectOpResult } from "./projects.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
 import type { ProjectDocumentSnapshot } from "./types.ts";
@@ -18,6 +18,38 @@ export async function loadProjectDocument(
   const snapshot = await deps.projects.getDocument(loaded.value.id);
   if (!snapshot) return { ok: false, code: "not_found" };
   return { ok: true, value: snapshot };
+}
+
+export async function renameProject(
+  deps: DocumentDeps,
+  input: { userId: string; projectId: string; name: string },
+): Promise<ProjectOpResult<{ name: string; version: number; updatedAt: number }>> {
+  const loaded = await loadOwnedProject(deps.projects, input);
+  if (!loaded.ok) return loaded;
+
+  const snapshot = await deps.projects.getDocument(loaded.value.id);
+  if (!snapshot?.document) return { ok: false, code: "not_found" };
+
+  const parsedName = parseProjectName(input.name);
+  if (!parsedName.ok) return { ok: false, code: "invalid_document" };
+  const name = parsedName.name;
+  if (snapshot.document.name === name) {
+    return {
+      ok: true,
+      value: { name, version: snapshot.version, updatedAt: snapshot.updatedAt ?? 0 },
+    };
+  }
+  const saved = await saveProjectDocument(deps, {
+    userId: input.userId,
+    projectId: loaded.value.id,
+    document: { ...snapshot.document, name },
+    expectedVersion: snapshot.version,
+  });
+  if (!saved.ok) return saved;
+  return {
+    ok: true,
+    value: { name, version: saved.value.version, updatedAt: saved.value.updatedAt },
+  };
 }
 
 export async function saveProjectDocument(

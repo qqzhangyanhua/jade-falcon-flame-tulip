@@ -5,6 +5,15 @@ import { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.t
 export { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS };
 
 export const MAX_REFERENCE_IMAGES = 3;
+
+/** Project names share the 40-character cap used for style DNA names and catalog display names. */
+export const PROJECT_NAME_MAX = 40;
+
+export function parseProjectName(raw: string): { ok: true; name: string } | { ok: false } {
+  const name = raw.trim();
+  if (!name || name.length > PROJECT_NAME_MAX) return { ok: false };
+  return { ok: true, name };
+}
 export const STORED_IMAGE_ADDRESS = /^\/api\/images\/[^/]+$/;
 
 /** Keeps at most three `/api/images/<id>` addresses. Anything else, including a missing field, is dropped. */
@@ -95,7 +104,7 @@ export type BriefIntent = z.infer<typeof briefIntentSchema>;
  */
 const projectDocumentObject = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().trim().min(1).max(PROJECT_NAME_MAX),
   brief: z.string(),
   // Image bytes live in image_blobs; the document only holds an /api/images/<id> address.
   prototypeDataUrl: z
@@ -170,13 +179,14 @@ export function normalizeProjectDocument<T>(input: T): T {
     ? input.styles.map((style) => withEnabledAssets(style, enabledSlotIds))
     : input.styles;
   const customSlots = input.customSlots === undefined ? [] : input.customSlots;
-  return { ...input, enabledSlotIds, currentSlot, styles, customSlots };
+  // A product name copied onto the project can be longer than the rename cap.
+  // Shorten it here so an older document can still be saved; rename itself rejects overflow.
+  const name =
+    typeof input.name === "string" ? input.name.trim().slice(0, PROJECT_NAME_MAX) : input.name;
+  return { ...input, name, enabledSlotIds, currentSlot, styles, customSlots };
 }
 
-export const projectDocumentSchema = z.preprocess(
-  normalizeProjectDocument,
-  projectDocumentObject,
-);
+export const projectDocumentSchema = z.preprocess(normalizeProjectDocument, projectDocumentObject);
 export type ProjectDocument = z.infer<typeof projectDocumentSchema>;
 
 export type Project = ProjectDocument & {

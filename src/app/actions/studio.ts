@@ -42,7 +42,7 @@ import type {
   StudioQuota,
   StudioRole,
 } from "@/lib/image-jobs/types";
-import { uploadWireframe } from "@/lib/image-jobs/upload";
+import { uploadReferenceImage, uploadWireframe } from "@/lib/image-jobs/upload";
 import { createXaiImageUpstream } from "@/lib/image-jobs/upstream";
 import { styleDnaSchema } from "@/lib/project/dna";
 import { PRESETS } from "@/lib/presets";
@@ -140,6 +140,21 @@ export async function uploadWireframeFn(input: {
   const { projectId } = parseProjectId(input.data);
   const deps = await createSqlGatewayDeps();
   const result = await uploadWireframe(deps, {
+    userId,
+    projectId,
+    dataUrl: input.data.dataUrl,
+  });
+  if (!result.ok) throw new ImageJobError(result.code);
+  return { url: result.url };
+}
+
+export async function uploadReferenceImageFn(input: {
+  data: { projectId: string; dataUrl: string };
+}): Promise<{ url: string }> {
+  const { userId } = await requireActionUser();
+  const { projectId } = parseProjectId(input.data);
+  const deps = await createSqlGatewayDeps();
+  const result = await uploadReferenceImage(deps, {
     userId,
     projectId,
     dataUrl: input.data.dataUrl,
@@ -282,7 +297,12 @@ export async function generateSlotFn(input: {
 }): Promise<ImageJobFnResult> {
   const { userId } = await requireActionUser();
   const data = input.data;
-  const prompt = slotPrompt(data.dna, data.slot, data.product, data.content);
+  const deps = await createSqlGatewayDeps();
+  const loaded = await loadProjectDocument(deps, { userId, projectId: data.projectId });
+  const custom = loaded.ok
+    ? loaded.value.document?.customSlots?.find((item) => item.id === data.slot)
+    : undefined;
+  const prompt = slotPrompt(data.dna, data.slot, data.product, data.content, custom);
   const ref =
     data.refUrl && !data.refUrl.startsWith("data:image/svg") ? data.refUrl : undefined;
   return runOwnedImageJob(userId, {

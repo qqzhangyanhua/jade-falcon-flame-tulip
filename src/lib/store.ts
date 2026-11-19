@@ -15,7 +15,12 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  createCustomSlot,
+  deleteCustomSlot,
+  editCustomSlot,
+  enableBuiltinSlot,
   forkStyle,
+  hideBuiltinSlot,
   lockCandidate,
   restoreStyle,
   setCurrentStyle,
@@ -23,7 +28,8 @@ import {
   writebackStyle,
 } from "./project/ops.ts";
 import type { DnaChange } from "./project/dna.ts";
-import type { ArchiveResult } from "./project/ops.ts";
+import type { ArchiveResult, CustomSlotDraft } from "./project/ops.ts";
+import { DEFAULT_ENABLED_SLOT_IDS, normalizeProjectDocument } from "./project/schema.ts";
 import { uid } from "./utils";
 
 type State = {
@@ -34,6 +40,7 @@ type State = {
   createProject: (input: {
     brief: string;
     prototypeDataUrl: string | null;
+    referenceImageUrls?: string[];
     id?: string;
     currentImageModelId?: string;
   }) => string;
@@ -45,6 +52,11 @@ type State = {
   lockCandidate: (candidateId: string) => void;
   setCurrentStyle: (styleId: string) => void;
   setSlot: (slot: Slot) => void;
+  enableBuiltinSlot: (slotId: string) => void;
+  hideBuiltinSlot: (slotId: string) => void;
+  createCustomSlot: (draft: CustomSlotDraft) => void;
+  editCustomSlot: (slotId: string, draft: CustomSlotDraft) => void;
+  deleteCustomSlot: (slotId: string) => void;
   setMode: (mode: Project["mode"]) => void;
   addImageRevs: (opts: {
     styleId: string;
@@ -95,7 +107,13 @@ export const useStudio = create<State>()(
         if (!p?.currentStyleId) return null;
         return p.styles.find((s) => s.id === p.currentStyleId) ?? null;
       },
-      createProject: ({ brief, prototypeDataUrl, id: givenId, currentImageModelId }) => {
+      createProject: ({
+        brief,
+        prototypeDataUrl,
+        referenceImageUrls,
+        id: givenId,
+        currentImageModelId,
+      }) => {
         const id = givenId ?? uid("prj");
         const name = brief.trim().slice(0, 24) || "未命名项目";
         const project: Project = {
@@ -103,9 +121,12 @@ export const useStudio = create<State>()(
           name,
           brief: brief.trim(),
           prototypeDataUrl,
+          referenceImageUrls: referenceImageUrls ?? [],
           createdAt: Date.now(),
           currentStyleId: null,
           currentSlot: "kv",
+          enabledSlotIds: [...DEFAULT_ENABLED_SLOT_IDS],
+          customSlots: [],
           currentImageModelId: currentImageModelId ?? "",
           phase: "direction",
           intent: null,
@@ -135,7 +156,11 @@ export const useStudio = create<State>()(
         const id = get().currentId;
         if (!id) return;
         set((s) => ({
-          projects: patchProject(s.projects, id, (p) => ({ ...p, intent, name: intent.productName || p.name })),
+          projects: patchProject(s.projects, id, (p) => ({
+            ...p,
+            intent,
+            name: intent.productName || p.name,
+          })),
         }));
       },
       setCandidates: (candidates) => {
@@ -153,13 +178,23 @@ export const useStudio = create<State>()(
           })),
         }));
       },
-      lockCandidate: (candidateId) => update(set, get, (p) => lockCandidate(p, candidateId, { newId: uid })),
+      lockCandidate: (candidateId) =>
+        update(set, get, (p) => lockCandidate(p, candidateId, { newId: uid })),
       setCurrentStyle: (styleId) => update(set, get, (p) => setCurrentStyle(p, styleId)),
       setSlot: (slot) => {
         const id = get().currentId;
         if (!id) return;
-        set((s) => ({ projects: patchProject(s.projects, id, (p) => ({ ...p, currentSlot: slot })) }));
+        set((s) => ({
+          projects: patchProject(s.projects, id, (p) => ({ ...p, currentSlot: slot })),
+        }));
       },
+      enableBuiltinSlot: (slotId) => update(set, get, (p) => enableBuiltinSlot(p, slotId)),
+      hideBuiltinSlot: (slotId) => update(set, get, (p) => hideBuiltinSlot(p, slotId)),
+      createCustomSlot: (draft) =>
+        update(set, get, (p) => createCustomSlot(p, draft, { newId: uid })),
+      editCustomSlot: (slotId, draft) =>
+        update(set, get, (p) => editCustomSlot(p, slotId, draft)),
+      deleteCustomSlot: (slotId) => update(set, get, (p) => deleteCustomSlot(p, slotId)),
       setMode: (mode) => {
         const id = get().currentId;
         if (!id) return;
@@ -179,7 +214,9 @@ export const useStudio = create<State>()(
       adoptImage: (styleId, slot, imageId) =>
         update(set, get, (p) => adoptImage(p, styleId, slot, imageId)),
       writebackStyle: ({ styleId, changeLog, dna, changes }) =>
-        update(set, get, (p) => writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid })),
+        update(set, get, (p) =>
+          writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid }),
+        ),
       setStyleRev: (styleId, rev) => update(set, get, (p) => setStyleRev(p, styleId, rev)),
       removeProject: (id) => {
         set((s) => ({
@@ -200,14 +237,17 @@ export const useStudio = create<State>()(
     }),
     {
       name: "keystone-v1",
-      version: 2,
+      version: 4,
       migrate: (persisted) => {
         const state = persisted as { projects?: Project[]; currentId?: string | null };
         return {
-          projects: (state.projects ?? []).map((project) => ({
-            ...project,
-            currentImageModelId: project.currentImageModelId ?? "",
-          })),
+          projects: (state.projects ?? []).map((project) =>
+            normalizeProjectDocument({
+              ...project,
+              currentImageModelId: project.currentImageModelId ?? "",
+              referenceImageUrls: project.referenceImageUrls ?? [],
+            }),
+          ),
           currentId: state.currentId ?? null,
         };
       },

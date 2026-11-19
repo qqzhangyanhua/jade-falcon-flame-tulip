@@ -1,7 +1,6 @@
 import type { ImageJobAction, ImageJobSlot } from "./types.ts";
-import { IMAGE_JOB_SLOTS } from "./types.ts";
 
-export const MAX_PARALLEL_DIRECTION_JOBS = 4;
+export const MAX_PARALLEL_DIRECTION_JOBS = 5;
 
 export type RunningJobRef = {
   projectId: string;
@@ -13,8 +12,8 @@ export function resolveJobSlot(
   slot?: ImageJobSlot | null,
 ): ImageJobSlot | null {
   if (action === "direction") return null;
-  if (slot && (IMAGE_JOB_SLOTS as readonly string[]).includes(slot)) return slot;
-  return "kv";
+  if (typeof slot === "string" && slot.length > 0) return slot;
+  return null;
 }
 
 export function concurrencyBlock(

@@ -1,4 +1,11 @@
+import { BUILTIN_SLOTS, customSlotPromptLead, DIRECTION_ASPECT } from "./project/slots.ts";
 import type { Slot, StyleDna } from "./types";
+
+export type SlotPromptFields = {
+  name: string;
+  purpose: string;
+  extraPrompt?: string;
+};
 
 export function candidatePrompt(dna: StyleDna, product: string): string {
   return [
@@ -19,6 +26,7 @@ export function slotPrompt(
   slot: Slot,
   product: string,
   content: string,
+  custom?: SlotPromptFields,
 ): string {
   const extra = content.trim() ? `Headline / offer: "${content.trim()}".` : "";
   const shared = [
@@ -29,22 +37,23 @@ export function slotPrompt(
     `Avoid: ${dna.promptNegative}, ${dna.forbidden.join(", ")}. No real-brand logos, no watermark.`,
   ].join(" ");
 
-  if (slot === "ui_hero") {
-    return `High-fidelity mobile app UI screenshot of "${product}" flagship home screen, full-bleed interface, realistic iOS/Android UI, readable Chinese or English UI copy, not a poster. ${shared}`;
-  }
-  if (slot === "kv") {
-    return `Brand key visual poster for "${product}", cinematic still, large refined typography, one hero subject, campaign-quality, 16:9. ${shared}`;
-  }
-  return `Website homepage hero, 16:9 desktop screenshot of "${product}" marketing site, navigation, headline, CTA, hero image, realistic web UI. ${shared}`;
+  const builtin = BUILTIN_SLOTS.find((item) => item.id === slot);
+  const lead = builtin
+    ? builtin.promptTemplate.replaceAll("{product}", product)
+    : custom
+      ? customSlotPromptLead(custom, product)
+      : (BUILTIN_SLOTS.find((item) => item.id === "web_home")?.promptTemplate ?? "").replaceAll(
+          "{product}",
+          product,
+        );
+  return `${lead} ${shared}`;
 }
 
 export function tunePrompt(dna: StyleDna, instruction: string): string {
   return `Edit this design image. Keep the same product, layout structure, and brand. ${instruction}. Stay inside the visual system: ${dna.promptPositive}. Palette ${dna.colors.bg} / ${dna.colors.primary} / ${dna.colors.accent}. Avoid ${dna.promptNegative}.`;
 }
 
-export const SLOT_ASPECT: Record<Slot | "candidate", string> = {
-  candidate: "16:9",
-  ui_hero: "9:16",
-  kv: "16:9",
-  web_home: "16:9",
+export const SLOT_ASPECT: Record<string, string> = {
+  candidate: DIRECTION_ASPECT,
+  ...Object.fromEntries(BUILTIN_SLOTS.map((slot) => [slot.id, slot.aspect])),
 };

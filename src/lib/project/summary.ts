@@ -16,6 +16,7 @@ export function projectCoverUrl(
   const style = document.styles.find((s) => s.id === document.currentStyleId);
   if (!style) return null;
   const kv = style.assets[COVER_SLOT];
+  if (!kv) return style.candidateUrl ?? null;
   const adopted = kv.adoptedId ? kv.revs.find((r) => r.id === kv.adoptedId) : undefined;
   return adopted?.url ?? kv.revs.at(-1)?.url ?? style.candidateUrl ?? null;
 }

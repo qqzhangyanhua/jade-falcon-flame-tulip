@@ -1,10 +1,31 @@
 import { z } from "zod";
 import { dnaChangeSchema, styleDnaSchema, type StyleDna } from "./dna.ts";
+import { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
 
-export const SLOT_IDS = ["ui_hero", "kv", "web_home"] as const;
+export { DEFAULT_ENABLED_SLOT_IDS, SLOT_IDS };
 
-export const slotSchema = z.enum(SLOT_IDS);
-export type Slot = z.infer<typeof slotSchema>;
+export const MAX_REFERENCE_IMAGES = 3;
+export const STORED_IMAGE_ADDRESS = /^\/api\/images\/[^/]+$/;
+
+/** Keeps at most three `/api/images/<id>` addresses. Anything else, including a missing field, is dropped. */
+export function referenceImageUrlsFrom(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && STORED_IMAGE_ADDRESS.test(item))
+    .slice(0, MAX_REFERENCE_IMAGES);
+}
+
+export const slotSchema = z.string().min(1);
+export type Slot = string;
+
+export const customSlotSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(40),
+  aspect: z.enum(SUPPORTED_ASPECTS),
+  purpose: z.string().min(1).max(200),
+  extraPrompt: z.string().max(400).optional(),
+});
+export type CustomSlot = z.infer<typeof customSlotSchema>;
 
 export const imageRevSchema = z.object({
   id: z.string(),
@@ -44,11 +65,7 @@ export const styleBranchSchema = z.object({
   status: z.enum(["active", "standby", "archived"]),
   currentRev: z.number().int(),
   revs: z.array(styleRevRecordSchema),
-  assets: z.object({
-    ui_hero: assetSchema,
-    kv: assetSchema,
-    web_home: assetSchema,
-  }),
+  assets: z.record(z.string(), assetSchema),
   candidateUrl: z.string().nullable(),
 });
 export type StyleBranch = z.infer<typeof styleBranchSchema>;
@@ -76,7 +93,7 @@ export type BriefIntent = z.infer<typeof briefIntentSchema>;
  * The persisted shape of a Project. `mode` is UI state and is deliberately
  * absent, so a parsed document never carries a generating/editing flag.
  */
-export const projectDocumentSchema = z.object({
+const projectDocumentObject = z.object({
   id: z.string(),
   name: z.string(),
   brief: z.string(),
@@ -87,15 +104,79 @@ export const projectDocumentSchema = z.object({
       message: "prototype must be a stored image address, not a data: URL",
     })
     .nullable(),
+  // Old documents omit this. Bytes stay in image_blobs; only /api/images/<id> is stored.
+  referenceImageUrls: z
+    .array(z.string().regex(STORED_IMAGE_ADDRESS))
+    .max(MAX_REFERENCE_IMAGES)
+    .default([]),
   createdAt: z.number(),
   currentStyleId: z.string().nullable(),
   currentSlot: slotSchema,
+  enabledSlotIds: z.array(z.string().min(1)).min(1),
+  /** Custom deliverables. Missing on old documents, which parse as none. */
+  customSlots: z.array(customSlotSchema).default([]),
   currentImageModelId: z.string(),
   phase: z.enum(["brief", "direction", "studio"]),
   intent: briefIntentSchema.nullable(),
   candidates: z.array(candidateSchema),
   styles: z.array(styleBranchSchema),
 });
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readEnabledSlotIds(value: unknown): string[] | null {
+  if (value === undefined) return [...DEFAULT_ENABLED_SLOT_IDS];
+  if (!Array.isArray(value) || value.length === 0) return null;
+  if (!value.every((id) => typeof id === "string" && id.length > 0)) return null;
+  return [...value];
+}
+
+function blankAsset(slot: string): { slot: string; adoptedId: null; revs: [] } {
+  return { slot, adoptedId: null, revs: [] };
+}
+
+function withEnabledAssets(style: unknown, enabled: string[]): unknown {
+  if (!isPlainObject(style)) return style;
+  if (style.assets == null) {
+    const assets: Record<string, unknown> = {};
+    for (const id of enabled) assets[id] = blankAsset(id);
+    return { ...style, assets };
+  }
+  if (!isPlainObject(style.assets)) return style;
+  const assets = { ...style.assets };
+  for (const id of enabled) {
+    if (assets[id] == null) assets[id] = blankAsset(id);
+  }
+  return { ...style, assets };
+}
+
+/**
+ * Old documents have no enabled-slot list and a fixed 3-key asset object.
+ * Fill the default list, point currentSlot at an enabled id, and insert an
+ * empty asset for every enabled id that is missing. Other asset keys stay.
+ */
+export function normalizeProjectDocument<T>(input: T): T {
+  if (!isPlainObject(input)) return input;
+  const enabledSlotIds = readEnabledSlotIds(input.enabledSlotIds);
+  if (!enabledSlotIds) return input;
+  const requested = input.currentSlot;
+  const currentSlot =
+    typeof requested === "string" && enabledSlotIds.includes(requested)
+      ? requested
+      : enabledSlotIds[0];
+  const styles = Array.isArray(input.styles)
+    ? input.styles.map((style) => withEnabledAssets(style, enabledSlotIds))
+    : input.styles;
+  const customSlots = input.customSlots === undefined ? [] : input.customSlots;
+  return { ...input, enabledSlotIds, currentSlot, styles, customSlots };
+}
+
+export const projectDocumentSchema = z.preprocess(
+  normalizeProjectDocument,
+  projectDocumentObject,
+);
 export type ProjectDocument = z.infer<typeof projectDocumentSchema>;
 
 export type Project = ProjectDocument & {
@@ -108,12 +189,8 @@ export function emptyAsset(slot: Slot): Asset {
   return { slot, adoptedId: null, revs: [] };
 }
 
-export function emptyAssets(): Record<Slot, Asset> {
-  return {
-    ui_hero: emptyAsset("ui_hero"),
-    kv: emptyAsset("kv"),
-    web_home: emptyAsset("web_home"),
-  };
+export function emptyAssets(): Record<string, Asset> {
+  return Object.fromEntries(DEFAULT_ENABLED_SLOT_IDS.map((id) => [id, emptyAsset(id)]));
 }
 
 export function currentDna(branch: StyleBranch): StyleDna {

@@ -1,14 +1,13 @@
 import type { Sql } from "../db";
-import { beijingCalendarDay } from "./beijing-day";
-import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency";
-import { COVER_SLOT } from "../project/summary";
-import { DEFAULT_DAILY_IMAGE_CAP } from "./quota";
+import { beijingCalendarDay } from "./beijing-day.ts";
+import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency.ts";
+import { COVER_SLOT } from "../project/summary.ts";
+import { DEFAULT_DAILY_IMAGE_CAP } from "./quota.ts";
 import {
   IMAGE_JOB_ACTIONS,
-  IMAGE_JOB_SLOTS,
   type ImageJobAction,
   type ImageJobSlot,
-} from "./types";
+} from "./types.ts";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -19,14 +18,14 @@ import type {
   ProjectDocumentSnapshot,
   ProjectSummary,
   StudioProjectRecord,
-} from "./types";
+} from "./types.ts";
 import type {
   ImageBlobStore,
   ImageJobStore,
   ImageRevStore,
   ModelCatalogStore,
   StudioProjectStore,
-} from "./stores";
+} from "./stores.ts";
 
 type CatalogRow = {
   id: string;
@@ -86,11 +85,10 @@ type BlobRow = {
   created_at_ms: number;
 };
 
-function parseSlot(raw: string | null): ImageJobSlot | null {
-  if (raw && (IMAGE_JOB_SLOTS as readonly string[]).includes(raw)) {
-    return raw as ImageJobSlot;
-  }
-  return null;
+/** A stored slot is the text that was written. Only null and "" are empty. */
+export function parseSlot(raw: string | null): ImageJobSlot | null {
+  if (!raw) return null;
+  return raw;
 }
 
 function isUniqueViolation(err: unknown): boolean {

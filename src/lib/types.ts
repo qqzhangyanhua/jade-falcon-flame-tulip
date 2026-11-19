@@ -1,4 +1,5 @@
 import type { Slot } from "./project/schema.ts";
+import { BUILTIN_SLOTS } from "./project/slots.ts";
 
 export {
   adoptedRev,
@@ -10,6 +11,7 @@ export type {
   Asset,
   BriefIntent,
   Candidate,
+  CustomSlot,
   ImageRev,
   Project,
   Slot,
@@ -18,11 +20,11 @@ export type {
   StyleRevRecord,
 } from "./project/schema.ts";
 
-export const SLOTS: { id: Slot; label: string; hint: string }[] = [
-  { id: "ui_hero", label: "产品旗舰页", hint: "有原型则保结构" },
-  { id: "kv", label: "品牌主视觉", hint: "KV / 海报" },
-  { id: "web_home", label: "官网首屏", hint: "延展页" },
-];
+export const SLOTS: { id: Slot; label: string; hint: string }[] = BUILTIN_SLOTS.map((slot) => ({
+  id: slot.id,
+  label: slot.name,
+  hint: slot.purpose,
+}));
 
 export type ProfileRecord = {
   displayName: string;

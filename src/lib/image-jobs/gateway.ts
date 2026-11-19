@@ -1,3 +1,5 @@
+import { projectDocumentSchema, type CustomSlot } from "../project/schema.ts";
+import { catalogAspect, DEFAULT_ENABLED_SLOT_IDS, DIRECTION_ASPECT } from "../project/slots.ts";
 import { persistDurableCopies, resolveUpstreamImageUrl } from "./durable.ts";
 import { newEntityId } from "./ids.ts";
 import { evaluateImageAction } from "./availability.ts";
@@ -15,6 +17,30 @@ import type {
 
 function fail(code: ImageJobErrorCode, job?: ImageJobRecord): RunImageJobResult {
   return job ? { ok: false, code, job } : { ok: false, code };
+}
+
+type ProjectSlots = {
+  enabled: readonly string[];
+  customSlots: readonly CustomSlot[];
+};
+
+/** Enabled ids and custom definitions, or the original three when there is no document. */
+async function projectSlotsFor(
+  deps: ImageJobGatewayDeps,
+  projectId: string,
+): Promise<ProjectSlots> {
+  const snapshot = await deps.projects.getDocument(projectId);
+  if (!snapshot?.document) return { enabled: DEFAULT_ENABLED_SLOT_IDS, customSlots: [] };
+  const parsed = projectDocumentSchema.safeParse(snapshot.document);
+  if (!parsed.success) return { enabled: DEFAULT_ENABLED_SLOT_IDS, customSlots: [] };
+  return { enabled: parsed.data.enabledSlotIds, customSlots: parsed.data.customSlots };
+}
+
+/** Built-in catalog aspect, else the custom definition. Never a 16:9 fallback. */
+function aspectForSlot(slot: string, customSlots: readonly CustomSlot[]): string | null {
+  const builtin = catalogAspect(slot);
+  if (builtin) return builtin;
+  return customSlots.find((item) => item.id === slot)?.aspect ?? null;
 }
 
 export async function runImageJob(
@@ -46,6 +72,16 @@ export async function runImageJob(
     imageUrl = resolved;
   }
 
+  const slot = resolveJobSlot(input.action, input.slot);
+  let jobAspect = DIRECTION_ASPECT;
+  if (input.action !== "direction") {
+    const projectSlots = await projectSlotsFor(deps, input.projectId);
+    if (!slot || !projectSlots.enabled.includes(slot)) return fail("unknown_slot");
+    const aspect = aspectForSlot(slot, projectSlots.customSlots);
+    if (!aspect) return fail("unknown_slot");
+    jobAspect = aspect;
+  }
+
   const now = deps.now?.() ?? Date.now();
   const newId = deps.newId ?? newEntityId;
   const reserved = await deps.jobs.insertReserved({
@@ -53,7 +89,7 @@ export async function runImageJob(
     userId: input.userId,
     projectId: input.projectId,
     action: input.action,
-    slot: resolveJobSlot(input.action, input.slot),
+    slot,
     catalogModelId: verdict.model.id,
     upstreamModelId: verdict.model.upstreamId,
     displayNameSnapshot: verdict.model.displayName,
@@ -71,7 +107,7 @@ export async function runImageJob(
       action: input.action,
       upstreamModelId: verdict.model.upstreamId,
       prompt: input.prompt,
-      aspect: input.aspect ?? "16:9",
+      aspect: jobAspect,
       n: input.n ?? 1,
       imageUrl,
     });

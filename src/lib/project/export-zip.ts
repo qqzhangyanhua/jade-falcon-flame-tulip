@@ -1,6 +1,7 @@
 import { zipSync } from "fflate";
 import { exportManifest } from "./manifest.ts";
 import type { StyleBranch } from "./schema.ts";
+import type { SlotPromptMeta } from "./slots.ts";
 
 const EXTENSION_BY_TYPE: Record<string, string> = {
   "image/png": "png",
@@ -27,17 +28,25 @@ export function exportZipName(projectName: string, styleName: string, rev: numbe
 export type ExportZip = { fileName: string; bytes: Uint8Array };
 
 /**
- * Fetches the manifest's images and zips them with dna.json. The extension comes
- * from the response content type, since /api/images/<id> urls carry none.
+ * Fetches the manifest's images and zips them with dna.json, the design-token
+ * files and prompts.md. The extension comes from the response content type,
+ * since /api/images/<id> urls carry none. Token text is the viewed rev; no model call.
  */
 export async function buildExportZip(input: {
   projectName: string;
   styleLine: StyleBranch;
   fetchImpl?: typeof fetch;
+  enabledSlotIds?: readonly string[];
+  customSlots?: readonly SlotPromptMeta[];
+  product?: string;
 }): Promise<ExportZip> {
   const { styleLine } = input;
   const fetchImpl = input.fetchImpl ?? fetch;
-  const manifest = exportManifest(styleLine);
+  const manifest = exportManifest(styleLine, {
+    enabledSlotIds: input.enabledSlotIds,
+    customSlots: input.customSlots,
+    product: input.product,
+  });
   if (manifest.images.length === 0) throw new Error("没有可导出的图片");
 
   const files: Record<string, Uint8Array> = {};
@@ -50,7 +59,12 @@ export async function buildExportZip(input: {
     );
     files[`${image.slot}.${extension}`] = new Uint8Array(await response.arrayBuffer());
   }
-  files[manifest.dna.fileName] = new TextEncoder().encode(manifest.dna.content);
+  const encode = (content: string) => new TextEncoder().encode(content);
+  files[manifest.dna.fileName] = encode(manifest.dna.content);
+  files[manifest.tokens.css.fileName] = encode(manifest.tokens.css.content);
+  files[manifest.tokens.tailwind.fileName] = encode(manifest.tokens.tailwind.content);
+  files[manifest.tokens.w3c.fileName] = encode(manifest.tokens.w3c.content);
+  files[manifest.prompts.fileName] = encode(manifest.prompts.content);
 
   return {
     fileName: exportZipName(input.projectName, styleLine.name, styleLine.currentRev),

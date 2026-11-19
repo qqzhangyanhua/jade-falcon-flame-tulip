@@ -3,6 +3,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { ConsistencyBadge } from "@/components/color-consistency-badge";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
+import { paletteOfDna } from "@/lib/project/dna-export";
 import { useStudio } from "@/lib/store";
 
 export function DirectionView() {
@@ -21,6 +23,7 @@ export function DirectionView() {
   if (!project) return null;
   const pending = project.candidates.some((c) => c.status === "pending");
   const tailoring = project.mode === "tailoring";
+  const hasReference = project.candidates.some((c) => c.presetId === "reference");
 
   return (
     <div className="page-shell">
@@ -57,65 +60,92 @@ export function DirectionView() {
             {project.name}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">
-            四个正交方向，同一主题。锁定一张作为当前工作风格，其余最多保留两条备选。
+            {hasReference
+              ? "一条参考图方向，加上四个预设。锁定一张作为当前工作风格，其余最多保留两条备选。"
+              : "四个正交方向，同一主题。锁定一张作为当前工作风格，其余最多保留两条备选。"}
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          {project.candidates.map((c) => (
-            <article key={c.id} className="overflow-hidden rounded-xl bg-surface p-2 shadow-border">
-              <div className="relative aspect-video overflow-hidden rounded-lg bg-surface-2">
-                {c.url ? (
-                  <img src={c.url} alt={c.dna.name} className="frame size-full object-cover" />
-                ) : (
-                  <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center text-subtle">
-                    {c.status === "error" ? (
-                      <p className="text-sm text-danger">出图失败</p>
-                    ) : (
-                      <>
-                        <Loader2 className="size-6 animate-spin" />
-                        {tailoring ? <p className="text-sm">正在定制方向</p> : null}
-                      </>
-                    )}
+          {project.candidates.map((c) => {
+            const isReference = c.presetId === "reference";
+            return (
+              <article
+                key={c.id}
+                className="overflow-hidden rounded-xl bg-surface p-2 shadow-border"
+              >
+                <div className="relative aspect-video overflow-hidden rounded-lg bg-surface-2">
+                  {c.url ? (
+                    <img src={c.url} alt={c.dna.name} className="frame size-full object-cover" />
+                  ) : (
+                    <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center text-subtle">
+                      {c.status === "error" ? (
+                        <p className="text-sm text-danger">出图失败</p>
+                      ) : (
+                        <>
+                          <Loader2 className="size-6 animate-spin" />
+                          {tailoring ? <p className="text-sm">正在定制方向</p> : null}
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {c.url ? (
+                    <ConsistencyBadge
+                      className="absolute inset-x-2 bottom-2 z-10"
+                      url={c.url}
+                      palette={paletteOfDna(c.dna)}
+                      offerTune={false}
+                    />
+                  ) : null}
+                  <div className="absolute left-3 top-3 flex gap-1.5">
+                    {Object.values(c.dna.colors)
+                      .slice(0, 5)
+                      .map((hex) => (
+                        <span
+                          key={hex}
+                          className="size-3 rounded-full shadow-border"
+                          style={{ background: hex }}
+                        />
+                      ))}
                   </div>
-                )}
-                <div className="absolute left-3 top-3 flex gap-1.5">
-                  {Object.values(c.dna.colors)
-                    .slice(0, 5)
-                    .map((hex) => (
-                      <span
-                        key={hex}
-                        className="size-3 rounded-full shadow-border"
-                        style={{ background: hex }}
-                      />
-                    ))}
                 </div>
-              </div>
-              <div className="space-y-3 px-3 py-4">
-                <div>
-                  <h2 className="font-display text-2xl tracking-tight text-fg">{c.dna.name}</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-muted">{c.dna.oneLiner}</p>
+                <div className="space-y-3 px-3 py-4">
+                  <div>
+                    {isReference ? <p className="text-xs font-medium text-fg">参考图方向</p> : null}
+                    <h2
+                      className={`font-display text-2xl tracking-tight text-fg ${isReference ? "mt-1" : ""}`}
+                    >
+                      {c.dna.name}
+                    </h2>
+                    <p className="mt-1 text-sm leading-relaxed text-muted">{c.dna.oneLiner}</p>
+                  </div>
+                  <p className="text-xs text-subtle">
+                    {c.dna.material} · {c.dna.light} · {c.dna.density}
+                  </p>
+                  <Button
+                    className="w-full"
+                    disabled={c.status !== "ready" || pending}
+                    onClick={() => {
+                      lockCandidate(c.id);
+                      toast.success(
+                        `已锁定 ${isReference ? "参考图方向" : c.dna.name}，其余方向保留为备选`,
+                      );
+                    }}
+                  >
+                    <Check className="size-4" />
+                    锁定为当前风格
+                  </Button>
                 </div>
-                <p className="text-xs text-subtle">
-                  {c.dna.material} · {c.dna.light} · {c.dna.density}
-                </p>
-                <Button
-                  className="w-full"
-                  disabled={c.status !== "ready" || pending}
-                  onClick={() => {
-                    lockCandidate(c.id);
-                    toast.success(`已锁定 ${c.dna.name}，其余方向保留为备选`);
-                  }}
-                >
-                  <Check className="size-4" />
-                  锁定为当前风格
-                </Button>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
         {pending ? (
           <p className="mt-8 text-center text-sm text-muted">
-            {tailoring ? "正在按你的需求定制方向…" : "正在出四个方向，卡片会逐张亮起。"}
+            {tailoring
+              ? "正在按你的需求定制方向…"
+              : hasReference
+                ? "正在出方向，卡片会逐张亮起。"
+                : "正在出四个方向，卡片会逐张亮起。"}
           </p>
         ) : null}
       </main>

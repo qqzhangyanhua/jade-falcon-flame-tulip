@@ -157,4 +157,46 @@ describe("exportManifest", () => {
     assert.match(manifest.prompts.content, /品牌主视觉/);
     assert.doesNotMatch(manifest.prompts.content, /产品旗舰页/);
   });
+
+  it("skips an excluded image and does not replace it with another rev", () => {
+    let project = sampleProject();
+    const kv = addImageRevs(project, {
+      ...base,
+      slot: "kv",
+      urls: ["/api/images/k1", "/api/images/k2"],
+    });
+    project = adoptImage(kv.project, "a", "kv", kv.ids[0]);
+    project = addImageRevs(project, {
+      ...base,
+      slot: "ui_hero",
+      urls: ["/api/images/u1", "/api/images/u2"],
+    }).project;
+    project = {
+      ...project,
+      styles: project.styles.map((style) =>
+        style.id === "a"
+          ? {
+              ...style,
+              assets: {
+                ...style.assets,
+                ui_hero: { ...style.assets.ui_hero, adoptedId: null },
+              },
+            }
+          : style,
+      ),
+    };
+    project = addImageRevs(project, {
+      ...base,
+      slot: "web_home",
+      urls: ["/api/images/w1"],
+    }).project;
+
+    const manifest = exportManifest(styleA(project), {
+      excludeImageIds: ["k1", "u2"],
+    });
+
+    assert.deepEqual(manifest.images, [
+      { slot: "web_home", fileName: "web_home.png", url: "/api/images/w1" },
+    ]);
+  });
 });

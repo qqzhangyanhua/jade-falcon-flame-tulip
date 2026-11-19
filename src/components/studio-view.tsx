@@ -527,6 +527,7 @@ export function StudioView() {
           />
           <StudioBrandGuideLink projectId={project.id} styleId={style.id} rev={style.currentRev} />
           <StudioExportButton
+            projectId={project.id}
             projectName={project.name}
             product={product}
             enabledSlotIds={project.enabledSlotIds}

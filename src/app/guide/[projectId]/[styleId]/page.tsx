@@ -4,8 +4,9 @@ import { SIGN_IN_PATH } from "@/lib/auth/gates";
 import { requireActionUser } from "@/lib/auth/session";
 import { UnauthorizedError } from "@/lib/auth/verify.server";
 import { getSql } from "@/lib/db";
+import { listHiddenImageIds } from "@/lib/image-jobs/image-hide";
 import { loadProjectDocument } from "@/lib/image-jobs/project-document";
-import { createSqlProjectStore } from "@/lib/image-jobs/sql";
+import { createSqlBlobStore, createSqlProjectStore } from "@/lib/image-jobs/sql";
 import { resolveBrandGuideAccess, styleForGuide } from "@/lib/project/brand-guide-access";
 import { brandGuideModel, type PromptSlot } from "@/lib/project/dna-export";
 import { currentDna, type ProjectDocument } from "@/lib/project/schema";
@@ -98,7 +99,9 @@ export default async function BrandGuidePage({
   } catch {
     notFound();
   }
-  const guide = brandGuideModel(viewed, slotsForGuide(document));
+  // Hidden ids belong to the project owner. The page does not read an exclude list.
+  const hiddenIds = await listHiddenImageIds(createSqlBlobStore(sql), userId);
+  const guide = brandGuideModel(viewed, slotsForGuide(document), hiddenIds);
 
   return (
     <BrandGuideSheet

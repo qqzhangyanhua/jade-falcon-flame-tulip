@@ -146,6 +146,25 @@ describe("buildExportZip", () => {
     assert.match(strFromU8(files["tokens.css"]), /--font-sans: system-ui, sans-serif;/);
   });
 
+  it("does not fetch or pack an excluded image, and does not use another rev", async () => {
+    const { impl, calls } = fakeFetch({
+      "/api/images/k1": { type: "image/png", bytes: PNG },
+      "/api/images/k2": { type: "image/jpeg", bytes: JPG },
+      "/api/images/w1": { type: "image/png", bytes: PNG },
+    });
+    const result = await buildExportZip({
+      projectName: "p",
+      styleLine: withImages(),
+      fetchImpl: impl,
+      excludeImageIds: ["k2"],
+    });
+    assert.deepEqual(calls, ["/api/images/w1"]);
+    const files = unzipSync(result.bytes);
+    assert.equal("kv.jpg" in files, false);
+    assert.equal("kv.png" in files, false);
+    assert.deepEqual(files["web_home.png"], PNG);
+  });
+
   it("rejects when no slot has an image", async () => {
     const { impl } = fakeFetch({});
     await assert.rejects(

@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { BookOpen, Copy, Download, Loader2, PackageOpen } from "lucide-react";
 import { toast } from "sonner";
+import { loadExportManifestFn } from "@/app/actions/export";
+import { useHiddenImageIds } from "@/components/owned-image";
 import { brandGuideHref } from "@/lib/project/brand-guide-access";
 import { designTokens, formatPromptPack, promptPack } from "@/lib/project/dna-export";
-import { buildExportZip, extensionOfContentType } from "@/lib/project/export-zip";
+import { extensionOfContentType, packExportManifest } from "@/lib/project/export-zip";
 import { exportManifest } from "@/lib/project/manifest";
 import { slotPromptMetas, type SlotPromptMeta } from "@/lib/project/slots";
 import type { StyleBranch, StyleDna } from "@/lib/types";
@@ -80,12 +82,14 @@ export function StudioBrandGuideLink({
 }
 
 export function StudioExportButton({
+  projectId,
   projectName,
   styleLine,
   enabledSlotIds,
   customSlots,
   product,
 }: {
+  projectId: string;
   projectName: string;
   styleLine: StyleBranch;
   enabledSlotIds?: readonly string[];
@@ -93,18 +97,31 @@ export function StudioExportButton({
   product?: string;
 }) {
   const [busy, setBusy] = useState(false);
-  const empty = exportManifest(styleLine, { enabledSlotIds, customSlots, product }).images.length === 0;
+  const hiddenIds = useHiddenImageIds();
+  const empty =
+    exportManifest(styleLine, {
+      enabledSlotIds,
+      customSlots,
+      product,
+      excludeImageIds: [...hiddenIds],
+    }).images.length === 0;
   const label = empty ? "导出（还没有图片可导出）" : "导出整套物料";
 
   async function runExport() {
     setBusy(true);
     try {
-      const { fileName, bytes } = await buildExportZip({
+      const prepared = await loadExportManifestFn({
+        data: { projectId, styleLine, enabledSlotIds, customSlots, product },
+      });
+      if (!prepared.ok) {
+        toast.error(prepared.message);
+        return;
+      }
+      const { fileName, bytes } = await packExportManifest({
         projectName,
-        styleLine,
-        enabledSlotIds,
-        customSlots,
-        product,
+        styleName: styleLine.name,
+        rev: styleLine.currentRev,
+        manifest: prepared.manifest,
       });
       saveBlob(new Blob([bytes as BlobPart], { type: "application/zip" }), fileName);
       toast.success(`已导出 ${fileName}`);

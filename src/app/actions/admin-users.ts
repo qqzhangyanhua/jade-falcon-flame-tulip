@@ -6,7 +6,15 @@ import { beijingCalendarDay } from "@/lib/image-jobs/beijing-day";
 import { requireCatalogAdmin } from "@/lib/image-jobs/catalog-admin";
 import { ImageJobError } from "@/lib/image-jobs/errors";
 import { createSqlQuotaStore, createSqlRoleStore } from "@/lib/image-jobs/quota-sql";
-import { clearUserDailyCap, normalizeDailyCap, resolveStudioRole, setUserDailyCap } from "@/lib/image-jobs/quota";
+import {
+  clearUserDailyCap,
+  grantUserBoost,
+  normalizeBoostGrant,
+  normalizeBoostNote,
+  normalizeDailyCap,
+  resolveStudioRole,
+  setUserDailyCap,
+} from "@/lib/image-jobs/quota";
 import { listAdminUserQuotas } from "@/lib/image-jobs/user-admin";
 import type { AdminUserQuota, StudioRole } from "@/lib/image-jobs/types";
 
@@ -97,6 +105,25 @@ export async function clearUserDailyCapFn(input: {
     const result = await clearUserDailyCap(deps.roles, deps.quota, {
       actorId,
       userId: input.data.userId,
+    });
+    if (!result.ok) throw new ImageJobError(result.code);
+  });
+}
+
+export async function grantUserBoostFn(input: {
+  data: { userId: string; amount: number; note: string };
+}): Promise<AdminUserQuota> {
+  const { userId: actorId } = await requireActionUser();
+  const amount = normalizeBoostGrant(input.data.amount);
+  if (amount === null) throw new Error("加量包数量须为 1–9999 的整数");
+  const note = normalizeBoostNote(input.data.note ?? "");
+  if (note === null) throw new Error("请填写备注，最多 200 字");
+  return writeUserCap(actorId, input.data.userId, async (deps) => {
+    const result = await grantUserBoost(deps.roles, deps.quota, {
+      actorId,
+      userId: input.data.userId,
+      amount,
+      note,
     });
     if (!result.ok) throw new ImageJobError(result.code);
   });

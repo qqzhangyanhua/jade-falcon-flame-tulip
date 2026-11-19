@@ -22,7 +22,7 @@ import {
   uploadWireframeFn,
 } from "@/app/actions/studio";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { messageForImageJobError, type StudioQuota } from "@/lib/image-jobs";
+import { messageForImageJobError, quotaExhausted, type StudioQuota } from "@/lib/image-jobs";
 import { PRESETS } from "@/lib/presets";
 import { presetDirections } from "@/lib/style-ai/shared";
 import { fileToDataUrl } from "@/lib/resize-image";
@@ -105,7 +105,7 @@ export function BriefView() {
       toast.error("先写一句产品描述");
       return;
     }
-    if (quota && quota.remaining <= 0) {
+    if (quota && quotaExhausted(quota)) {
       toast.error("今日额度已用完");
       return;
     }
@@ -223,7 +223,7 @@ export function BriefView() {
       : "正在解析并出四个方向…"
     : imagesUnavailable
       ? "出图暂不可用"
-      : quota && quota.remaining <= 0
+      : quota && quotaExhausted(quota)
         ? "今日额度已用完"
         : !user && !authPending
           ? hasReferences
@@ -234,7 +234,7 @@ export function BriefView() {
             : "生成四个方向";
 
   const blocked =
-    busy || authPending || imagesUnavailable || (quota !== null && quota.remaining <= 0);
+    busy || authPending || imagesUnavailable || (quota !== null && quotaExhausted(quota));
 
   return (
     <div className="page-shell">
@@ -378,7 +378,7 @@ export function BriefView() {
                   onClick={() => void start()}
                 >
                   {cta}
-                  {!busy && !imagesUnavailable && !(quota && quota.remaining <= 0) ? (
+                  {!busy && !imagesUnavailable && !(quota && quotaExhausted(quota)) ? (
                     <ArrowRight className="size-4" />
                   ) : null}
                 </Button>
@@ -388,8 +388,8 @@ export function BriefView() {
                     {imagesUnavailable
                       ? "出图暂不可用"
                       : hasReferences
-                        ? "解析描述和参考图提炼不扣额度；每个方向候选会占用 1 次今日额度。"
-                        : "解析描述不扣额度；每个方向候选会占用 1 次今日额度。"}
+                        ? "解析描述和参考图提炼不扣额度；每个方向候选会占用 1 次额度，先扣今日额度，再扣加量包。"
+                        : "解析描述不扣额度；每个方向候选会占用 1 次额度，先扣今日额度，再扣加量包。"}
                   </p>
                 </div>
               </div>

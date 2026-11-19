@@ -494,7 +494,7 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
               ${DEFAULT_DAILY_IMAGE_CAP}
             ) as n
           ),
-          reserved as (
+          daily as (
             insert into image_quota_days (user_id, beijing_day, used)
             select ${record.userId}, ${beijingDay}::date, 1
             from cap_row
@@ -504,7 +504,37 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
               set used = image_quota_days.used + 1
               where image_quota_days.used < (select n from cap_row)
                 and (select code from gate) is null
-            returning used
+            returning user_id
+          ),
+          -- Daily cap first. The boost update sees daily's RETURNING, so a
+          -- full cap falls through in the same statement as the job insert.
+          boosted as (
+            update user_boost_balances
+            set balance = balance - 1
+            where user_id = ${record.userId}
+              and balance >= 1
+              and (select code from gate) is null
+              and not exists (select 1 from daily)
+            returning user_id
+          ),
+          debited as (
+            insert into user_boost_ledger (
+              user_id, kind, amount, created_at, admin_id, note
+            )
+            select
+              ${record.userId},
+              'debit',
+              1,
+              to_timestamp(${record.createdAt / 1000}),
+              null,
+              ${record.id}
+            from boosted
+            returning user_id
+          ),
+          funded as (
+            select user_id from daily
+            union all
+            select user_id from debited
           ),
           inserted as (
             insert into image_jobs (
@@ -525,7 +555,7 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
               ${record.errorCode},
               to_timestamp(${record.createdAt / 1000}),
               null
-            from reserved
+            from funded
             returning
               id, user_id, project_id, action, slot,
               catalog_model_id, upstream_model_id, display_name_snapshot,

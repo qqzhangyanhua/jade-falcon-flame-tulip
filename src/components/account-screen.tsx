@@ -10,7 +10,12 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getProfile, saveProfile } from "@/app/actions/profile";
 import { getStudioAccessFn, setDailyImageCapFn } from "@/app/actions/studio";
-import { messageForImageJobError, type StudioQuota, type StudioRole } from "@/lib/image-jobs";
+import {
+  messageForImageJobError,
+  quotaExhausted,
+  type StudioQuota,
+  type StudioRole,
+} from "@/lib/image-jobs";
 import type { ProfileRecord } from "@/lib/types";
 
 export function AccountScreen() {
@@ -186,15 +191,19 @@ export function AccountScreen() {
               <h2 className="font-display text-xl tracking-tight">今日出图额度</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted">
                 按北京时间自然日计算。方向候选、槽位出图、微调和换构图各计 1
-                次；解析描述不计。失败仍占用。
+                次；解析描述不计。失败仍占用。每日额度用完后从加量包扣，加量包不过期。
               </p>
-              <p className="mt-4 text-sm text-fg">
-                {quota
-                  ? quota.remaining <= 0
-                    ? "今日额度已用完"
-                    : `今日剩余 ${quota.remaining}/${quota.cap}（${quota.beijingDay}）`
-                  : "读取中…"}
-              </p>
+              {quota ? (
+                <div className="mt-4 space-y-1 text-sm text-fg">
+                  <p>
+                    今日剩余 {quota.remaining}/{quota.cap}（{quota.beijingDay}）
+                  </p>
+                  <p>加量包 {quota.boost}</p>
+                  {quotaExhausted(quota) ? <p>今日额度已用完</p> : null}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-fg">读取中…</p>
+              )}
               {role === "admin" ? (
                 <form
                   className="mt-5 space-y-3 border-t border-border pt-5"

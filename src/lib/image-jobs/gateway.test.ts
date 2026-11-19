@@ -5,6 +5,7 @@ import { beijingCalendarDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES, messageForImageJobError } from "./errors.ts";
 import { DURABLE_IMAGE_PATH_PREFIX, listJobImages, openJobImage } from "./durable.ts";
 import { runImageJob } from "./gateway.ts";
+import { createXaiImageUpstream } from "./upstream.ts";
 import { parseSlot } from "./sql.ts";
 import { listUserJobs } from "./list-jobs.ts";
 import {
@@ -1556,5 +1557,40 @@ describe("slot catalog on the gateway", () => {
     assert.equal((await world.jobs.listByUser(world.userId)).length, 0);
     const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
     assert.equal(after.used, before.used);
+  });
+});
+
+describe("image job cost", () => {
+  it("saves usage.cost_in_usd_ticks as a bigint past the safe integer limit", async () => {
+    const raw =
+      '{"data":[{"url":"https://img.example/a.png"}],"usage":{"cost_in_usd_ticks":9007199254740993}}';
+    const world = createMemoryGatewayWorld({
+      upstream: createXaiImageUpstream({
+        apiKey: "test-key",
+        fetchImpl: async () => ({ ok: true, text: async () => raw }),
+      }).run,
+    });
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.costInUsdTicks, 9007199254740993n);
+    const stored = await world.jobs.get(result.job.id);
+    assert.equal(stored?.costInUsdTicks, 9007199254740993n);
+  });
+
+  it("stores null cost when the upstream body has no usage", async () => {
+    const raw = '{"data":[{"url":"https://img.example/a.png"}]}';
+    const world = createMemoryGatewayWorld({
+      upstream: createXaiImageUpstream({
+        apiKey: "test-key",
+        fetchImpl: async () => ({ ok: true, text: async () => raw }),
+      }).run,
+    });
+    const result = await runImageJob(world, jobInput(world, { n: 1 }));
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.job.costInUsdTicks, null);
+    const stored = await world.jobs.get(result.job.id);
+    assert.equal(stored?.costInUsdTicks, null);
   });
 });

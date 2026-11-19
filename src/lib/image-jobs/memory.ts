@@ -23,6 +23,8 @@ import type {
 } from "./types.ts";
 import type {
   ImageBlobStore,
+  ImageHideAuditRecord,
+  ImageHideAuditStore,
   ImageJobGatewayDeps,
   ImageJobStore,
   ImageRevStore,
@@ -49,9 +51,7 @@ function cloneProject(project: StudioProjectRecord): StudioProjectRecord {
 }
 
 export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
-  const models = new Map(
-    seed.map((model) => [model.id, cloneModel(model)]),
-  );
+  const models = new Map(seed.map((model) => [model.id, cloneModel(model)]));
   return {
     async list() {
       return [...models.values()].map(cloneModel);
@@ -76,18 +76,12 @@ export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
   };
 }
 
-export function createMemoryProjects(
-  seed: StudioProjectRecord[] = [],
-): StudioProjectStore {
-  const projects = new Map(
-    seed.map((project) => [project.id, cloneProject(project)]),
-  );
+export function createMemoryProjects(seed: StudioProjectRecord[] = []): StudioProjectStore {
+  const projects = new Map(seed.map((project) => [project.id, cloneProject(project)]));
   const documents = new Map<string, ProjectDocumentSnapshot>();
   const snapshotOf = (id: string): ProjectDocumentSnapshot => {
     const stored = documents.get(id);
-    return stored
-      ? structuredClone(stored)
-      : { document: null, version: 0, updatedAt: null };
+    return stored ? structuredClone(stored) : { document: null, version: 0, updatedAt: null };
   };
   return {
     async create(record) {
@@ -117,7 +111,7 @@ export function createMemoryProjects(
     async getDocument(id) {
       return projects.has(id) ? snapshotOf(id) : null;
     },
-    async listSummaries(userId, limit) {
+    async listSummaries(userId) {
       const rows: ProjectSummary[] = [];
       for (const project of projects.values()) {
         if (project.userId !== userId || project.deletedAt !== null) continue;
@@ -129,10 +123,10 @@ export function createMemoryProjects(
           stage: stored.document.phase,
           coverUrl: projectCoverUrl(stored.document),
           updatedAt: stored.updatedAt,
+          createdAt: stored.document.createdAt,
         });
       }
-      rows.sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1));
-      return rows.slice(0, limit);
+      return rows;
     },
     async saveDocument(id, document, expectedVersion, now) {
       const project = projects.get(id);
@@ -223,9 +217,7 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
   };
 }
 
-export function createMemoryRoles(
-  seed: Record<string, StudioRole> = {},
-): RoleStore {
+export function createMemoryRoles(seed: Record<string, StudioRole> = {}): RoleStore {
   const roles = new Map<string, StudioRole>(Object.entries(seed));
   return {
     async getRole(userId) {
@@ -240,9 +232,7 @@ export function createMemoryRoles(
   };
 }
 
-export function createMemoryJobs(
-  reserve: (record: ImageJobRecord) => boolean,
-): ImageJobStore {
+export function createMemoryJobs(reserve: (record: ImageJobRecord) => boolean): ImageJobStore {
   const jobs = new Map<string, ImageJobRecord>();
   return {
     async insertReserved(record) {
@@ -269,13 +259,20 @@ export function createMemoryJobs(
         .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
         .map(cloneJob);
     },
-    async finish(id, status, errorCode, finishedAt) {
+    async finish(id, status, errorCode, finishedAt, costInUsdTicks) {
       const job = jobs.get(id);
       if (!job) return null;
       job.status = status;
       job.errorCode = errorCode;
       job.finishedAt = finishedAt;
+      job.costInUsdTicks = costInUsdTicks;
       return cloneJob(job);
+    },
+    async listInRange(fromMs, toMs) {
+      return [...jobs.values()]
+        .filter((job) => job.createdAt >= fromMs && job.createdAt < toMs)
+        .sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map(cloneJob);
     },
   };
 }
@@ -299,6 +296,20 @@ export function createMemoryRevs(): ImageRevStore {
   };
 }
 
+export function createMemoryHideAudit(): ImageHideAuditStore {
+  const rows: ImageHideAuditRecord[] = [];
+  return {
+    async append(record) {
+      const next = { ...record };
+      rows.push(next);
+      return { ...next };
+    },
+    async listByImage(imageId) {
+      return rows.filter((row) => row.imageId === imageId).map((row) => ({ ...row }));
+    },
+  };
+}
+
 export function createMemoryBlobs(): ImageBlobStore {
   const blobs = new Map<string, ImageBlobRecord>();
   return {
@@ -315,6 +326,35 @@ export function createMemoryBlobs(): ImageBlobStore {
       for (const [id, blob] of blobs) {
         if (blob.projectId === projectId) blobs.delete(id);
       }
+    },
+    async setHidden(id, hidden) {
+      const blob = blobs.get(id);
+      if (!blob) return false;
+      blob.hidden = hidden;
+      return true;
+    },
+    async listGenerated({ query, limit }) {
+      const q = query.trim().toLowerCase();
+      return [...blobs.values()]
+        .filter((blob) => blob.kind === "job")
+        .filter((blob) => !q || blob.userId.toLowerCase().includes(q))
+        .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .slice(0, limit)
+        .map((blob) => ({
+          id: blob.id,
+          userId: blob.userId,
+          userName: null,
+          userEmail: null,
+          projectId: blob.projectId,
+          createdAt: blob.createdAt,
+          hidden: blob.hidden === true,
+          contentType: blob.contentType,
+        }));
+    },
+    async listHiddenIds(userId) {
+      return [...blobs.values()]
+        .filter((blob) => blob.userId === userId && blob.hidden === true)
+        .map((blob) => blob.id);
     },
   };
 }
@@ -354,9 +394,10 @@ export function defaultCatalogSeed(): CatalogModel[] {
   ];
 }
 
-export function recordingUpstream(
-  impl?: ImageUpstream["run"],
-): { upstream: ImageUpstream; calls: ImageUpstreamRequest[] } {
+export function recordingUpstream(impl?: ImageUpstream["run"]): {
+  upstream: ImageUpstream;
+  calls: ImageUpstreamRequest[];
+} {
   const calls: ImageUpstreamRequest[] = [];
   return {
     calls,
@@ -413,6 +454,7 @@ export function createMemoryGatewayWorld(opts?: {
     jobs: createMemoryJobs((record) => quota.tryReserve(record)),
     revs: createMemoryRevs(),
     blobs: createMemoryBlobs(),
+    audit: createMemoryHideAudit(),
     fetchImage: opts?.fetchImage ?? defaultMemoryFetchImage,
     quota,
     roles: createMemoryRoles(opts?.roles),

@@ -1,12 +1,7 @@
 import type { ProjectDocument } from "../project/schema.ts";
 import { SLOT_IDS } from "../project/slots.ts";
 
-export const IMAGE_JOB_ACTIONS = [
-  "direction",
-  "generate",
-  "tune",
-  "compose",
-] as const;
+export const IMAGE_JOB_ACTIONS = ["direction", "generate", "tune", "compose"] as const;
 
 export type ImageJobAction = (typeof IMAGE_JOB_ACTIONS)[number];
 
@@ -56,13 +51,15 @@ export type ProjectDocumentSnapshot = {
   updatedAt: number | null;
 };
 
-/** One row of the recent-projects list; deliberately omits everything else in the document. */
+/** One row of the project list; deliberately omits everything else in the document. */
 export type ProjectSummary = {
   id: string;
   name: string;
   stage: ProjectDocument["phase"];
   coverUrl: string | null;
   updatedAt: number;
+  /** Project document `createdAt`, not the row insert time. */
+  createdAt: number;
 };
 
 export type SaveDocumentOutcome =
@@ -94,6 +91,11 @@ export type ImageJobRecord = {
   errorCode: ImageJobErrorCode | null;
   createdAt: number;
   finishedAt: number | null;
+  /**
+   * Upstream fee in USD ticks (1 USD = 1e10). Null when usage was absent.
+   * Stay in ticks until a screen formats dollars.
+   */
+  costInUsdTicks: bigint | null;
 };
 
 export type ImageRevRecord = {
@@ -119,6 +121,8 @@ export type ImageBlobRecord = {
   contentType: string;
   bytes: Uint8Array;
   createdAt: number;
+  /** Set when an admin has hidden this image. Missing means visible. */
+  hidden?: boolean;
 };
 
 export type DurableImageRef = {
@@ -246,8 +250,7 @@ export type ImageJobHistoryItem = {
 };
 
 export type ListUserJobsResult =
-  | { ok: true; jobs: ImageJobHistoryItem[] }
-  | { ok: false; code: "unauthorized" };
+  { ok: true; jobs: ImageJobHistoryItem[] } | { ok: false; code: "unauthorized" };
 
 export type ImageUpstreamRequest = {
   action: ImageJobAction;
@@ -259,8 +262,8 @@ export type ImageUpstreamRequest = {
 };
 
 export type ImageUpstreamResult =
-  | { ok: true; urls: string[] }
-  | { ok: false };
+  | { ok: true; urls: string[]; costInUsdTicks?: bigint | null }
+  | { ok: false; costInUsdTicks?: bigint | null };
 
 export type ImageUpstream = {
   run: (request: ImageUpstreamRequest) => Promise<ImageUpstreamResult>;

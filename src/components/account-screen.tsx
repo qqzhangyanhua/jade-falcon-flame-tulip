@@ -269,6 +269,30 @@ export function AccountScreen() {
                 </Link>
               </section>
             ) : null}
+
+            {role === "admin" ? (
+              <section className="rounded-xl border border-border bg-surface p-5">
+                <h2 className="font-display text-xl tracking-tight">任务统计</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  按模型查看任务数、失败率、耗时和实际成本。
+                </p>
+                <Link href="/admin/stats" className="btn btn-ink mt-4 h-11 px-4">
+                  打开任务统计
+                </Link>
+              </section>
+            ) : null}
+
+            {role === "admin" ? (
+              <section className="rounded-xl border border-border bg-surface p-5">
+                <h2 className="font-display text-xl tracking-tight">内容审核</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  浏览最近生成的图片，隐藏不当内容，或撤销隐藏。
+                </p>
+                <Link href="/admin/review" className="btn btn-ink mt-4 h-11 px-4">
+                  打开内容审核
+                </Link>
+              </section>
+            ) : null}
           </div>
         </div>
       </main>

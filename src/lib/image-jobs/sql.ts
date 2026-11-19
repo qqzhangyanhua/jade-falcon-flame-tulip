@@ -3,11 +3,7 @@ import { beijingCalendarDay } from "./beijing-day.ts";
 import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency.ts";
 import { COVER_SLOT } from "../project/summary.ts";
 import { DEFAULT_DAILY_IMAGE_CAP } from "./quota.ts";
-import {
-  IMAGE_JOB_ACTIONS,
-  type ImageJobAction,
-  type ImageJobSlot,
-} from "./types.ts";
+import { IMAGE_JOB_ACTIONS, type ImageJobAction, type ImageJobSlot } from "./types.ts";
 import type {
   CatalogModel,
   ImageBlobRecord,
@@ -20,7 +16,11 @@ import type {
   StudioProjectRecord,
 } from "./types.ts";
 import type {
+  GeneratedImageRow,
   ImageBlobStore,
+  ImageHideAction,
+  ImageHideAuditRecord,
+  ImageHideAuditStore,
   ImageJobStore,
   ImageRevStore,
   ModelCatalogStore,
@@ -58,6 +58,8 @@ type JobRow = {
   error_code: string | null;
   created_at_ms: number;
   finished_at_ms: number | null;
+  /** Text, never a JS number — int8 past 2^53 would round. */
+  cost_in_usd_ticks: string | null;
 };
 
 type ReserveRow = JobRow & {
@@ -83,6 +85,7 @@ type BlobRow = {
   content_type: string;
   bytes: unknown;
   created_at_ms: number;
+  hidden: boolean | string | number | null;
 };
 
 /** A stored slot is the text that was written. Only null and "" are empty. */
@@ -125,8 +128,7 @@ type DocumentRow = {
 };
 
 function toSnapshot(row: DocumentRow): ProjectDocumentSnapshot {
-  const document =
-    typeof row.document === "string" ? JSON.parse(row.document) : row.document;
+  const document = typeof row.document === "string" ? JSON.parse(row.document) : row.document;
   return {
     document: (document ?? null) as ProjectDocumentSnapshot["document"],
     version: Number(row.version),
@@ -142,6 +144,12 @@ function toProject(row: ProjectRow): StudioProjectRecord {
     createdAt: Number(row.created_at_ms),
     deletedAt: row.deleted_at_ms === null ? null : Number(row.deleted_at_ms),
   };
+}
+
+function toCostTicks(value: string | null | undefined): bigint | null {
+  if (value == null || value === "") return null;
+  if (!/^-?\d+$/.test(value)) return null;
+  return BigInt(value);
 }
 
 function toJob(row: JobRow): ImageJobRecord {
@@ -163,6 +171,7 @@ function toJob(row: JobRow): ImageJobRecord {
     errorCode: row.error_code as ImageJobErrorCode | null,
     createdAt: Number(row.created_at_ms),
     finishedAt: row.finished_at_ms === null ? null : Number(row.finished_at_ms),
+    costInUsdTicks: toCostTicks(row.cost_in_usd_ticks),
   };
 }
 
@@ -183,6 +192,34 @@ function toBytes(value: unknown): Uint8Array {
   return new Uint8Array();
 }
 
+function asHidden(value: BlobRow["hidden"]): boolean {
+  return value === true || value === "t" || value === "true" || value === 1;
+}
+
+type ReviewBlobRow = {
+  id: string;
+  user_id: string;
+  project_id: string;
+  content_type: string;
+  hidden: BlobRow["hidden"];
+  created_at_ms: number;
+  user_name: string | null;
+  user_email: string | null;
+};
+
+function toReviewImage(row: ReviewBlobRow): GeneratedImageRow {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    userName: row.user_name,
+    userEmail: row.user_email,
+    projectId: row.project_id,
+    createdAt: Number(row.created_at_ms),
+    hidden: asHidden(row.hidden),
+    contentType: row.content_type,
+  };
+}
+
 function toBlob(row: BlobRow): ImageBlobRecord {
   return {
     id: row.id,
@@ -193,6 +230,7 @@ function toBlob(row: BlobRow): ImageBlobRecord {
     contentType: row.content_type,
     bytes: toBytes(row.bytes),
     createdAt: Number(row.created_at_ms),
+    hidden: asHidden(row.hidden),
   };
 }
 
@@ -312,14 +350,16 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
       `;
       return rows[0] ? toSnapshot(rows[0]) : null;
     },
-    async listSummaries(userId, limit) {
+    async listSummaries(userId) {
       // Only the few fields the list needs are pulled out of the jsonb; the document is never loaded whole.
+      // Paging happens in listProjectSummaries, so this returns every live project of the user.
       const rows = await sql<{
         id: string;
         name: string | null;
         stage: string | null;
         cover_url: string | null;
         updated_at_ms: number | string;
+        created_at_ms: number | string | null;
       }>`
         select p.id,
                p.document->>'name' as name,
@@ -332,7 +372,13 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
                  cur.style->'assets'->${COVER_SLOT}::text->'revs'->-1->>'url',
                  cur.style->>'candidateUrl'
                ) as cover_url,
-               extract(epoch from p.updated_at) * 1000 as updated_at_ms
+               extract(epoch from p.updated_at) * 1000 as updated_at_ms,
+               coalesce(
+                 case when jsonb_typeof(p.document->'createdAt') = 'number'
+                      then (p.document->>'createdAt')::double precision
+                      else null end,
+                 extract(epoch from p.created_at) * 1000
+               ) as created_at_ms
         from studio_projects p
         left join lateral (
           select s as style
@@ -344,18 +390,15 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
           and p.deleted_at is null
           and p.document is not null
           and p.updated_at is not null
-        order by p.updated_at desc, p.id asc
-        limit ${limit}
       `;
-      return rows.map(
-        (row): ProjectSummary => ({
-          id: row.id,
-          name: row.name ?? "",
-          stage: row.stage === "studio" || row.stage === "direction" ? row.stage : "brief",
-          coverUrl: row.cover_url,
-          updatedAt: Number(row.updated_at_ms),
-        }),
-      );
+      return rows.map((row): ProjectSummary => ({
+        id: row.id,
+        name: row.name ?? "",
+        stage: row.stage === "studio" || row.stage === "direction" ? row.stage : "brief",
+        coverUrl: row.cover_url,
+        updatedAt: Number(row.updated_at_ms),
+        createdAt: Number(row.created_at_ms),
+      }));
     },
     async saveDocument(id, document, expectedVersion, now) {
       // Version and deleted checks live in the WHERE so a concurrent save or delete cannot slip between them.
@@ -519,7 +562,8 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
               status, error_code,
               (extract(epoch from created_at) * 1000) as created_at_ms,
               case when finished_at is null then null
-                   else extract(epoch from finished_at) * 1000 end as finished_at_ms
+                   else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+              cost_in_usd_ticks::text as cost_in_usd_ticks
           )
           select
             gate.code as reject_code,
@@ -534,7 +578,8 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
             inserted.status,
             inserted.error_code,
             inserted.created_at_ms,
-            inserted.finished_at_ms
+            inserted.finished_at_ms,
+            inserted.cost_in_usd_ticks
           from gate
           left join inserted on true
         `;
@@ -556,7 +601,8 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
           case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
         from image_jobs
         where id = ${id}
       `;
@@ -570,20 +616,23 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
           case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
         from image_jobs
         where user_id = ${userId}
         order by created_at desc, id desc
       `;
       return rows.map(toJob);
     },
-    async finish(id, status, errorCode, finishedAt) {
+    async finish(id, status, errorCode, finishedAt, costInUsdTicks) {
+      const costText = costInUsdTicks === null ? null : costInUsdTicks.toString();
       const rows = await sql<JobRow>`
         update image_jobs
         set
           status = ${status},
           error_code = ${errorCode},
-          finished_at = to_timestamp(${finishedAt / 1000})
+          finished_at = to_timestamp(${finishedAt / 1000}),
+          cost_in_usd_ticks = ${costText}::bigint
         where id = ${id}
         returning
           id, user_id, project_id, action, slot,
@@ -591,9 +640,27 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
           case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
       `;
       return rows[0] ? toJob(rows[0]) : null;
+    },
+    async listInRange(fromMs, toMs) {
+      const rows = await sql<JobRow>`
+        select
+          id, user_id, project_id, action, slot,
+          catalog_model_id, upstream_model_id, display_name_snapshot,
+          status, error_code,
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when finished_at is null then null
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
+        from image_jobs
+        where created_at >= to_timestamp(${fromMs / 1000})
+          and created_at < to_timestamp(${toMs / 1000})
+        order by created_at asc, id asc
+      `;
+      return rows.map(toJob);
     },
   };
 }
@@ -638,13 +705,64 @@ export function createSqlRevStore(sql: Sql): ImageRevStore {
   };
 }
 
+type AuditRow = {
+  id: string;
+  image_id: string;
+  action: string;
+  admin_id: string;
+  reason: string | null;
+  created_at_ms: number;
+};
+
+function toAudit(row: AuditRow): ImageHideAuditRecord {
+  const action: ImageHideAction = row.action === "unhide" ? "unhide" : "hide";
+  return {
+    id: row.id,
+    imageId: row.image_id,
+    action,
+    adminId: row.admin_id,
+    at: Number(row.created_at_ms),
+    reason: row.reason,
+  };
+}
+
+export function createSqlHideAudit(sql: Sql): ImageHideAuditStore {
+  return {
+    async append(record) {
+      await sql`
+        insert into image_hide_audit (id, image_id, action, admin_id, reason, created_at)
+        values (
+          ${record.id},
+          ${record.imageId},
+          ${record.action},
+          ${record.adminId},
+          ${record.reason},
+          to_timestamp(${record.at / 1000})
+        )
+      `;
+      return record;
+    },
+    async listByImage(imageId) {
+      const rows = await sql<AuditRow>`
+        select
+          id, image_id, action, admin_id, reason,
+          (extract(epoch from created_at) * 1000) as created_at_ms
+        from image_hide_audit
+        where image_id = ${imageId}
+        order by created_at, id
+      `;
+      return rows.map(toAudit);
+    },
+  };
+}
+
 export function createSqlBlobStore(sql: Sql): ImageBlobStore {
   return {
     async put(record) {
       const payload = Buffer.from(record.bytes);
       const rows = await sql<BlobRow>`
         insert into image_blobs (
-          id, user_id, project_id, job_id, kind, content_type, bytes, created_at
+          id, user_id, project_id, job_id, kind, content_type, bytes, created_at, hidden
         )
         values (
           ${record.id},
@@ -654,10 +772,11 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
           ${record.kind},
           ${record.contentType},
           ${payload},
-          to_timestamp(${record.createdAt / 1000})
+          to_timestamp(${record.createdAt / 1000}),
+          ${record.hidden === true}
         )
         returning
-          id, user_id, project_id, job_id, kind, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes, hidden,
           (extract(epoch from created_at) * 1000) as created_at_ms
       `;
       return rows[0] ? toBlob(rows[0]) : record;
@@ -665,7 +784,7 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
     async get(id) {
       const rows = await sql<BlobRow>`
         select
-          id, user_id, project_id, job_id, kind, content_type, bytes,
+          id, user_id, project_id, job_id, kind, content_type, bytes, hidden,
           (extract(epoch from created_at) * 1000) as created_at_ms
         from image_blobs
         where id = ${id}
@@ -681,6 +800,50 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
         delete from image_blobs
         where project_id = ${projectId}
       `;
+    },
+    async setHidden(id, hidden) {
+      const rows = await sql<{ id: string }>`
+        update image_blobs
+        set hidden = ${hidden}
+        where id = ${id}
+        returning id
+      `;
+      return Boolean(rows[0]);
+    },
+    async listGenerated({ query, limit }) {
+      const trimmed = query.trim();
+      const pattern = `%${trimmed.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+      const rows = await sql<ReviewBlobRow>`
+        select
+          b.id,
+          b.user_id,
+          b.project_id,
+          b.content_type,
+          b.hidden,
+          (extract(epoch from b.created_at) * 1000) as created_at_ms,
+          u.name as user_name,
+          u.email as user_email
+        from image_blobs b
+        left join "user" u on u.id = b.user_id
+        where b.kind = 'job'
+          and (
+            ${trimmed} = ''
+            or b.user_id ilike ${pattern} escape '\\\\'
+            or coalesce(u.name, '') ilike ${pattern} escape '\\\\'
+            or coalesce(u.email, '') ilike ${pattern} escape '\\\\'
+          )
+        order by b.created_at desc, b.id desc
+        limit ${limit}
+      `;
+      return rows.map(toReviewImage);
+    },
+    async listHiddenIds(userId) {
+      const rows = await sql<{ id: string }>`
+        select id
+        from image_blobs
+        where user_id = ${userId} and hidden = true
+      `;
+      return rows.map((row) => row.id);
     },
   };
 }

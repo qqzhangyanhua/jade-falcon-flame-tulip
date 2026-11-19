@@ -6,16 +6,56 @@ import type { ProjectSummary } from "./types.ts";
 
 export { PROJECT_SUMMARY_LIMIT };
 
+export const PROJECT_LIST_SORTS = ["updated", "created", "name"] as const;
+export type ProjectListSort = (typeof PROJECT_LIST_SORTS)[number];
+
+export type ProjectListPage = {
+  items: ProjectSummary[];
+  total: number;
+};
+
 type ListDeps = Pick<ImageJobGatewayDeps, "projects">;
+
+function byId(a: ProjectSummary, b: ProjectSummary): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function asSort(sort: string | undefined): ProjectListSort {
+  if (sort === "created" || sort === "name" || sort === "updated") return sort;
+  return "updated";
+}
+
+function pageOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) return 0;
+  return offset;
+}
+
+function compareSummaries(a: ProjectSummary, b: ProjectSummary, sort: ProjectListSort): number {
+  if (sort === "name") {
+    return a.name.localeCompare(b.name, "zh", { sensitivity: "base" }) || byId(a, b);
+  }
+  const delta = sort === "created" ? b.createdAt - a.createdAt : b.updatedAt - a.updatedAt;
+  return delta || byId(a, b);
+}
 
 export async function listProjectSummaries(
   deps: ListDeps,
-  input: { userId: string },
-): Promise<ProjectOpResult<ProjectSummary[]>> {
+  input: { userId: string; keyword?: string; sort?: string; offset?: number },
+): Promise<ProjectOpResult<ProjectListPage>> {
   if (!input.userId) return { ok: false, code: "unauthorized" };
+  const keyword = (input.keyword ?? "").trim().toLocaleLowerCase();
+  const sort = asSort(input.sort);
+  const offset = pageOffset(input.offset);
+  const rows = (await deps.projects.listSummaries(input.userId)).filter((row) =>
+    keyword ? row.name.toLocaleLowerCase().includes(keyword) : true,
+  );
+  rows.sort((a, b) => compareSummaries(a, b, sort));
   return {
     ok: true,
-    value: await deps.projects.listSummaries(input.userId, PROJECT_SUMMARY_LIMIT),
+    value: {
+      items: rows.slice(offset, offset + PROJECT_SUMMARY_LIMIT),
+      total: rows.length,
+    },
   };
 }
 

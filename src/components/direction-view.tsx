@@ -3,8 +3,11 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { OwnedImage } from "@/components/owned-image";
 import { ConsistencyBadge } from "@/components/color-consistency-badge";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { ProjectRenameControl } from "@/components/project-rename-control";
+import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { Button } from "@/components/ui/button";
@@ -56,9 +59,14 @@ export function DirectionView() {
       <main className="mx-auto max-w-6xl px-5 pb-20 pt-8 md:px-8 md:pt-12">
         <div className="mb-10 max-w-2xl">
           <p className="section-label">第一步 · 锁定方向</p>
-          <h1 className="mt-3 font-display text-4xl leading-none tracking-tight md:text-5xl">
-            {project.name}
-          </h1>
+          <div className="mt-3">
+            <ProjectRenameControl
+              appearance="title"
+              projectId={project.id}
+              name={project.name}
+              onRenamed={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+            />
+          </div>
           <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">
             {hasReference
               ? "一条参考图方向，加上四个预设。锁定一张作为当前工作风格，其余最多保留两条备选。"
@@ -75,7 +83,12 @@ export function DirectionView() {
               >
                 <div className="relative aspect-video overflow-hidden rounded-lg bg-surface-2">
                   {c.url ? (
-                    <img src={c.url} alt={c.dna.name} className="frame size-full object-cover" />
+                    <OwnedImage
+                      src={c.url}
+                      alt={c.dna.name}
+                      className="frame size-full object-cover"
+                      placeholderClassName="size-full"
+                    />
                   ) : (
                     <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center text-subtle">
                       {c.status === "error" ? (

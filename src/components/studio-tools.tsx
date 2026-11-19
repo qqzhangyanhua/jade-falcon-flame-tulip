@@ -21,6 +21,10 @@ export type StudioSlotChoice = {
 
 const ASPECT_ITEMS = SUPPORTED_ASPECTS.map((aspect) => ({ value: aspect, label: aspect }));
 
+const GENERATE_COUNTS = [1, 2, 4] as const;
+
+export type GenerateCount = (typeof GENERATE_COUNTS)[number];
+
 export const TUNE_PRESETS = [
   {
     id: "like",
@@ -519,8 +523,10 @@ export function StudioGenerateBar({
   onEdit: (slotId: string, draft: CustomSlotDraft) => void;
   onDelete: (slotId: string) => void;
   onContent: (value: string) => void;
-  onGenerate: () => void;
+  onGenerate: (n: GenerateCount) => void;
 }) {
+  const [count, setCount] = useState<GenerateCount>(2);
+  const controlsDisabled = generating || generateBlocked;
   return (
     <footer className="grid min-w-0 shrink-0 gap-2 border-t border-border bg-surface p-3 md:grid-cols-[minmax(0,1fr)_auto]">
       <StudioSlotList
@@ -546,22 +552,45 @@ export function StudioGenerateBar({
         />
         {generateReason ? <p className="mt-1 text-xs text-danger">{generateReason}</p> : null}
       </div>
-      <Button
-        className="h-11 min-w-28"
-        disabled={generating || generateBlocked}
-        onClick={onGenerate}
-      >
-        {generating ? (
-          <>
-            <Loader2 className="size-4 animate-spin" />
-            {busyLabel ?? "生成中"}
-          </>
-        ) : generateBlocked ? (
-          (generateReason ?? "出图暂不可用")
-        ) : (
-          "出 2 张"
-        )}
-      </Button>
+      <div className="flex min-w-0 items-center gap-2">
+        <div
+          role="group"
+          aria-label="出图张数"
+          className="flex h-11 shrink-0 items-center rounded-md border border-border bg-bg p-0.5"
+        >
+          {GENERATE_COUNTS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-pressed={count === n}
+              disabled={controlsDisabled}
+              onClick={() => setCount(n)}
+              className={cn(
+                "h-10 min-w-11 rounded-xs px-2 text-sm disabled:opacity-40",
+                count === n ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
+              )}
+            >
+              {n} 张
+            </button>
+          ))}
+        </div>
+        <Button
+          className="h-11 min-w-28 flex-1"
+          disabled={controlsDisabled}
+          onClick={() => onGenerate(count)}
+        >
+          {generating ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              {busyLabel ?? "生成中"}
+            </>
+          ) : generateBlocked ? (
+            (generateReason ?? "出图暂不可用")
+          ) : (
+            `出 ${count} 张`
+          )}
+        </Button>
+      </div>
     </footer>
   );
 }

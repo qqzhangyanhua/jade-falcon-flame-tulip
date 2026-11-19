@@ -330,6 +330,112 @@ describe("image job gateway", () => {
   });
 });
 
+describe("generate count", () => {
+  it("passes generate counts of 1, 2, and 4 through unchanged and debits one quota unit", async () => {
+    const world = createMemoryGatewayWorld();
+    const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    for (const n of [1, 2, 4]) {
+      world.calls.length = 0;
+      const result = await runImageJob(world, jobInput(world, { n }));
+      assert.equal(result.ok, true);
+      assert.equal(world.calls.length, 1);
+      assert.equal(world.calls[0]?.n, n);
+    }
+    const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(after.used, before.used + 3);
+    assert.equal(after.remaining, before.remaining - 3);
+  });
+
+  it("rejects any other generate count before reserving quota or calling upstream", async () => {
+    const illegal: Array<number | undefined> = [0, 3, 5, -1, undefined];
+    for (const n of illegal) {
+      const world = createMemoryGatewayWorld();
+      const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+      const result = await runImageJob(world, jobInput(world, { n }));
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.code, "invalid_n");
+      assert.equal(result.job, undefined);
+      assert.equal(world.calls.length, 0);
+      const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+      assert.equal(after.remaining, before.remaining);
+      assert.equal(after.used, before.used);
+    }
+    assert.ok((IMAGE_JOB_ERROR_CODES as readonly string[]).includes("invalid_n"));
+    assert.equal(messageForImageJobError(new Error("invalid_n")), "出图张数不正确");
+  });
+
+  it("keeps tune and compose at one image and rejects any other count", async () => {
+    for (const action of ["tune", "compose"] as const) {
+      const world = createMemoryGatewayWorld();
+      const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+      const accepted = await runImageJob(
+        world,
+        jobInput(world, { action, n: 1, imageUrl: "https://img.example/src.png" }),
+      );
+      assert.equal(accepted.ok, true);
+      assert.equal(world.calls[0]?.n, 1);
+      const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+      assert.equal(after.used, before.used + 1);
+      assert.equal(after.remaining, before.remaining - 1);
+
+      for (const n of [0, 2, 4, -1, undefined] as const) {
+        const rejectedWorld = createMemoryGatewayWorld();
+        const start = await rejectedWorld.quota.snapshot(
+          rejectedWorld.userId,
+          rejectedWorld.now?.() ?? 0,
+        );
+        const result = await runImageJob(
+          rejectedWorld,
+          jobInput(rejectedWorld, {
+            action,
+            n,
+            imageUrl: "https://img.example/src.png",
+          }),
+        );
+        assert.equal(result.ok, false);
+        if (result.ok) return;
+        assert.equal(result.code, "invalid_n");
+        assert.equal(rejectedWorld.calls.length, 0);
+        const end = await rejectedWorld.quota.snapshot(
+          rejectedWorld.userId,
+          rejectedWorld.now?.() ?? 0,
+        );
+        assert.equal(end.remaining, start.remaining);
+        assert.equal(end.used, start.used);
+      }
+    }
+  });
+
+  it("keeps direction at one image", async () => {
+    const world = createMemoryGatewayWorld();
+    const before = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    const result = await runImageJob(world, jobInput(world, { action: "direction", n: 1 }));
+    assert.equal(result.ok, true);
+    assert.equal(world.calls[0]?.n, 1);
+    const after = await world.quota.snapshot(world.userId, world.now?.() ?? 0);
+    assert.equal(after.used, before.used + 1);
+    assert.equal(after.remaining, before.remaining - 1);
+
+    const omitted = createMemoryGatewayWorld();
+    const omittedInput = jobInput(omitted, { action: "direction" });
+    delete omittedInput.n;
+    const omittedResult = await runImageJob(omitted, omittedInput);
+    assert.equal(omittedResult.ok, true);
+    assert.equal(omitted.calls[0]?.n, 1);
+
+    const rejected = createMemoryGatewayWorld();
+    const start = await rejected.quota.snapshot(rejected.userId, rejected.now?.() ?? 0);
+    const bad = await runImageJob(rejected, jobInput(rejected, { action: "direction", n: 4 }));
+    assert.equal(bad.ok, false);
+    if (!bad.ok) assert.equal(bad.code, "invalid_n");
+    assert.equal(rejected.calls.length, 0);
+    const end = await rejected.quota.snapshot(rejected.userId, rejected.now?.() ?? 0);
+    assert.equal(end.remaining, start.remaining);
+    assert.equal(end.used, start.used);
+  });
+});
+
 describe("daily quota (Beijing time)", () => {
   it("defaults to 30 and counts one accepted job even when two variants return", async () => {
     const world = createMemoryGatewayWorld({

@@ -43,6 +43,20 @@ function aspectForSlot(slot: string, customSlots: readonly CustomSlot[]): string
   return customSlots.find((item) => item.id === slot)?.aspect ?? null;
 }
 
+/** Generate may ask for 1, 2, or 4. Tune, compose, and direction stay at one. */
+function acceptedImageCount(action: RunImageJobInput["action"], n: number | undefined): number | null {
+  if (action === "generate") {
+    if (n === 1 || n === 2 || n === 4) return n;
+    return null;
+  }
+  if (action === "direction") {
+    if (n === undefined || n === 1) return 1;
+    return null;
+  }
+  if (n === 1) return 1;
+  return null;
+}
+
 export async function runImageJob(
   deps: ImageJobGatewayDeps,
   input: RunImageJobInput,
@@ -82,6 +96,9 @@ export async function runImageJob(
     jobAspect = aspect;
   }
 
+  const count = acceptedImageCount(input.action, input.n);
+  if (count === null) return fail("invalid_n");
+
   const now = deps.now?.() ?? Date.now();
   const newId = deps.newId ?? newEntityId;
   const reserved = await deps.jobs.insertReserved({
@@ -108,7 +125,7 @@ export async function runImageJob(
       upstreamModelId: verdict.model.upstreamId,
       prompt: input.prompt,
       aspect: jobAspect,
-      n: input.n ?? 1,
+      n: count,
       imageUrl,
     });
   } catch {

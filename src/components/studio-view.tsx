@@ -24,6 +24,7 @@ import {
   StudioSlotList,
   StudioTunePanel,
   TUNE_PRESETS,
+  type GenerateCount,
   type StudioSlotChoice,
 } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
@@ -131,7 +132,7 @@ export function StudioView() {
     await getProjectSync()?.flush(project.id);
   }
 
-  async function runGenerate() {
+  async function runGenerate(n: GenerateCount) {
     if (!project || !style || !dna) return;
     if (generateBlocked) {
       toast.error(generateReason ?? "出图暂不可用");
@@ -143,7 +144,7 @@ export function StudioView() {
     try {
       const ref = slot === "ui_hero" ? project.prototypeDataUrl : style.candidateUrl;
       const res = await generateSlotFn({
-        data: { projectId: project.id, dna, slot, product, content, refUrl: ref },
+        data: { projectId: project.id, dna, slot, product, content, refUrl: ref, n },
       });
       addImageRevs({
         styleId: style.id,
@@ -154,7 +155,7 @@ export function StudioView() {
         parentId: currentImg?.id ?? null,
         jobId: res.jobId,
       });
-      toast.success("已生成 2 张变体，点「采用」选定");
+      toast.success(`已生成 ${res.urls.length} 张变体，点「采用」选定`);
     } catch (e) {
       toast.error(messageForImageJobError(e));
     } finally {
@@ -545,7 +546,7 @@ export function StudioView() {
               onEdit={editCustomSlot}
               onDelete={deleteCustomSlot}
               onContent={setContent}
-              onGenerate={() => void runGenerate()}
+              onGenerate={(n) => void runGenerate(n)}
             />
           </div>
         </section>

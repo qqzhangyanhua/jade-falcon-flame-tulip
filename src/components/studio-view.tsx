@@ -21,6 +21,7 @@ import {
 import { StyleLineActions } from "@/components/style-line-actions";
 import { StyleLineCompare } from "@/components/style-line-compare";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
+import { OwnedImage } from "@/components/owned-image";
 import {
   StudioGenerateBar,
   StudioSlotList,
@@ -567,10 +568,11 @@ export function StudioView() {
                     title={s.name}
                   >
                     {s.candidateUrl ? (
-                      <img
+                      <OwnedImage
                         src={s.candidateUrl}
                         alt={s.name}
                         className="frame h-14 w-20 object-cover"
+                        placeholderClassName="h-14 w-20 px-1 text-center text-xs leading-tight"
                       />
                     ) : (
                       <span className="block h-14 w-20 bg-surface-2" />

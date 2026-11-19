@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { OwnedImage } from "@/components/owned-image";
 import { getProjectSync } from "@/components/project-sync";
 import { listProjectSummariesFn } from "@/app/actions/studio";
 import { IMAGE_JOB_USER_MESSAGES } from "@/lib/image-jobs/errors";
@@ -68,7 +69,12 @@ export function RecentProjects() {
             >
               <div className="aspect-video bg-surface-2">
                 {p.coverUrl ? (
-                  <img src={p.coverUrl} alt="" className="frame size-full object-cover" />
+                  <OwnedImage
+                    src={p.coverUrl}
+                    alt=""
+                    className="frame size-full object-cover"
+                    placeholderClassName="size-full"
+                  />
                 ) : (
                   <div className="flex size-full items-center justify-center text-xs text-subtle">
                     尚未出图

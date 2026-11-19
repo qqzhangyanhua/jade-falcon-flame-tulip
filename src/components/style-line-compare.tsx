@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Columns2, Image as ImageIcon, X } from "lucide-react";
+import { OwnedImage } from "@/components/owned-image";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { compareLines } from "@/lib/project/ops";
@@ -113,10 +114,11 @@ export function StyleLineCompare({
                 </div>
                 {row.image ? (
                   <div className="grid h-48 place-items-center overflow-hidden rounded-md bg-surface-2">
-                    <img
+                    <OwnedImage
                       src={row.image.url}
                       alt={`${row.name}在${slotName}上采用的图`}
                       className="frame max-h-full max-w-full object-contain"
+                      placeholderClassName="h-full w-full"
                     />
                   </div>
                 ) : (

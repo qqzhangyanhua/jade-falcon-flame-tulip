@@ -22,6 +22,8 @@ import type {
 } from "./types.ts";
 import type {
   ImageBlobStore,
+  ImageHideAuditRecord,
+  ImageHideAuditStore,
   ImageJobGatewayDeps,
   ImageJobStore,
   ImageRevStore,
@@ -253,6 +255,20 @@ export function createMemoryRevs(): ImageRevStore {
   };
 }
 
+export function createMemoryHideAudit(): ImageHideAuditStore {
+  const rows: ImageHideAuditRecord[] = [];
+  return {
+    async append(record) {
+      const next = { ...record };
+      rows.push(next);
+      return { ...next };
+    },
+    async listByImage(imageId) {
+      return rows.filter((row) => row.imageId === imageId).map((row) => ({ ...row }));
+    },
+  };
+}
+
 export function createMemoryBlobs(): ImageBlobStore {
   const blobs = new Map<string, ImageBlobRecord>();
   return {
@@ -269,6 +285,35 @@ export function createMemoryBlobs(): ImageBlobStore {
       for (const [id, blob] of blobs) {
         if (blob.projectId === projectId) blobs.delete(id);
       }
+    },
+    async setHidden(id, hidden) {
+      const blob = blobs.get(id);
+      if (!blob) return false;
+      blob.hidden = hidden;
+      return true;
+    },
+    async listGenerated({ query, limit }) {
+      const q = query.trim().toLowerCase();
+      return [...blobs.values()]
+        .filter((blob) => blob.kind === "job")
+        .filter((blob) => !q || blob.userId.toLowerCase().includes(q))
+        .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .slice(0, limit)
+        .map((blob) => ({
+          id: blob.id,
+          userId: blob.userId,
+          userName: null,
+          userEmail: null,
+          projectId: blob.projectId,
+          createdAt: blob.createdAt,
+          hidden: blob.hidden === true,
+          contentType: blob.contentType,
+        }));
+    },
+    async listHiddenIds(userId) {
+      return [...blobs.values()]
+        .filter((blob) => blob.userId === userId && blob.hidden === true)
+        .map((blob) => blob.id);
     },
   };
 }
@@ -367,6 +412,7 @@ export function createMemoryGatewayWorld(opts?: {
     jobs: createMemoryJobs((record) => quota.tryReserve(record.userId, record.createdAt)),
     revs: createMemoryRevs(),
     blobs: createMemoryBlobs(),
+    audit: createMemoryHideAudit(),
     fetchImage: opts?.fetchImage ?? defaultMemoryFetchImage,
     quota,
     roles: createMemoryRoles(opts?.roles),

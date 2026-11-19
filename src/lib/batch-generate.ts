@@ -65,10 +65,22 @@ export type BatchQueue = {
 export function createBatchQueue(concurrency = BATCH_CONCURRENCY): BatchQueue {
   const pending: QueuedTask[] = [];
   let active = 0;
-  const listeners = new Set<(id: string, status: BatchTaskStatus) => void>();
+  // One studio passes the same listener to every enqueue. Count uses so the
+  // first batch to finish does not silence the one still running.
+  const listeners = new Map<(id: string, status: BatchTaskStatus) => void, number>();
 
   function emit(id: string, status: BatchTaskStatus) {
-    for (const listener of listeners) listener(id, status);
+    for (const listener of listeners.keys()) listener(id, status);
+  }
+
+  function addListener(onStatus: (id: string, status: BatchTaskStatus) => void) {
+    listeners.set(onStatus, (listeners.get(onStatus) ?? 0) + 1);
+  }
+
+  function removeListener(onStatus: (id: string, status: BatchTaskStatus) => void) {
+    const next = (listeners.get(onStatus) ?? 0) - 1;
+    if (next <= 0) listeners.delete(onStatus);
+    else listeners.set(onStatus, next);
   }
 
   function finish(task: QueuedTask, status: "done" | "failed" | "dropped") {
@@ -105,7 +117,7 @@ export function createBatchQueue(concurrency = BATCH_CONCURRENCY): BatchQueue {
 
   return {
     enqueue(tasks, onStatus) {
-      if (onStatus) listeners.add(onStatus);
+      if (onStatus) addListener(onStatus);
       const outcomes = tasks.map(
         (task) =>
           new Promise<BatchTaskOutcome>((resolve) => {
@@ -115,7 +127,7 @@ export function createBatchQueue(concurrency = BATCH_CONCURRENCY): BatchQueue {
       );
       pump();
       return Promise.all(outcomes).finally(() => {
-        if (onStatus) listeners.delete(onStatus);
+        if (onStatus) removeListener(onStatus);
       });
     },
     cancel() {

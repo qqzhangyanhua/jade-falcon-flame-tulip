@@ -166,4 +166,19 @@ describe("createBatchQueue", () => {
       ["failed", "done", "done", "done", "done"],
     );
   });
+
+  it("keeps a shared status listener until every enqueue that used it has finished", async () => {
+    const queue = createBatchQueue(1);
+    const gate = deferred<void>();
+    const seen: string[] = [];
+    const listener = (id: string, status: string) => {
+      if (id === "second" && status === "running") seen.push(status);
+    };
+    const first = queue.enqueue([{ id: "first", run: () => gate.promise }], listener);
+    const second = queue.enqueue([{ id: "second", run: async () => {} }], listener);
+    gate.resolve();
+    await first;
+    await second;
+    assert.deepEqual(seen, ["running"]);
+  });
 });

@@ -24,6 +24,7 @@ import {
   lockCandidate,
   restoreStyle,
   setCurrentStyle,
+  rollbackStyle,
   setStyleRev,
   writebackStyle,
 } from "./project/ops.ts";
@@ -59,6 +60,7 @@ type State = {
   deleteCustomSlot: (slotId: string) => void;
   setMode: (mode: Project["mode"]) => void;
   addImageRevs: (opts: {
+    projectId?: string;
     styleId: string;
     slot: Slot;
     urls: string[];
@@ -75,6 +77,7 @@ type State = {
     dna: StyleDna;
     changes?: DnaChange[];
   }) => void;
+  rollbackStyle: (styleId: string, rev: number) => void;
   setStyleRev: (styleId: string, rev: number) => void;
   archiveStyle: (styleId: string) => ArchiveOutcome;
   restoreStyle: (styleId: string) => void;
@@ -200,14 +203,19 @@ export const useStudio = create<State>()(
         if (!id) return;
         set((s) => ({ projects: patchProject(s.projects, id, (p) => ({ ...p, mode })) }));
       },
-      addImageRevs: ({ writeback = "none", ...opts }) => {
-        const id = get().currentId;
+      addImageRevs: ({ projectId, writeback = "none", ...opts }) => {
+        const id = projectId ?? get().currentId;
         if (!id) return [];
         let ids: string[] = [];
-        update(set, get, (p) => {
-          const result = addImageRevs(p, { ...opts, writeback }, { newId: uid });
+        set((s) => {
+          const project = s.projects.find((p) => p.id === id);
+          if (!project) return s;
+          const result = addImageRevs(project, { ...opts, writeback }, { newId: uid });
           ids = result.ids;
-          return result.project;
+          if (result.project === project) return s;
+          return {
+            projects: s.projects.map((p) => (p.id === id ? result.project : p)),
+          };
         });
         return ids;
       },
@@ -217,6 +225,7 @@ export const useStudio = create<State>()(
         update(set, get, (p) =>
           writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid }),
         ),
+      rollbackStyle: (styleId, rev) => update(set, get, (p) => rollbackStyle(p, styleId, rev)),
       setStyleRev: (styleId, rev) => update(set, get, (p) => setStyleRev(p, styleId, rev)),
       removeProject: (id) => {
         set((s) => ({

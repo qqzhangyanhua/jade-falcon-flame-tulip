@@ -293,6 +293,7 @@ export async function generateSlotFn(input: {
     content: string;
     refUrl?: string | null;
     clientModelId?: string;
+    n: number;
   };
 }): Promise<ImageJobFnResult> {
   const { userId } = await requireActionUser();
@@ -311,7 +312,7 @@ export async function generateSlotFn(input: {
     slot: data.slot,
     prompt,
     aspect: SLOT_ASPECT[data.slot],
-    n: 2,
+    n: data.n,
     imageUrl: ref,
     clientModelId: data.clientModelId,
   });

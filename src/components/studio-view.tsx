@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AuthSlot } from "@/components/auth-slot";
@@ -11,6 +11,7 @@ import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
+import { StyleRevCompare } from "@/components/style-rev-compare";
 import {
   StudioBrandGuideLink,
   StudioCopyMenu,
@@ -18,21 +19,25 @@ import {
   StudioExportButton,
 } from "@/components/studio-export";
 import { StyleLineActions } from "@/components/style-line-actions";
+import { StyleLineCompare } from "@/components/style-line-compare";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
 import {
   StudioGenerateBar,
   StudioSlotList,
   StudioTunePanel,
   TUNE_PRESETS,
+  type GenerateCount,
   type StudioSlotChoice,
 } from "@/components/studio-tools";
 import { Button } from "@/components/ui/button";
 import { SelectField } from "@/components/ui/select";
 import { Wordmark } from "@/components/wordmark";
 import { composeImageFn, generateSlotFn, tuneImageFn } from "@/app/actions/studio";
+import { createBatchQueue, planBatch, type BatchTaskStatus } from "@/lib/batch-generate";
 import { mergeStyleInstructionFn } from "@/app/actions/writeback";
 import type { DnaChange } from "@/lib/project/dna";
 import { paletteForStyleRev } from "@/lib/project/dna-export";
+import { latestGenerateRevs } from "@/lib/project/ops";
 import { messageForMergeError } from "@/lib/style-ai/shared";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
@@ -40,6 +45,56 @@ import { BUILTIN_SLOTS } from "@/lib/project/slots";
 import { useStudio } from "@/lib/store";
 import { adoptedRev, currentDna, type Slot, type StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function findProject(projectId: string) {
+  return useStudio.getState().projects.find((item) => item.id === projectId) ?? null;
+}
+
+/** Writes a finished generate onto the project that started it, even if it is no longer current. */
+async function generateOntoProject(input: {
+  projectId: string;
+  styleId: string;
+  slotId: string;
+  productName: string;
+  contentText: string;
+  n: GenerateCount;
+}): Promise<string[] | null> {
+  const live = findProject(input.projectId);
+  const styleLine = live?.styles.find((entry) => entry.id === input.styleId);
+  if (!live || !styleLine) return null;
+  const dnaNow = currentDna(styleLine);
+  const priorAsset = styleLine.assets[input.slotId];
+  const priorParent = priorAsset ? adoptedRev(priorAsset) : null;
+  const refUrl = input.slotId === "ui_hero" ? live.prototypeDataUrl : styleLine.candidateUrl;
+  await getProjectSync()?.flush(input.projectId);
+  const res = await generateSlotFn({
+    data: {
+      projectId: input.projectId,
+      dna: dnaNow,
+      slot: input.slotId,
+      product: input.productName,
+      content: input.contentText,
+      refUrl,
+      n: input.n,
+    },
+  });
+  const saved = findProject(input.projectId);
+  const savedStyle = saved?.styles.find((entry) => entry.id === input.styleId);
+  if (!saved || !savedStyle) return null;
+  const savedAsset = savedStyle.assets[input.slotId];
+  const parentNow = savedAsset ? adoptedRev(savedAsset) : priorParent;
+  const ids = useStudio.getState().addImageRevs({
+    projectId: input.projectId,
+    styleId: input.styleId,
+    slot: input.slotId,
+    urls: res.urls,
+    action: "generate",
+    diff: input.contentText.trim() || "首次生成",
+    parentId: parentNow?.id ?? null,
+    jobId: res.jobId,
+  });
+  return ids.length > 0 ? res.urls : null;
+}
 
 export function StudioView() {
   const project = useStudio((s) => s.current());
@@ -54,12 +109,14 @@ export function StudioView() {
   const addImageRevs = useStudio((s) => s.addImageRevs);
   const adoptImage = useStudio((s) => s.adoptImage);
   const writebackStyle = useStudio((s) => s.writebackStyle);
+  const rollbackStyle = useStudio((s) => s.rollbackStyle);
   const setStyleRev = useStudio((s) => s.setStyleRev);
   const setCurrentImageModel = useStudio((s) => s.setCurrentImageModel);
   const { state: imageGate, pick, refresh } = useStudioImageGate(project?.id);
 
   const [content, setContent] = useState("");
   const [tab, setTab] = useState<"image" | "style">("image");
+  const [compareOpen, setCompareOpen] = useState(false);
   const [mobile, setMobile] = useState<"canvas" | "style" | "history">("canvas");
   const [confirmWrite, setConfirmWrite] = useState<null | {
     instruction: string;
@@ -74,12 +131,49 @@ export function StudioView() {
     palette: readonly string[] | null;
   } | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const busyToken = useRef(0);
+  const [inspecting, setInspecting] = useState<{
+    styleId: string;
+    slot: string;
+    id: string;
+  } | null>(null);
+  const [slotPhases, setSlotPhases] = useState<Record<string, BatchTaskStatus>>({});
+  const phasesRef = useRef(slotPhases);
+  const queueRef = useRef<ReturnType<typeof createBatchQueue> | null>(null);
+  const mountedRef = useRef(true);
+
+  function batchQueue() {
+    queueRef.current ??= createBatchQueue();
+    return queueRef.current;
+  }
+
+  function setSlotPhase(id: string, status: BatchTaskStatus) {
+    const next = { ...phasesRef.current };
+    if (status === "dropped") delete next[id];
+    else next[id] = status;
+    phasesRef.current = next;
+    setSlotPhases(next);
+  }
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      queueRef.current?.cancel();
+    };
+  }, []);
 
   const style = project?.styles.find((s) => s.id === project.currentStyleId) ?? null;
   const dna = style ? currentDna(style) : null;
   const slot: Slot = project?.currentSlot ?? "kv";
   const asset = style?.assets[slot];
   const currentImg = asset ? adoptedRev(asset) : null;
+  const inspectingId =
+    inspecting && style && inspecting.styleId === style.id && inspecting.slot === slot
+      ? inspecting.id
+      : null;
+  const inspectedRev =
+    inspectingId && asset ? (asset.revs.find((rev) => rev.id === inspectingId) ?? null) : null;
   const generating = project?.mode === "generating" || merging;
   const generateBlocked = Boolean(imageGate && !imageGate.actions.generate.enabled);
   const generateReason = imageGate?.actions.generate.reason ?? null;
@@ -88,10 +182,11 @@ export function StudioView() {
 
   const pair = useMemo(() => {
     if (!asset) return [];
-    const last = asset.revs.slice(-2);
-    if (last.length === 2 && last.every((r) => r.action === "generate")) return last;
-    return currentImg ? [currentImg] : last;
-  }, [asset, currentImg]);
+    if (inspectedRev) return [inspectedRev];
+    const generated = latestGenerateRevs(asset.revs);
+    if (generated.length > 0) return generated;
+    return currentImg ? [currentImg] : [];
+  }, [asset, currentImg, inspectedRev]);
 
   if (!project || !style || !dna) return null;
 
@@ -131,37 +226,128 @@ export function StudioView() {
     await getProjectSync()?.flush(project.id);
   }
 
-  async function runGenerate() {
+  function onSlotStatus(id: string, status: BatchTaskStatus) {
+    if (!mountedRef.current) return;
+    setSlotPhase(id, status);
+  }
+
+  function holdBusy(label: string) {
+    const token = ++busyToken.current;
+    if (mountedRef.current) setBusyLabel(label);
+    return token;
+  }
+
+  function releaseBusy(token: number) {
+    if (busyToken.current !== token || !mountedRef.current) return;
+    setBusyLabel(null);
+  }
+
+  // No global "generating" mode: that overlay hides per-slot progress.
+  // The busy label stays on this slot while its own task runs.
+  function runGenerate(n: GenerateCount) {
     if (!project || !style || !dna) return;
+    const slotId = slot;
+    const currentPhase = phasesRef.current[slotId];
+    if (currentPhase === "queued" || currentPhase === "running") return;
     if (generateBlocked) {
       toast.error(generateReason ?? "出图暂不可用");
       return;
     }
-    setMode("generating");
-    await flushDocument();
-    setBusyLabel("出图中");
-    try {
-      const ref = slot === "ui_hero" ? project.prototypeDataUrl : style.candidateUrl;
-      const res = await generateSlotFn({
-        data: { projectId: project.id, dna, slot, product, content, refUrl: ref },
-      });
-      addImageRevs({
-        styleId: style.id,
-        slot,
-        urls: res.urls,
-        action: "generate",
-        diff: content.trim() || "首次生成",
-        parentId: currentImg?.id ?? null,
-        jobId: res.jobId,
-      });
-      toast.success("已生成 2 张变体，点「采用」选定");
-    } catch (e) {
-      toast.error(messageForImageJobError(e));
-    } finally {
-      setMode("idle");
-      setBusyLabel(null);
-      void refresh();
+    const projectId = project.id;
+    const styleId = style.id;
+    const productName = product;
+    const contentText = content;
+    void batchQueue().enqueue(
+      [
+        {
+          id: slotId,
+          run: async () => {
+            const token = holdBusy("出图中");
+            try {
+              const urls = await generateOntoProject({
+                projectId,
+                styleId,
+                slotId,
+                productName,
+                contentText,
+                n,
+              });
+              if (urls) toast.success(`已生成 ${urls.length} 张变体，点「采用」`);
+            } catch (error) {
+              toast.error(messageForImageJobError(error));
+              throw error;
+            } finally {
+              releaseBusy(token);
+              if (mountedRef.current) void refresh();
+            }
+          },
+        },
+      ],
+      onSlotStatus,
+    );
+  }
+
+  function runningSlotIds() {
+    return Object.entries(phasesRef.current)
+      .filter(([, status]) => status === "queued" || status === "running")
+      .map(([id]) => id);
+  }
+
+  function startBatch(n: GenerateCount, slotIds: readonly string[]) {
+    if (!project || !style || !dna) return;
+    const quotaRemaining = imageGate?.quota.remaining;
+    if (quotaRemaining == null) {
+      toast.error("还没有拿到剩余额度，无法开始");
+      return;
     }
+    const confirmed = new Set(slotIds);
+    const plan = planBatch({
+      enabled: enabledSlots
+        .filter((item) => confirmed.has(item.id))
+        .map((item) => ({ id: item.id, name: item.name })),
+      runningIds: runningSlotIds(),
+      remaining: quotaRemaining,
+    });
+    if (!plan.quotaEnough) {
+      toast.error(`剩余额度 ${quotaRemaining}，不够扣 ${plan.cost} 个。额度不足，无法开始。`);
+      return;
+    }
+    if (plan.start.length === 0) {
+      toast.error("没有可以开始的任务");
+      return;
+    }
+    if (generateBlocked) {
+      toast.error(generateReason ?? "出图暂不可用");
+      return;
+    }
+    const projectId = project.id;
+    const styleId = style.id;
+    const productName = product;
+    const contentText = content;
+    void batchQueue().enqueue(
+      plan.start.map((item) => ({
+        id: item.id,
+        run: async () => {
+          try {
+            const urls = await generateOntoProject({
+              projectId,
+              styleId,
+              slotId: item.id,
+              productName,
+              contentText,
+              n,
+            });
+            if (urls) toast.success(`${item.name} 已生成 ${urls.length} 张`);
+          } catch (error) {
+            toast.error(`${item.name}：${messageForImageJobError(error)}`);
+            throw error;
+          } finally {
+            if (mountedRef.current) void refresh();
+          }
+        },
+      })),
+      onSlotStatus,
+    );
   }
 
   async function runTune(instruction: string, writeback: boolean, action: "tune" | "compose") {
@@ -184,7 +370,7 @@ export function StudioView() {
   async function previewWriteback(instruction: string) {
     if (!style || !dna) return;
     setMerging(true);
-    setBusyLabel("合并风格中");
+    const token = holdBusy("合并风格中");
     try {
       const merged = await mergeStyleInstructionFn({ data: { dna, instruction } });
       if (!merged.ok) {
@@ -201,7 +387,7 @@ export function StudioView() {
       toast.error(messageForMergeError("network"));
     } finally {
       setMerging(false);
-      setBusyLabel(null);
+      releaseBusy(token);
     }
   }
 
@@ -231,7 +417,7 @@ export function StudioView() {
     });
     setMode("generating");
     await flushDocument();
-    setBusyLabel(action === "compose" ? "换构图中" : "微调中");
+    const token = holdBusy(action === "compose" ? "换构图中" : "微调中");
     try {
       const fn = action === "compose" ? composeImageFn : tuneImageFn;
       const res = await fn({
@@ -264,7 +450,7 @@ export function StudioView() {
       );
     } finally {
       setMode("idle");
-      setBusyLabel(null);
+      releaseBusy(token);
       void refresh();
     }
   }
@@ -295,6 +481,7 @@ export function StudioView() {
             }))}
             onValueChange={setCurrentStyle}
           />
+          <StyleLineCompare disabled={generating} onGoGenerate={() => setMobile("canvas")} />
           <SelectField
             label="风格版本"
             className="w-40 shrink-0"
@@ -306,6 +493,14 @@ export function StudioView() {
             }))}
             onValueChange={(value) => setStyleRev(style.id, Number(value))}
           />
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => setCompareOpen(true)}
+          >
+            对比风格版本
+          </Button>
           <ImageModelPicker
             className="w-44 shrink-0"
             state={imageGate}
@@ -392,6 +587,7 @@ export function StudioView() {
             available={availableSlots}
             current={slot}
             disabled={generating}
+            slotPhases={slotPhases}
             onSelect={setSlot}
             onEnable={enableBuiltinSlot}
             onHide={hideBuiltinSlot}
@@ -406,6 +602,15 @@ export function StudioView() {
         >
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:hidden">
             <p className="min-w-0 flex-1 truncate text-sm text-fg">{product}</p>
+            <StyleLineCompare disabled={generating} onGoGenerate={() => setMobile("canvas")} />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => setCompareOpen(true)}
+            >
+              对比风格版本
+            </Button>
             <ImageModelPicker
               className="w-32 shrink-0"
               state={imageGate}
@@ -428,7 +633,7 @@ export function StudioView() {
                 <ImageIcon className="mb-4 size-6 text-subtle" />
                 <p className="font-display text-xl tracking-tight">还没有图</p>
                 <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted">
-                  选物料槽，填一句内容，出两张变体。
+                  选物料槽，填一句内容，出图。
                 </p>
                 {generateReason ? (
                   <p className="mt-3 text-xs text-danger">{generateReason}</p>
@@ -538,6 +743,9 @@ export function StudioView() {
               generateBlocked={generateBlocked}
               generateReason={generateReason}
               busyLabel={busyLabel}
+              slotPhases={slotPhases}
+              runningIds={runningSlotIds()}
+              remaining={imageGate ? imageGate.quota.remaining : null}
               onSlot={setSlot}
               onEnable={enableBuiltinSlot}
               onHide={hideBuiltinSlot}
@@ -545,14 +753,15 @@ export function StudioView() {
               onEdit={editCustomSlot}
               onDelete={deleteCustomSlot}
               onContent={setContent}
-              onGenerate={() => void runGenerate()}
+              onGenerate={(n) => void runGenerate(n)}
+              onStartBatch={startBatch}
             />
           </div>
         </section>
 
         <aside
           className={cn(
-            "w-full overflow-y-auto border-l border-border md:w-72 md:shrink-0",
+            "w-full min-w-0 overflow-y-auto border-l border-border md:w-72 md:shrink-0",
             mobile !== "history" ? "hidden md:block" : "min-h-0 flex-1",
           )}
         >
@@ -561,12 +770,31 @@ export function StudioView() {
             onTab={setTab}
             assetRevs={asset?.revs ?? []}
             adoptedId={asset?.adoptedId}
+            inspectingId={inspectedRev?.id ?? null}
             style={style}
             onAdopt={(imageId) => adoptImage(style.id, slot, imageId)}
+            onInspect={(imageId) => {
+              if (!imageId) {
+                setInspecting(null);
+                return;
+              }
+              setInspecting({ styleId: style.id, slot, id: imageId });
+              setMobile("canvas");
+            }}
             onStyleRev={(rev) => setStyleRev(style.id, rev)}
+            onRollback={(rev) => rollbackStyle(style.id, rev)}
           />
         </aside>
       </div>
+
+      {compareOpen ? (
+        <StyleRevCompare
+          key={style.id}
+          style={style}
+          slots={enabledSlots.map((item) => ({ id: item.id, name: item.name }))}
+          onClose={() => setCompareOpen(false)}
+        />
+      ) : null}
 
       {confirmWrite ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-fg/40 p-4 md:place-items-center">

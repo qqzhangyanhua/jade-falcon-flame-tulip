@@ -4,18 +4,29 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  compareLines,
   createCustomSlot,
   deleteCustomSlot,
   editCustomSlot,
   enableBuiltinSlot,
   forkStyle,
   hideBuiltinSlot,
+  compareRevs,
   lockCandidate,
   restoreStyle,
+  latestGenerateRevs,
+  revTree,
+  rollbackStyle,
   setStyleRev,
   writebackStyle,
 } from "./ops.ts";
-import { currentDna, projectDocumentSchema } from "./schema.ts";
+import {
+  currentDna,
+  projectDocumentSchema,
+  type Asset,
+  type ImageRev,
+  type StyleBranch,
+} from "./schema.ts";
 import { BUILTIN_SLOTS, DEFAULT_ENABLED_SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
 import { slotPrompt } from "../prompts.ts";
 import { sampleCandidate, sampleDna, sampleProject, sampleStyle } from "./fixtures.ts";
@@ -146,6 +157,187 @@ describe("writebackStyle", () => {
       changes,
     });
     assert.deepEqual(style(next, "a").revs[1].changes, changes);
+  });
+});
+
+describe("rollbackStyle", () => {
+  it("appends a new rev that copies the target DNA and records the change from the viewed rev", () => {
+    let project = sampleProject();
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
+    });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v3",
+      dna: sampleDna({ name: "风格 a", light: "硬光" }),
+    });
+    project = setStyleRev(project, "a", 2);
+    const source = style(project, "a").revs[0].dna;
+
+    const next = rollbackStyle(project, "a", 1, counter());
+    const a = style(next, "a");
+    const rolled = a.revs[3];
+
+    assert.deepEqual(
+      a.revs.map((rev) => rev.rev),
+      [1, 2, 3, 4],
+    );
+    assert.equal(a.currentRev, 4);
+    assert.deepEqual(
+      { rev: rolled.rev, parentRev: rolled.parentRev, changeLog: rolled.changeLog },
+      { rev: 4, parentRev: 2, changeLog: "回滚至 rev1" },
+    );
+    assert.deepEqual(rolled.dna, source);
+    assert.notEqual(rolled.dna, source);
+    assert.deepEqual(rolled.changes, [{ field: "light", from: "侧逆光", to: "柔和顶光" }]);
+    assert.equal(currentDna(a).light, "柔和顶光");
+  });
+
+  it("does nothing when the target DNA matches the viewed DNA", () => {
+    const viewingTarget = sampleProject();
+    assert.equal(rollbackStyle(viewingTarget, "a", 1), viewingTarget);
+
+    let project = sampleProject();
+    const same = sampleDna({ name: "风格 a", light: "柔和顶光" });
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
+    });
+    project = writebackStyle(project, { styleId: "a", changeLog: "v3", dna: same });
+    assert.equal(style(project, "a").currentRev, 3);
+    assert.equal(rollbackStyle(project, "a", 1), project);
+    assert.equal(style(project, "a").revs.length, 3);
+  });
+
+  it("does not rewrite or mutate older revs", () => {
+    let project = sampleProject();
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ name: "风格 a", light: "侧逆光", mood: ["冷静", "锋利"] }),
+    });
+    project = setStyleRev(project, "a", 1);
+    const before = style(project, "a").revs.map((rev) => rev);
+    const sourceLight = before[0].dna.light;
+    const sourcePrimary = before[0].dna.colors.primary;
+
+    const next = rollbackStyle(project, "a", 2, counter());
+    const a = style(next, "a");
+
+    assert.equal(a.revs[0], before[0]);
+    assert.equal(a.revs[1], before[1]);
+    assert.equal(before[0].dna.light, sourceLight);
+    assert.equal(before[0].changeLog, "锁定");
+    assert.equal(before[1].changeLog, "v2");
+    assert.equal(a.revs[2].changeLog, "回滚至 rev2");
+    assert.equal(a.revs[2].parentRev, 1);
+
+    a.revs[2].dna.light = "被改";
+    a.revs[2].dna.colors.primary = "#000000";
+    a.revs[2].dna.mood.push("多余");
+    assert.equal(before[1].dna.light, "侧逆光");
+    assert.equal(before[1].dna.colors.primary, sourcePrimary);
+    assert.deepEqual(before[1].dna.mood, ["冷静", "锋利"]);
+  });
+
+  it("ignores an unknown style or rev", () => {
+    const project = sampleProject();
+    assert.equal(rollbackStyle(project, "zzz", 1), project);
+    assert.equal(rollbackStyle(project, "a", 9), project);
+    assert.equal(style(project, "a").revs.length, 1);
+    assert.equal(style(project, "b").currentRev, 1);
+  });
+});
+
+function imageRev(id: string, styleRev: number, createdAt: number, url: string): ImageRev {
+  return {
+    id,
+    parentId: null,
+    url,
+    createdAt,
+    action: "generate",
+    diff: id,
+    writeback: "none",
+    styleRev,
+  };
+}
+
+function lineWithImages(
+  project: ReturnType<typeof sampleProject>,
+  images: { kv?: ImageRev[]; ui_hero?: ImageRev[] },
+): StyleBranch {
+  const line = style(project, "a");
+  return {
+    ...line,
+    assets: {
+      ...line.assets,
+      kv: { ...line.assets.kv, revs: images.kv ?? [] },
+      ui_hero: { ...line.assets.ui_hero, revs: images.ui_hero ?? [] },
+    },
+  };
+}
+
+describe("compareRevs", () => {
+  it("diffs the two DNAs and picks each slot's latest image for those revs", () => {
+    let project = sampleProject();
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
+    });
+    const line = lineWithImages(project, {
+      kv: [
+        imageRev("kv-old", 1, 10, "/api/images/kv-old"),
+        imageRev("kv-new", 1, 30, "/api/images/kv-new"),
+        imageRev("kv-stale", 1, 20, "/api/images/kv-stale"),
+        imageRev("kv-rev2", 2, 40, "/api/images/kv-rev2"),
+      ],
+      ui_hero: [imageRev("hero-1", 1, 5, "/api/images/hero")],
+    });
+
+    const compared = compareRevs(line, 1, 2, ["kv", "web_home", "ui_hero"]);
+
+    assert.deepEqual(compared.changes, [{ field: "light", from: "柔和顶光", to: "侧逆光" }]);
+    assert.deepEqual(
+      compared.slots.map((slot) => slot.slot),
+      ["kv", "web_home", "ui_hero"],
+    );
+    assert.equal(compared.slots[0].revA?.url, "/api/images/kv-new");
+    assert.equal(compared.slots[0].revB?.url, "/api/images/kv-rev2");
+    assert.equal(compared.slots[1].revA, null);
+    assert.equal(compared.slots[1].revB, null);
+    assert.equal(compared.slots[2].revA?.url, "/api/images/hero");
+    assert.equal(compared.slots[2].revB, null);
+  });
+
+  it("keeps the later image when createdAt ties, and returns null for a slot with no image", () => {
+    let project = sampleProject();
+    project = writebackStyle(project, {
+      styleId: "a",
+      changeLog: "v2",
+      dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
+    });
+    const line = lineWithImages(project, {
+      kv: [
+        imageRev("tie-a", 1, 30, "/api/images/tie-a"),
+        imageRev("other-rev", 2, 99, "/api/images/other"),
+        imageRev("tie-b", 1, 30, "/api/images/tie-b"),
+      ],
+    });
+
+    const compared = compareRevs(line, 1, 2, ["missing", "kv"]);
+
+    assert.deepEqual(
+      compared.slots.map((slot) => [slot.slot, slot.revA?.url ?? null, slot.revB?.url ?? null]),
+      [
+        ["missing", null, null],
+        ["kv", "/api/images/tie-b", "/api/images/other"],
+      ],
+    );
+    assert.deepEqual(compared.changes, [{ field: "light", from: "柔和顶光", to: "侧逆光" }]);
   });
 });
 
@@ -593,7 +785,11 @@ describe("editCustomSlot", () => {
     );
     const id = created.customSlots[0]?.id ?? "";
     assert.equal(
-      editCustomSlot(created, "cslot_missing", { name: "别的", aspect: "1:1", purpose: "别的用途" }),
+      editCustomSlot(created, "cslot_missing", {
+        name: "别的",
+        aspect: "1:1",
+        purpose: "别的用途",
+      }),
       created,
     );
     assert.equal(
@@ -676,5 +872,327 @@ describe("custom slot prompt", () => {
     assert.equal(tall.includes("Brand key visual poster"), false);
     assert.equal(sticker.includes("centered graphic symbol"), false);
     assert.equal(sticker.includes("Website homepage hero"), false);
+  });
+});
+
+function lineImage(id: string, url: string, createdAt = 1): ImageRev {
+  return {
+    id,
+    parentId: null,
+    url,
+    createdAt,
+    action: "generate",
+    diff: "",
+    writeback: "none",
+    styleRev: 1,
+  };
+}
+
+describe("compareLines", () => {
+  it("lists live style lines in project order and leaves archived lines out", () => {
+    const project = sampleProject({
+      styles: [
+        sampleStyle("old", {
+          status: "archived",
+          assets: {
+            kv: {
+              slot: "kv",
+              adoptedId: "gone",
+              revs: [lineImage("gone", "/api/images/gone")],
+            },
+          },
+        }),
+        sampleStyle("a", {
+          status: "active",
+          assets: {
+            kv: {
+              slot: "kv",
+              adoptedId: "a1",
+              revs: [lineImage("a1", "/api/images/a")],
+            },
+          },
+        }),
+        sampleStyle("b", {
+          status: "standby",
+          assets: {
+            poster: {
+              slot: "poster",
+              adoptedId: "b1",
+              revs: [lineImage("b1", "/api/images/b")],
+            },
+          },
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      compareLines(project, "kv").map((row) => ({
+        styleId: row.styleId,
+        name: row.name,
+        status: row.status,
+        url: row.image?.url ?? null,
+      })),
+      [
+        { styleId: "a", name: "风格 a", status: "active", url: "/api/images/a" },
+        { styleId: "b", name: "风格 b", status: "standby", url: null },
+      ],
+    );
+    assert.deepEqual(
+      compareLines(project, "poster").map((row) => row.styleId),
+      ["a", "b"],
+    );
+  });
+
+  it("uses the adopted image, or the latest image when none is adopted", () => {
+    const older = lineImage("older", "/api/images/older", 30);
+    const newer = lineImage("newer", "/api/images/newer", 4);
+    const project = sampleProject({
+      styles: [
+        sampleStyle("picked", {
+          status: "active",
+          assets: {
+            cslot_poster: {
+              slot: "cslot_poster",
+              adoptedId: "older",
+              revs: [older, newer],
+            },
+          },
+        }),
+        sampleStyle("open", {
+          status: "standby",
+          assets: {
+            cslot_poster: {
+              slot: "cslot_poster",
+              adoptedId: null,
+              revs: [older, newer],
+            },
+          },
+        }),
+        sampleStyle("dangling", {
+          status: "standby",
+          assets: {
+            cslot_poster: {
+              slot: "cslot_poster",
+              adoptedId: "missing",
+              revs: [older, newer],
+            },
+          },
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      compareLines(project, "cslot_poster").map((row) => row.image?.id ?? null),
+      ["older", "newer", "newer"],
+    );
+    assert.equal(compareLines(project, "cslot_poster")[0]?.image?.url, "/api/images/older");
+    assert.equal(compareLines(project, "cslot_poster")[1]?.image?.url, "/api/images/newer");
+  });
+
+  it("returns no image when the slot has no revs or the asset is missing", () => {
+    const project = sampleProject({
+      styles: [
+        sampleStyle("empty", {
+          status: "active",
+          assets: {
+            kv: { slot: "kv", adoptedId: null, revs: [] },
+          },
+        }),
+        sampleStyle("partial", {
+          status: "standby",
+          assets: {
+            ui_hero: {
+              slot: "ui_hero",
+              adoptedId: "hero",
+              revs: [lineImage("hero", "/api/images/hero")],
+            },
+          },
+        }),
+        sampleStyle("kept", {
+          status: "archived",
+          assets: {
+            kv: { slot: "kv", adoptedId: "kept", revs: [lineImage("kept", "/api/images/kept")] },
+          },
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      compareLines(project, "kv").map((row) => ({ styleId: row.styleId, image: row.image })),
+      [
+        { styleId: "empty", image: null },
+        { styleId: "partial", image: null },
+      ],
+    );
+  });
+});
+
+function treeImage(
+  patch: Pick<ImageRev, "id" | "parentId" | "styleRev" | "action"> & Partial<ImageRev>,
+): ImageRev {
+  return {
+    url: `/u/${patch.id}`,
+    createdAt: 1,
+    diff: patch.id,
+    writeback: "none",
+    ...patch,
+  };
+}
+
+function treeShape(nodes: ReturnType<typeof revTree>): unknown {
+  return nodes.map((node) => ({
+    id: node.rev.id,
+    styleRev: node.rev.styleRev,
+    children: treeShape(node.children),
+  }));
+}
+
+describe("revTree", () => {
+  it("nests multi-level parent links in rev order", () => {
+    const asset: Asset = {
+      slot: "kv",
+      adoptedId: "c",
+      revs: [
+        treeImage({ id: "a", parentId: null, styleRev: 1, action: "generate" }),
+        treeImage({ id: "b", parentId: "a", styleRev: 1, action: "tune" }),
+        treeImage({ id: "c", parentId: "b", styleRev: 1, action: "compose" }),
+        treeImage({ id: "d", parentId: "a", styleRev: 1, action: "tune" }),
+      ],
+    };
+
+    assert.deepEqual(treeShape(revTree(asset)), [
+      {
+        id: "a",
+        styleRev: 1,
+        children: [
+          { id: "b", styleRev: 1, children: [{ id: "c", styleRev: 1, children: [] }] },
+          { id: "d", styleRev: 1, children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("makes a rev whose parent is missing a root", () => {
+    const asset: Asset = {
+      slot: "kv",
+      adoptedId: null,
+      revs: [
+        treeImage({ id: "kept", parentId: null, styleRev: 1, action: "generate" }),
+        treeImage({ id: "orphan", parentId: "gone", styleRev: 2, action: "tune" }),
+        treeImage({ id: "follow", parentId: "orphan", styleRev: 2, action: "compose" }),
+      ],
+    };
+
+    assert.deepEqual(treeShape(revTree(asset)), [
+      { id: "kept", styleRev: 1, children: [] },
+      {
+        id: "orphan",
+        styleRev: 2,
+        children: [{ id: "follow", styleRev: 2, children: [] }],
+      },
+    ]);
+  });
+
+  it("includes revs from every style rev", () => {
+    const asset: Asset = {
+      slot: "kv",
+      adoptedId: "later",
+      revs: [
+        treeImage({ id: "early", parentId: null, styleRev: 1, action: "generate" }),
+        treeImage({ id: "later", parentId: "early", styleRev: 3, action: "tune" }),
+        treeImage({ id: "side", parentId: null, styleRev: 2, action: "generate" }),
+      ],
+    };
+
+    assert.deepEqual(treeShape(revTree(asset)), [
+      {
+        id: "early",
+        styleRev: 1,
+        children: [{ id: "later", styleRev: 3, children: [] }],
+      },
+      { id: "side", styleRev: 2, children: [] },
+    ]);
+  });
+});
+
+function generateRev(
+  id: string,
+  jobId?: string,
+  action: ImageRev["action"] = "generate",
+): ImageRev {
+  return {
+    id,
+    parentId: null,
+    url: `/u/${id}`,
+    createdAt: 1,
+    action,
+    diff: id,
+    writeback: "none",
+    styleRev: 1,
+    ...(jobId ? { jobId } : {}),
+  };
+}
+
+describe("latestGenerateRevs", () => {
+  it("returns every tail rev that shares the last generate's job id", () => {
+    const four = [
+      generateRev("old", "job-old"),
+      generateRev("a", "job-4"),
+      generateRev("b", "job-4"),
+      generateRev("c", "job-4"),
+      generateRev("d", "job-4"),
+    ];
+    assert.deepEqual(
+      latestGenerateRevs(four).map((rev) => rev.id),
+      ["a", "b", "c", "d"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([generateRev("old", "job-old"), generateRev("only", "job-1")]).map(
+        (rev) => rev.id,
+      ),
+      ["only"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([
+        generateRev("kept", "job-2"),
+        generateRev("gap", "job-other"),
+        generateRev("tail", "job-2"),
+      ]).map((rev) => rev.id),
+      ["tail"],
+    );
+  });
+
+  it("keeps at most two trailing generates when the last one has no job id", () => {
+    assert.deepEqual(
+      latestGenerateRevs([generateRev("a"), generateRev("b"), generateRev("c")]).map(
+        (rev) => rev.id,
+      ),
+      ["b", "c"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([generateRev("job", "job-1"), generateRev("bare")]).map((rev) => rev.id),
+      ["bare"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([
+        generateRev("tuned", undefined, "tune"),
+        generateRev("a"),
+        generateRev("b"),
+      ]).map((rev) => rev.id),
+      ["a", "b"],
+    );
+  });
+
+  it("returns nothing when the last rev is not a generate", () => {
+    assert.deepEqual(latestGenerateRevs([]), []);
+    assert.deepEqual(
+      latestGenerateRevs([
+        generateRev("a", "job-1"),
+        generateRev("b", "job-1"),
+        generateRev("tuned", undefined, "tune"),
+      ]),
+      [],
+    );
+    assert.deepEqual(latestGenerateRevs([generateRev("composed", undefined, "compose")]), []);
   });
 });

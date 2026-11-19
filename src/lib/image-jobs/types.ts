@@ -20,6 +20,7 @@ export const IMAGE_JOB_ERROR_CODES = [
   "forbidden",
   "not_found",
   "unknown_slot",
+  "invalid_n",
   "model_disabled",
   "images_unavailable",
   "capability_denied",

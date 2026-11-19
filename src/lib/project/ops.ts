@@ -1,8 +1,10 @@
 import { diffDna, type DnaChange, type StyleDna } from "./dna.ts";
 import {
+  adoptedRev,
   currentDna,
   emptyAsset,
   emptyAssets,
+  type Asset,
   type CustomSlot,
   type ImageRev,
   type Project,
@@ -259,6 +261,85 @@ export function writebackStyle(
   });
 }
 
+/**
+ * Appends a style rev whose DNA is a deep copy of an older rev. The viewed
+ * rev stays the parent, and history is not rewritten. Same DNA is a no-op.
+ */
+export function rollbackStyle(
+  project: Project,
+  styleId: string,
+  rev: number,
+  deps?: ProjectOpDeps,
+): Project {
+  const style = project.styles.find((item) => item.id === styleId);
+  if (!style) return project;
+  const target = style.revs.find((record) => record.rev === rev);
+  if (!target) return project;
+  const viewed = style.revs.find((record) => record.rev === style.currentRev);
+  if (!viewed) return project;
+  const dna = structuredClone(target.dna);
+  const changes = diffDna(viewed.dna, dna);
+  if (changes.length === 0) return project;
+  const nextRev = Math.max(0, ...style.revs.map((record) => record.rev)) + 1;
+  return mapStyle(project, styleId, (current) => ({
+    ...current,
+    currentRev: nextRev,
+    revs: [
+      ...current.revs,
+      {
+        rev: nextRev,
+        parentRev: current.currentRev,
+        dna,
+        changeLog: `回滚至 rev${rev}`,
+        createdAt: now(deps),
+        changes,
+      },
+    ],
+  }));
+}
+
+export type ComparedSlot = {
+  slot: string;
+  revA: ImageRev | null;
+  revB: ImageRev | null;
+};
+
+export type RevComparison = {
+  changes: DnaChange[];
+  slots: ComparedSlot[];
+};
+
+function latestImageForRev(style: StyleBranch, slot: string, rev: number): ImageRev | null {
+  const revs = style.assets[slot]?.revs ?? [];
+  let best: ImageRev | null = null;
+  for (const image of revs) {
+    if (image.styleRev !== rev) continue;
+    // Equal timestamps keep the later image in the array.
+    if (!best || image.createdAt >= best.createdAt) best = image;
+  }
+  return best;
+}
+
+/** DNA diff from rev A to rev B, plus each slot's latest image tagged with that rev. */
+export function compareRevs(
+  styleLine: StyleBranch,
+  revA: number,
+  revB: number,
+  slots: readonly string[],
+): RevComparison {
+  const recordA = styleLine.revs.find((record) => record.rev === revA);
+  const recordB = styleLine.revs.find((record) => record.rev === revB);
+  const changes = recordA && recordB ? diffDna(recordA.dna, recordB.dna) : [];
+  return {
+    changes,
+    slots: slots.map((slot) => ({
+      slot,
+      revA: latestImageForRev(styleLine, slot, revA),
+      revB: latestImageForRev(styleLine, slot, revB),
+    })),
+  };
+}
+
 export type ArchiveResult =
   | { ok: true; project: Project }
   | { ok: false; reason: "not_found" | "already_archived" | "last_live_style" };
@@ -371,4 +452,95 @@ export function adoptImage(
     if (!asset || !asset.revs.some((rev) => rev.id === imageId)) return style;
     return { ...style, assets: { ...style.assets, [slot]: { ...asset, adoptedId: imageId } } };
   });
+}
+
+/**
+ * Canvas tail for the latest generate.
+ * A job id returns every rev at the tail that shares it, so one, two, or four all show.
+ * A generate with no job id keeps at most two trailing generates that also have no job id.
+ * Any other tail is empty so the canvas can fall back to the adopted image.
+ */
+export function latestGenerateRevs(revs: readonly ImageRev[]): ImageRev[] {
+  const last = revs.at(-1);
+  if (!last || last.action !== "generate") return [];
+  if (last.jobId) {
+    let start = revs.length - 1;
+    while (start > 0 && revs[start - 1]?.jobId === last.jobId) start -= 1;
+    return revs.slice(start);
+  }
+  let start = revs.length - 1;
+  while (start > 0 && revs.length - start < 2) {
+    const prev = revs[start - 1];
+    if (!prev || prev.action !== "generate" || prev.jobId) break;
+    start -= 1;
+  }
+  return revs.slice(start);
+}
+
+export type LineComparison = {
+  styleId: string;
+  name: string;
+  status: StyleBranch["status"];
+  image: ImageRev | null;
+};
+
+/**
+ * One row per live style line, in project order. The image is the slot's
+ * adopted rev, or the latest rev when nothing is adopted. Archived lines
+ * are left out. A missing asset or an empty rev list is a null image.
+ */
+export function compareLines(project: Project, slot: Slot): LineComparison[] {
+  return project.styles.filter(isLive).map((style) => {
+    const asset = style.assets[slot];
+    return {
+      styleId: style.id,
+      name: style.name,
+      status: style.status,
+      image: asset ? adoptedRev(asset) : null,
+    };
+  });
+}
+
+export type RevTreeNode = {
+  rev: ImageRev;
+  children: RevTreeNode[];
+};
+
+/**
+ * Parent links for one slot. A rev whose parent is null or not in this asset is a root.
+ * Every rev is included once, including revs from older style revs.
+ */
+export function revTree(asset: Asset): RevTreeNode[] {
+  const byId = new Map(asset.revs.map((rev) => [rev.id, rev]));
+  const childIds = new Map<string, string[]>();
+  const roots: ImageRev[] = [];
+
+  for (const rev of asset.revs) {
+    const parentId = rev.parentId;
+    if (parentId && parentId !== rev.id && byId.has(parentId)) {
+      const siblings = childIds.get(parentId);
+      if (siblings) siblings.push(rev.id);
+      else childIds.set(parentId, [rev.id]);
+    } else {
+      roots.push(rev);
+    }
+  }
+
+  const placed = new Set<string>();
+  const build = (rev: ImageRev): RevTreeNode => {
+    placed.add(rev.id);
+    const children: RevTreeNode[] = [];
+    for (const id of childIds.get(rev.id) ?? []) {
+      if (placed.has(id)) continue;
+      const child = byId.get(id);
+      if (child) children.push(build(child));
+    }
+    return { rev, children };
+  };
+
+  const tree = roots.map(build);
+  for (const rev of asset.revs) {
+    if (!placed.has(rev.id)) tree.push(build(rev));
+  }
+  return tree;
 }

@@ -7,13 +7,16 @@ import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
 import {
+  addProjectTag,
   loadProjectDocument,
+  removeProjectTag,
   renameProject,
   saveProjectDocument,
 } from "@/lib/image-jobs/project-document";
 import {
   importLocalProject,
   listProjectSummaries,
+  listUsedProjectTags,
   type ImportLocalResult,
   type ProjectListPage,
   type ProjectListSort,
@@ -471,7 +474,7 @@ export async function saveProjectDocumentFn(input: {
 }
 
 export async function listProjectSummariesFn(input?: {
-  data?: { keyword?: string; sort?: ProjectListSort; offset?: number };
+  data?: { keyword?: string; sort?: ProjectListSort; offset?: number; tags?: string[] };
 }): Promise<ProjectListPage> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
@@ -482,8 +485,43 @@ export async function listProjectSummariesFn(input?: {
       keyword: data?.keyword,
       sort: data?.sort,
       offset: data?.offset,
+      tags: data?.tags,
     }),
   );
+}
+
+export async function listUsedProjectTagsFn(input?: {
+  data?: { prefix?: string };
+}): Promise<string[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return unwrapProjectOp(await listUsedProjectTags(deps, { userId, prefix: input?.data?.prefix }));
+}
+
+export async function addProjectTagFn(input: {
+  data: { projectId: string; tag: string };
+}): Promise<ProjectDocumentActionResult<{ tags: string[]; version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return addProjectTag(deps, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    tag: input.data.tag,
+  });
+}
+
+export async function removeProjectTagFn(input: {
+  data: { projectId: string; tag: string };
+}): Promise<ProjectDocumentActionResult<{ tags: string[]; version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return removeProjectTag(deps, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    tag: input.data.tag,
+  });
 }
 
 export async function renameProjectFn(input: {

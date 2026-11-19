@@ -1,6 +1,7 @@
 import type { Sql } from "../db";
 import { beijingCalendarDay } from "./beijing-day.ts";
 import { MAX_PARALLEL_DIRECTION_JOBS } from "./concurrency.ts";
+import { readProjectTags } from "../project/schema.ts";
 import { COVER_SLOT } from "../project/summary.ts";
 import { DEFAULT_DAILY_IMAGE_CAP } from "./quota.ts";
 import { IMAGE_JOB_ACTIONS, type ImageJobAction, type ImageJobSlot } from "./types.ts";
@@ -129,6 +130,15 @@ function toSnapshot(row: DocumentRow): ProjectDocumentSnapshot {
     version: Number(row.version),
     updatedAt: row.updated_at_ms === null ? null : Number(row.updated_at_ms),
   };
+}
+
+function tagsColumn(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return [];
+  }
 }
 
 function toProject(row: ProjectRow): StudioProjectRecord {
@@ -326,6 +336,7 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
         cover_url: string | null;
         updated_at_ms: number | string;
         created_at_ms: number | string | null;
+        tags: unknown;
       }>`
         select p.id,
                p.document->>'name' as name,
@@ -344,7 +355,14 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
                       then (p.document->>'createdAt')::double precision
                       else null end,
                  extract(epoch from p.created_at) * 1000
-               ) as created_at_ms
+               ) as created_at_ms,
+               case
+                 when jsonb_typeof(p.document->'tags') = 'array' then (
+                   select coalesce(jsonb_agg(to_jsonb(t.elem) order by t.ord), '[]'::jsonb)
+                     from jsonb_array_elements_text(p.document->'tags') with ordinality as t(elem, ord)
+                 )
+                 else '[]'::jsonb
+               end as tags
         from studio_projects p
         left join lateral (
           select s as style
@@ -364,6 +382,7 @@ export function createSqlProjectStore(sql: Sql): StudioProjectStore {
         coverUrl: row.cover_url,
         updatedAt: Number(row.updated_at_ms),
         createdAt: Number(row.created_at_ms),
+        tags: readProjectTags(tagsColumn(row.tags)),
       }));
     },
     async saveDocument(id, document, expectedVersion, now) {

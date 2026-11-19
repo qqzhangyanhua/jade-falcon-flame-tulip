@@ -6,6 +6,7 @@ import { AppHeader } from "@/components/app-header";
 import { ConsistencyBadge } from "@/components/color-consistency-badge";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
+import { ProjectTagControl } from "@/components/project-tag-control";
 import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -64,6 +65,13 @@ export function DirectionView() {
               projectId={project.id}
               name={project.name}
               onRenamed={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+            />
+          </div>
+          <div className="mt-4 max-w-md">
+            <ProjectTagControl
+              projectId={project.id}
+              tags={project.tags ?? []}
+              onChange={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
             />
           </div>
           <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">

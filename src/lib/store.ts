@@ -88,6 +88,7 @@ type State = {
   forkStyle: (styleId: string) => void;
   removeProject: (id: string) => void;
   renameProject: (id: string, name: string) => void;
+  setProjectTags: (id: string, tags: string[]) => void;
 };
 
 export type ArchiveOutcome = { ok: true } | Extract<ArchiveResult, { ok: false }>;
@@ -135,6 +136,7 @@ export const useStudio = create<State>()(
           currentSlot: "kv",
           enabledSlotIds: [...DEFAULT_ENABLED_SLOT_IDS],
           customSlots: [],
+          tags: [],
           currentImageModelId: currentImageModelId ?? "",
           phase: "direction",
           intent: null,
@@ -242,6 +244,11 @@ export const useStudio = create<State>()(
           projects: patchProject(s.projects, id, (p) => ({ ...p, name })),
         }));
       },
+      setProjectTags: (id, tags) => {
+        set((s) => ({
+          projects: patchProject(s.projects, id, (p) => ({ ...p, tags })),
+        }));
+      },
       archiveStyle: (styleId) => {
         const project = get().current();
         if (!project) return { ok: false, reason: "not_found" };
@@ -255,7 +262,7 @@ export const useStudio = create<State>()(
     }),
     {
       name: "keystone-v1",
-      version: 4,
+      version: 5,
       migrate: (persisted) => {
         const state = persisted as { projects?: Project[]; currentId?: string | null };
         return {

@@ -38,16 +38,44 @@ function compareSummaries(a: ProjectSummary, b: ProjectSummary, sort: ProjectLis
   return delta || byId(a, b);
 }
 
+function selectedTags(tags: readonly string[] | undefined): string[] {
+  if (!tags) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    if (typeof raw !== "string") continue;
+    const tag = raw.trim();
+    if (!tag || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+  }
+  return out;
+}
+
+function hasEveryTag(row: ProjectSummary, tags: readonly string[]): boolean {
+  if (tags.length === 0) return true;
+  const have = new Set(row.tags);
+  return tags.every((tag) => have.has(tag));
+}
+
 export async function listProjectSummaries(
   deps: ListDeps,
-  input: { userId: string; keyword?: string; sort?: string; offset?: number },
+  input: {
+    userId: string;
+    keyword?: string;
+    sort?: string;
+    offset?: number;
+    tags?: readonly string[];
+  },
 ): Promise<ProjectOpResult<ProjectListPage>> {
   if (!input.userId) return { ok: false, code: "unauthorized" };
   const keyword = (input.keyword ?? "").trim().toLocaleLowerCase();
+  const tags = selectedTags(input.tags);
   const sort = asSort(input.sort);
   const offset = pageOffset(input.offset);
-  const rows = (await deps.projects.listSummaries(input.userId)).filter((row) =>
-    keyword ? row.name.toLocaleLowerCase().includes(keyword) : true,
+  const rows = (await deps.projects.listSummaries(input.userId)).filter(
+    (row) =>
+      (keyword ? row.name.toLocaleLowerCase().includes(keyword) : true) && hasEveryTag(row, tags),
   );
   rows.sort((a, b) => compareSummaries(a, b, sort));
   return {
@@ -57,6 +85,25 @@ export async function listProjectSummaries(
       total: rows.length,
     },
   };
+}
+
+/** Tags this user has already put on a live project, for the tag field's suggestions. */
+export async function listUsedProjectTags(
+  deps: ListDeps,
+  input: { userId: string; prefix?: string },
+): Promise<ProjectOpResult<string[]>> {
+  if (!input.userId) return { ok: false, code: "unauthorized" };
+  const prefix = (input.prefix ?? "").trim().toLocaleLowerCase();
+  const seen = new Set<string>();
+  for (const row of await deps.projects.listSummaries(input.userId)) {
+    for (const tag of row.tags) {
+      if (seen.has(tag)) continue;
+      if (prefix && !tag.toLocaleLowerCase().startsWith(prefix)) continue;
+      seen.add(tag);
+    }
+  }
+  const tags = [...seen].sort((a, b) => a.localeCompare(b, "zh", { sensitivity: "base" }));
+  return { ok: true, value: tags };
 }
 
 export type ImportLocalResult = { status: "imported" | "already_synced"; version: number };

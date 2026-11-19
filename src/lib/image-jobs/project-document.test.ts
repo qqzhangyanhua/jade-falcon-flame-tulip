@@ -4,7 +4,9 @@ import { createMemoryGatewayWorld } from "./memory.ts";
 import { deleteStudioProject } from "./projects.ts";
 import {
   MAX_PROJECT_DOCUMENT_BYTES,
+  addProjectTag,
   loadProjectDocument,
+  removeProjectTag,
   renameProject,
   saveProjectDocument,
 } from "./project-document.ts";
@@ -181,6 +183,166 @@ describe("project document: rename", () => {
         name: "新名字",
       }),
       { ok: false, code: "not_found" },
+    );
+  });
+});
+
+describe("project document: tags", () => {
+  it("keeps one copy when the same tag is added twice", async () => {
+    const { world, save, load } = setup(5_000);
+    await save(documentFor(world.projectId, { name: "茶空间" }), 0);
+    const first = await addProjectTag(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+      tag: "  客户  ",
+    });
+    assert.deepEqual(first, {
+      ok: true,
+      value: { tags: ["客户"], version: 2, updatedAt: 5_000 },
+    });
+    const second = await addProjectTag(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+      tag: "客户",
+    });
+    assert.deepEqual(second, {
+      ok: true,
+      value: { tags: ["客户"], version: 2, updatedAt: 5_000 },
+    });
+    const loaded = await load();
+    assert.equal(loaded.ok, true);
+    if (!loaded.ok || !loaded.value.document) return;
+    assert.deepEqual(loaded.value.document.tags, ["客户"]);
+    assert.equal(loaded.value.document.name, "茶空间");
+    assert.equal(loaded.value.version, 2);
+  });
+
+  it("rejects a tag longer than 20 characters and accepts one of exactly 20", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId), 0);
+    const tooLong = "签".repeat(21);
+    assert.deepEqual(
+      await addProjectTag(world, {
+        userId: world.userId,
+        projectId: world.projectId,
+        tag: tooLong,
+      }),
+      { ok: false, code: "invalid_document" },
+    );
+    const kept = await load();
+    assert.deepEqual(kept.ok && kept.value.document?.tags, []);
+
+    const exact = "签".repeat(20);
+    const added = await addProjectTag(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+      tag: exact,
+    });
+    assert.equal(added.ok, true);
+    if (!added.ok) return;
+    assert.deepEqual(added.value.tags, [exact]);
+    const loaded = await load();
+    assert.deepEqual(loaded.ok && loaded.value.document?.tags, [exact]);
+  });
+
+  it("rejects an empty tag", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { tags: ["客户"] }), 0);
+    assert.deepEqual(
+      await addProjectTag(world, { userId: world.userId, projectId: world.projectId, tag: "   " }),
+      { ok: false, code: "invalid_document" },
+    );
+    const loaded = await load();
+    assert.deepEqual(loaded.ok && loaded.value.document?.tags, ["客户"]);
+  });
+
+  it("rejects a ninth tag and keeps the first eight", async () => {
+    const { world, save, load } = setup();
+    const eight = ["一", "二", "三", "四", "五", "六", "七", "八"];
+    await save(documentFor(world.projectId, { tags: eight }), 0);
+    assert.deepEqual(
+      await addProjectTag(world, { userId: world.userId, projectId: world.projectId, tag: "九" }),
+      { ok: false, code: "invalid_document" },
+    );
+    const loaded = await load();
+    assert.deepEqual(loaded.ok && loaded.value.document?.tags, eight);
+  });
+
+  it("removes one tag and leaves the others", async () => {
+    const { world, save, load } = setup(5_000);
+    await save(documentFor(world.projectId, { tags: ["客户", "春季"] }), 0);
+    const removed = await removeProjectTag(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+      tag: " 客户 ",
+    });
+    assert.deepEqual(removed, {
+      ok: true,
+      value: { tags: ["春季"], version: 2, updatedAt: 5_000 },
+    });
+    const loaded = await load();
+    assert.deepEqual(loaded.ok && loaded.value.document?.tags, ["春季"]);
+    assert.equal(loaded.ok && loaded.value.document?.brief, "一个示例项目");
+  });
+
+  it("rejects adding a tag on someone else's project, even when the tag is empty", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { tags: ["客户"] }), 0);
+    assert.deepEqual(
+      await addProjectTag(world, {
+        userId: "someone-else",
+        projectId: world.projectId,
+        tag: "   ",
+      }),
+      { ok: false, code: "forbidden" },
+    );
+    const loaded = await load();
+    assert.deepEqual(loaded.ok && loaded.value.document?.tags, ["客户"]);
+  });
+
+  it("rejects removing a tag from someone else's project", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { tags: ["客户"] }), 0);
+    assert.deepEqual(
+      await removeProjectTag(world, {
+        userId: "someone-else",
+        projectId: world.projectId,
+        tag: "客户",
+      }),
+      { ok: false, code: "forbidden" },
+    );
+    const loaded = await load();
+    assert.deepEqual(loaded.ok && loaded.value.document?.tags, ["客户"]);
+  });
+
+  it("rejects adding or removing a tag on a deleted project", async () => {
+    const { world, save } = setup();
+    await save(documentFor(world.projectId, { tags: ["客户"] }), 0);
+    await deleteStudioProject(world, { userId: world.userId, projectId: world.projectId });
+    assert.deepEqual(
+      await addProjectTag(world, { userId: world.userId, projectId: world.projectId, tag: "春季" }),
+      { ok: false, code: "project_deleted" },
+    );
+    assert.deepEqual(
+      await removeProjectTag(world, {
+        userId: world.userId,
+        projectId: world.projectId,
+        tag: "客户",
+      }),
+      { ok: false, code: "project_deleted" },
+    );
+  });
+
+  it("rejects an anonymous caller", async () => {
+    const { world, save } = setup();
+    await save(documentFor(world.projectId, { tags: ["客户"] }), 0);
+    assert.deepEqual(
+      await addProjectTag(world, { userId: "", projectId: world.projectId, tag: "春季" }),
+      { ok: false, code: "unauthorized" },
+    );
+    assert.deepEqual(
+      await removeProjectTag(world, { userId: "", projectId: world.projectId, tag: "客户" }),
+      { ok: false, code: "unauthorized" },
     );
   });
 });

@@ -60,6 +60,8 @@ export type ProjectSummary = {
   updatedAt: number;
   /** Project document `createdAt`, not the row insert time. */
   createdAt: number;
+  /** Free-form tags from the project document. Empty when the document has none. */
+  tags: string[];
 };
 
 export type SaveDocumentOutcome =

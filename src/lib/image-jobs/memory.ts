@@ -4,6 +4,7 @@ import { newEntityId } from "./ids.ts";
 import { cloneModel } from "./availability.ts";
 import { DEFAULT_DAILY_IMAGE_CAP, effectiveDailyCap, quotaFromParts } from "./quota.ts";
 import { decodeDataUrl } from "./durable.ts";
+import { readProjectTags } from "../project/schema.ts";
 import { projectCoverUrl } from "../project/summary.ts";
 import type {
   CatalogModel,
@@ -121,6 +122,7 @@ export function createMemoryProjects(seed: StudioProjectRecord[] = []): StudioPr
           coverUrl: projectCoverUrl(stored.document),
           updatedAt: stored.updatedAt,
           createdAt: stored.document.createdAt,
+          tags: readProjectTags(stored.document.tags),
         });
       }
       return rows;

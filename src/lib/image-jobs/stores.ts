@@ -10,6 +10,7 @@ import type {
   ProjectSummary,
   SaveDocumentOutcome,
   StudioProjectRecord,
+  BoostLedgerEntry,
   StudioQuota,
   StudioRole,
 } from "./types.ts";
@@ -50,7 +51,7 @@ export type ReservedJobInsert =
   { ok: true; job: ImageJobRecord } | { ok: false; code: "quota_exceeded" | "in_flight" };
 
 export type ImageJobStore = {
-  /** Insert a running job and reserve today's cap in one atomic step. */
+  /** Insert a running job and reserve today's cap, then 加量包, in one atomic step. */
   insertReserved: (record: ImageJobRecord) => Promise<ReservedJobInsert>;
   get: (id: string) => Promise<ImageJobRecord | null>;
   /** Current user's jobs only, newest first. */
@@ -66,6 +67,14 @@ export type ImageJobStore = {
   listInRange: (fromMs: number, toMs: number) => Promise<ImageJobRecord[]>;
 };
 
+export type BoostGrantWrite = {
+  userId: string;
+  amount: number;
+  adminId: string;
+  note: string;
+  at: number;
+};
+
 export type QuotaStore = {
   getCap: () => Promise<number>;
   setCap: (cap: number) => Promise<number>;
@@ -74,6 +83,10 @@ export type QuotaStore = {
   setUserCap: (userId: string, cap: number) => Promise<void>;
   /** Drop the per-user cap so the user follows the global cap again. */
   clearUserCap: (userId: string) => Promise<void>;
+  /** Add 加量包 and append the grant ledger row. Returns the new balance. */
+  addBoost: (input: BoostGrantWrite) => Promise<number>;
+  /** Grants and debits for one user, oldest first. */
+  listBoostLedger: (userId: string) => Promise<BoostLedgerEntry[]>;
 };
 
 export type RoleStore = {
@@ -92,6 +105,43 @@ export type ImageBlobStore = {
   put: (record: ImageBlobRecord) => Promise<ImageBlobRecord>;
   get: (id: string) => Promise<ImageBlobRecord | null>;
   deleteByProject: (projectId: string) => Promise<void>;
+  /** False when the image id does not exist. Does not remove the bytes. */
+  setHidden: (id: string, hidden: boolean) => Promise<boolean>;
+  /**
+   * Generated images only (`kind = job`), newest first.
+   * `query` matches user id, and in SQL also name or email. Empty query lists everyone.
+   */
+  listGenerated: (input: { query: string; limit: number }) => Promise<GeneratedImageRow[]>;
+  /** Hidden image ids owned by this user. No bytes. */
+  listHiddenIds: (userId: string) => Promise<string[]>;
+};
+
+export type GeneratedImageRow = {
+  id: string;
+  userId: string;
+  userName: string | null;
+  userEmail: string | null;
+  projectId: string;
+  createdAt: number;
+  hidden: boolean;
+  contentType: string;
+};
+
+export type ImageHideAction = "hide" | "unhide";
+
+export type ImageHideAuditRecord = {
+  id: string;
+  imageId: string;
+  action: ImageHideAction;
+  adminId: string;
+  at: number;
+  reason: string | null;
+};
+
+export type ImageHideAuditStore = {
+  append: (record: ImageHideAuditRecord) => Promise<ImageHideAuditRecord>;
+  /** Oldest first. */
+  listByImage: (imageId: string) => Promise<ImageHideAuditRecord[]>;
 };
 
 export type ImageJobGatewayDeps = {
@@ -100,6 +150,7 @@ export type ImageJobGatewayDeps = {
   jobs: ImageJobStore;
   revs: ImageRevStore;
   blobs: ImageBlobStore;
+  audit: ImageHideAuditStore;
   quota: QuotaStore;
   roles: RoleStore;
   upstream: ImageUpstreamLike;

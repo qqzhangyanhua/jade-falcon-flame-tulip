@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DnaChangeList } from "@/components/dna-change-list";
+import { OwnedImage } from "@/components/owned-image";
 import { RevTree } from "@/components/rev-tree";
 import { Button } from "@/components/ui/button";
 import { diffDna } from "@/lib/project/dna";
@@ -127,10 +128,11 @@ export function StudioHistoryPanel({
                         onAdopt(rev.id);
                       }}
                     >
-                      <img
+                      <OwnedImage
                         src={rev.url}
                         alt=""
                         className="frame h-12 w-16 shrink-0 rounded-sm object-cover"
+                        placeholderClassName="h-12 w-16 shrink-0 rounded-sm px-1 text-center text-xs leading-tight"
                       />
                       <span className="min-w-0">
                         <span className="block truncate text-sm text-fg">

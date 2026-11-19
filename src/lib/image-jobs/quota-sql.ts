@@ -7,7 +7,7 @@ import {
   quotaFromParts,
 } from "./quota";
 import type { QuotaStore, RoleStore } from "./stores";
-import type { StudioRole } from "./types";
+import type { BoostLedgerEntry, BoostLedgerKind, StudioRole } from "./types";
 
 type SettingRow = { value: string };
 type UsedRow = { used: number };
@@ -44,6 +44,53 @@ export function createSqlQuotaStore(sql: Sql): QuotaStore {
     async clearUserCap(userId) {
       await sql`delete from user_daily_caps where user_id = ${userId}`;
     },
+    async addBoost(input) {
+      const rows = await sql<{ balance: number }>`
+        with added as (
+          insert into user_boost_balances (user_id, balance)
+          values (${input.userId}, ${input.amount})
+          on conflict (user_id) do update
+            set balance = user_boost_balances.balance + excluded.balance
+          returning balance
+        ),
+        noted as (
+          insert into user_boost_ledger (user_id, kind, amount, created_at, admin_id, note)
+          select ${input.userId}, 'grant', ${input.amount}, to_timestamp(${input.at / 1000}), ${input.adminId}, ${input.note}
+          returning id
+        )
+        select added.balance
+        from added
+        cross join (select count(*)::int as n from noted) ledger_rows
+      `;
+      return Number(rows[0]?.balance ?? 0);
+    },
+    async listBoostLedger(userId) {
+      const rows = await sql<{
+        kind: string;
+        amount: number;
+        created_at_ms: number;
+        admin_id: string | null;
+        note: string;
+      }>`
+        select
+          kind,
+          amount,
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          admin_id,
+          note
+        from user_boost_ledger
+        where user_id = ${userId}
+        order by created_at asc, id asc
+      `;
+      return rows.map((row): BoostLedgerEntry => ({
+        userId,
+        kind: asBoostKind(row.kind),
+        amount: Number(row.amount),
+        at: Math.round(Number(row.created_at_ms)),
+        adminId: row.admin_id,
+        note: row.note,
+      }));
+    },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);
       const capRows = await sql<SettingRow>`
@@ -56,14 +103,22 @@ export function createSqlQuotaStore(sql: Sql): QuotaStore {
         select used from image_quota_days
         where user_id = ${userId} and beijing_day = ${day}::date
       `;
+      const boostRows = await sql<{ balance: number }>`
+        select balance from user_boost_balances where user_id = ${userId}
+      `;
       const userCap = userCapRows[0] ? Number(userCapRows[0].cap) : null;
       return quotaFromParts(
         effectiveDailyCap(parseDailyCap(capRows[0]?.value), userCap),
         Number(usedRows[0]?.used ?? 0),
         day,
+        Number(boostRows[0]?.balance ?? 0),
       );
     },
   };
+}
+
+function asBoostKind(value: string): BoostLedgerKind {
+  return value === "debit" ? "debit" : "grant";
 }
 
 export function createSqlRoleStore(sql: Sql): RoleStore {

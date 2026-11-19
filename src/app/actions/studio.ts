@@ -33,6 +33,7 @@ import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "@/lib/i
 import {
   createSqlBlobStore,
   createSqlCatalogStore,
+  createSqlHideAudit,
   createSqlJobStore,
   createSqlProjectStore,
   createSqlRevStore,
@@ -63,6 +64,7 @@ async function createSqlGatewayDeps(): Promise<ImageJobGatewayDeps> {
     jobs: createSqlJobStore(sql),
     revs: createSqlRevStore(sql),
     blobs: createSqlBlobStore(sql),
+    audit: createSqlHideAudit(sql),
     quota: createSqlQuotaStore(sql),
     roles: createSqlRoleStore(sql),
     upstream: createXaiImageUpstream(),

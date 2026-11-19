@@ -24,6 +24,7 @@ import {
 import { StyleLineActions } from "@/components/style-line-actions";
 import { StyleLineCompare } from "@/components/style-line-compare";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
+import { OwnedImage } from "@/components/owned-image";
 import {
   StudioGenerateBar,
   StudioSlotList,
@@ -42,7 +43,7 @@ import type { DnaChange } from "@/lib/project/dna";
 import { paletteForStyleRev } from "@/lib/project/dna-export";
 import { latestGenerateRevs } from "@/lib/project/ops";
 import { messageForMergeError } from "@/lib/style-ai/shared";
-import { messageForImageJobError } from "@/lib/image-jobs";
+import { messageForImageJobError, quotaSpendable } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { BUILTIN_SLOTS } from "@/lib/project/slots";
 import { useStudio } from "@/lib/store";
@@ -298,7 +299,7 @@ export function StudioView() {
 
   function startBatch(n: GenerateCount, slotIds: readonly string[]) {
     if (!project || !style || !dna) return;
-    const quotaRemaining = imageGate?.quota.remaining;
+    const quotaRemaining = imageGate ? quotaSpendable(imageGate.quota) : undefined;
     if (quotaRemaining == null) {
       toast.error("还没有拿到剩余额度，无法开始");
       return;
@@ -580,10 +581,11 @@ export function StudioView() {
                     title={s.name}
                   >
                     {s.candidateUrl ? (
-                      <img
+                      <OwnedImage
                         src={s.candidateUrl}
                         alt={s.name}
                         className="frame h-14 w-20 object-cover"
+                        placeholderClassName="h-14 w-20 px-1 text-center text-xs leading-tight"
                       />
                     ) : (
                       <span className="block h-14 w-20 bg-surface-2" />
@@ -758,7 +760,7 @@ export function StudioView() {
               busyLabel={busyLabel}
               slotPhases={slotPhases}
               runningIds={runningSlotIds()}
-              remaining={imageGate ? imageGate.quota.remaining : null}
+              remaining={imageGate ? quotaSpendable(imageGate.quota) : null}
               onSlot={setSlot}
               onEnable={enableBuiltinSlot}
               onHide={hideBuiltinSlot}

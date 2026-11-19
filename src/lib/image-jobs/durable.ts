@@ -134,7 +134,7 @@ export async function resolveUpstreamImageUrl(
   const durableId = parseDurableImageId(imageUrl);
   if (!durableId) return imageUrl;
   const blob = await deps.blobs.get(durableId);
-  if (!blob || blob.userId !== userId) return null;
+  if (!blob || blob.hidden || blob.userId !== userId) return null;
   return bytesToDataUrl(blob.bytes, blob.contentType);
 }
 
@@ -227,7 +227,7 @@ export async function openJobImage(
 ): Promise<OpenJobImageResult> {
   if (!input.userId) return { ok: false, code: "unauthorized" };
   const blob = await deps.blobs.get(input.imageId);
-  if (!blob) return { ok: false, code: "not_found" };
+  if (!blob || blob.hidden) return { ok: false, code: "not_found" };
   if (blob.userId !== input.userId) return { ok: false, code: "forbidden" };
   const project = await deps.projects.get(blob.projectId);
   if (!isProjectAlive(project)) return { ok: false, code: "not_found" };

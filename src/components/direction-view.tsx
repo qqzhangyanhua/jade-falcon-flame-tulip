@@ -3,6 +3,7 @@
 import { Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { OwnedImage } from "@/components/owned-image";
 import { ConsistencyBadge } from "@/components/color-consistency-badge";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
@@ -82,7 +83,12 @@ export function DirectionView() {
               >
                 <div className="relative aspect-video overflow-hidden rounded-lg bg-surface-2">
                   {c.url ? (
-                    <img src={c.url} alt={c.dna.name} className="frame size-full object-cover" />
+                    <OwnedImage
+                      src={c.url}
+                      alt={c.dna.name}
+                      className="frame size-full object-cover"
+                      placeholderClassName="size-full"
+                    />
                   ) : (
                     <div className="flex size-full flex-col items-center justify-center gap-2 px-4 text-center text-subtle">
                       {c.status === "error" ? (

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { openJobImage, resolveUpstreamImageUrl } from "./durable.ts";
 import { readImageForUser, readImageForUserByUrl, selectReferenceUploadBytes } from "./image-access.ts";
+import { hideImage, unhideImage } from "./image-hide.ts";
 import { createMemoryGatewayWorld } from "./memory.ts";
 import { MAX_REFERENCE_IMAGE_BYTES, uploadWireframe } from "./upload.ts";
 
@@ -40,6 +42,39 @@ describe("image read access", () => {
   it("treats a missing image as not found", async () => {
     const { world } = await uploaded();
     assert.equal(await readImageForUser(world.blobs, "img_00000000", world.userId), null);
+  });
+
+  it("returns nothing for a hidden image, including to its owner, until the hide is undone", async () => {
+    const { world, id } = await uploaded();
+    await world.roles.setRole("admin-1", "admin");
+    const hidden = await hideImage(world, {
+      actorId: "admin-1",
+      imageId: id,
+      reason: "不当内容",
+    });
+    assert.equal(hidden.ok, true);
+    assert.equal(await readImageForUser(world.blobs, id, world.userId), null);
+    assert.equal(await readImageForUser(world.blobs, id, "someone-else"), null);
+    assert.equal(await readImageForUser(world.blobs, id, null), null);
+    assert.equal(
+      await readImageForUserByUrl(world.blobs, `/api/images/${id}`, world.userId),
+      null,
+    );
+    assert.equal((await openJobImage(world, { userId: world.userId, imageId: id })).ok, false);
+    assert.equal(
+      await resolveUpstreamImageUrl(world, world.userId, `/api/images/${id}`),
+      null,
+    );
+
+    const restored = await unhideImage(world, { actorId: "admin-1", imageId: id });
+    assert.equal(restored.ok, true);
+    const blob = await readImageForUser(world.blobs, id, world.userId);
+    assert.equal(blob?.id, id);
+    assert.ok(blob && blob.bytes.byteLength > 0);
+    assert.equal(await readImageForUser(world.blobs, id, "someone-else"), null);
+    const opened = await openJobImage(world, { userId: world.userId, imageId: id });
+    assert.equal(opened.ok, true);
+    if (opened.ok) assert.ok(opened.image.bytes.byteLength > 0);
   });
 });
 

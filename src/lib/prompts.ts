@@ -53,6 +53,55 @@ export function tunePrompt(dna: StyleDna, instruction: string): string {
   return `Edit this design image. Keep the same product, layout structure, and brand. ${instruction}. Stay inside the visual system: ${dna.promptPositive}. Palette ${dna.colors.bg} / ${dna.colors.primary} / ${dna.colors.accent}. Avoid ${dna.promptNegative}.`;
 }
 
+export const TUNE_INSTRUCTION_MAX_LENGTH = 400;
+
+export type TuneSliders = {
+  brightness: number;
+  warmth: number;
+  contrast: number;
+};
+
+const SLIDER_CENTER = 50;
+
+function sliderAdjustmentText(sliders: TuneSliders): string {
+  const bits: string[] = [];
+  if (sliders.brightness !== SLIDER_CENTER) {
+    bits.push(sliders.brightness > SLIDER_CENTER ? "brighter" : "darker");
+  }
+  if (sliders.warmth !== SLIDER_CENTER) {
+    bits.push(
+      sliders.warmth > SLIDER_CENTER ? "warmer color temperature" : "cooler color temperature",
+    );
+  }
+  if (sliders.contrast !== SLIDER_CENTER) {
+    bits.push(sliders.contrast > SLIDER_CENTER ? "higher contrast" : "softer contrast");
+  }
+  return bits.length ? `Adjust: ${bits.join(", ")}. Keep composition.` : "";
+}
+
+export function mergeTuneInstruction(freeText: string, sliders: TuneSliders): string {
+  const text = freeText.trim();
+  const slider = sliderAdjustmentText(sliders);
+  if (!text) return slider;
+  if (!slider) return text;
+  return `${text} ${slider}`;
+}
+
+export function canSubmitTuneInstruction(instruction: string): boolean {
+  const text = instruction.trim();
+  return text.length > 0 && text.length <= TUNE_INSTRUCTION_MAX_LENGTH;
+}
+
+export function canSubmitCopyRewrite(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed.length <= TUNE_INSTRUCTION_MAX_LENGTH;
+}
+
+export function copyRewriteInstruction(text: string): string {
+  const trimmed = text.trim();
+  return `Keep the layout, the picture, and the palette. Replace the title or copy with: "${trimmed}".`;
+}
+
 export const SLOT_ASPECT: Record<string, string> = {
   candidate: DIRECTION_ASPECT,
   ...Object.fromEntries(BUILTIN_SLOTS.map((slot) => [slot.id, slot.aspect])),

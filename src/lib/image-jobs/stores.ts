@@ -61,7 +61,10 @@ export type ImageJobStore = {
     status: "succeeded" | "failed",
     errorCode: ImageJobErrorCode | null,
     finishedAt: number,
+    costInUsdTicks: bigint | null,
   ) => Promise<ImageJobRecord | null>;
+  /** Jobs created in [fromMs, toMs), oldest first. */
+  listInRange: (fromMs: number, toMs: number) => Promise<ImageJobRecord[]>;
 };
 
 export type QuotaStore = {

@@ -19,6 +19,14 @@ function fail(code: ImageJobErrorCode, job?: ImageJobRecord): RunImageJobResult 
   return job ? { ok: false, code, job } : { ok: false, code };
 }
 
+/** Only a non-negative bigint counts. Numbers would already be rounded past 2^53. */
+function costInUsdTicksFrom(result: ImageUpstreamResult): bigint | null {
+  if (!("costInUsdTicks" in result)) return null;
+  const ticks = result.costInUsdTicks;
+  if (typeof ticks !== "bigint" || ticks < 0n) return null;
+  return ticks;
+}
+
 type ProjectSlots = {
   enabled: readonly string[];
   customSlots: readonly CustomSlot[];
@@ -114,6 +122,7 @@ export async function runImageJob(
     errorCode: null,
     createdAt: now,
     finishedAt: null,
+    costInUsdTicks: null,
   });
   if (!reserved.ok) return fail(reserved.code);
   const job = reserved.job;
@@ -133,18 +142,25 @@ export async function runImageJob(
   }
 
   const finishedAt = deps.now?.() ?? Date.now();
+  const costInUsdTicks = costInUsdTicksFrom(upstreamResult);
   if (!upstreamResult.ok || upstreamResult.urls.length === 0) {
     const failed =
-      (await deps.jobs.finish(job.id, "failed", "upstream_failed", finishedAt)) ??
-      { ...job, status: "failed" as const, errorCode: "upstream_failed" as const, finishedAt };
+      (await deps.jobs.finish(job.id, "failed", "upstream_failed", finishedAt, costInUsdTicks)) ??
+      {
+        ...job,
+        status: "failed" as const,
+        errorCode: "upstream_failed" as const,
+        finishedAt,
+        costInUsdTicks,
+      };
     return fail("upstream_failed", failed);
   }
 
   const still = await deps.projects.get(input.projectId);
   if (still?.deletedAt !== null) {
     const succeeded =
-      (await deps.jobs.finish(job.id, "succeeded", null, finishedAt)) ??
-      { ...job, status: "succeeded" as const, finishedAt };
+      (await deps.jobs.finish(job.id, "succeeded", null, finishedAt, costInUsdTicks)) ??
+      { ...job, status: "succeeded" as const, finishedAt, costInUsdTicks };
     return { ok: true, job: succeeded, revs: [] };
   }
 
@@ -163,14 +179,20 @@ export async function runImageJob(
   }
   if (!revs || revs.length === 0) {
     const failed =
-      (await deps.jobs.finish(job.id, "failed", "upstream_failed", finishedAt)) ??
-      { ...job, status: "failed" as const, errorCode: "upstream_failed" as const, finishedAt };
+      (await deps.jobs.finish(job.id, "failed", "upstream_failed", finishedAt, costInUsdTicks)) ??
+      {
+        ...job,
+        status: "failed" as const,
+        errorCode: "upstream_failed" as const,
+        finishedAt,
+        costInUsdTicks,
+      };
     return fail("upstream_failed", failed);
   }
 
   const succeeded =
-    (await deps.jobs.finish(job.id, "succeeded", null, finishedAt)) ??
-    { ...job, status: "succeeded" as const, finishedAt };
+    (await deps.jobs.finish(job.id, "succeeded", null, finishedAt, costInUsdTicks)) ??
+    { ...job, status: "succeeded" as const, finishedAt, costInUsdTicks };
   return { ok: true, job: succeeded, revs };
 }
 

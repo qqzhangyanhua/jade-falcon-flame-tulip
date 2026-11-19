@@ -223,13 +223,20 @@ export function createMemoryJobs(
         .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
         .map(cloneJob);
     },
-    async finish(id, status, errorCode, finishedAt) {
+    async finish(id, status, errorCode, finishedAt, costInUsdTicks) {
       const job = jobs.get(id);
       if (!job) return null;
       job.status = status;
       job.errorCode = errorCode;
       job.finishedAt = finishedAt;
+      job.costInUsdTicks = costInUsdTicks;
       return cloneJob(job);
+    },
+    async listInRange(fromMs, toMs) {
+      return [...jobs.values()]
+        .filter((job) => job.createdAt >= fromMs && job.createdAt < toMs)
+        .sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map(cloneJob);
     },
   };
 }

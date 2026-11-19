@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
@@ -9,14 +10,23 @@ import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getProfile, saveProfile } from "@/app/actions/profile";
-import { getStudioAccessFn, setDailyImageCapFn } from "@/app/actions/studio";
+import { getImageUsageFn, getStudioAccessFn, setDailyImageCapFn } from "@/app/actions/studio";
 import {
   messageForImageJobError,
   quotaExhausted,
   type StudioQuota,
   type StudioRole,
 } from "@/lib/image-jobs";
+import type { ImageUsageDay } from "@/lib/image-jobs/quota";
 import type { ProfileRecord } from "@/lib/types";
+
+const UsageChart = dynamic(
+  () => import("@/components/account-usage-chart").then((mod) => mod.AccountUsageChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded-md bg-surface-2" />,
+  },
+);
 
 export function AccountScreen() {
   const { user, isPending } = useCurrentUserState();
@@ -30,6 +40,7 @@ export function AccountScreen() {
   const [saving, setSaving] = useState(false);
   const [role, setRole] = useState<StudioRole>("user");
   const [quota, setQuota] = useState<StudioQuota | null>(null);
+  const [usage, setUsage] = useState<ImageUsageDay[] | null>(null);
   const [capDraft, setCapDraft] = useState("30");
   const [savingCap, setSavingCap] = useState(false);
 
@@ -37,8 +48,8 @@ export function AccountScreen() {
     if (isPending || !userId) return;
     let cancelled = false;
     setLoading(true);
-    void Promise.all([getProfile(), getStudioAccessFn()])
-      .then(([row, access]) => {
+    void Promise.all([getProfile(), getStudioAccessFn(), getImageUsageFn()])
+      .then(([row, access, days]) => {
         if (cancelled) return;
         setProfile(row);
         setDisplayName(row.displayName || sessionName);
@@ -46,6 +57,7 @@ export function AccountScreen() {
         setBio(row.bio);
         setRole(access.role);
         setQuota(access.quota);
+        setUsage(days);
         setCapDraft(String(access.globalCap));
       })
       .catch((e) => {
@@ -244,6 +256,27 @@ export function AccountScreen() {
                   </Button>
                 </form>
               ) : null}
+            </section>
+
+            <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5">
+              <h2 className="font-display text-xl tracking-tight">近 30 日用量</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                按北京时间自然日。每日额度是从当天上限扣的张数，加量包是当天从加量包扣的张数。没有出图的日子是
+                0。
+              </p>
+              {usage ? (
+                <>
+                  <p className="mt-4 text-sm tabular-nums text-fg">
+                    今日已用 每日额度 {usage[usage.length - 1]?.daily ?? 0}，加量包{" "}
+                    {usage[usage.length - 1]?.boost ?? 0}
+                  </p>
+                  <div className="mt-4 min-w-0">
+                    <UsageChart days={usage} />
+                  </div>
+                </>
+              ) : (
+                <div className="mt-4 h-64 animate-pulse rounded-md bg-surface-2" />
+              )}
             </section>
 
             {role === "admin" ? (

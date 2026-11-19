@@ -64,6 +64,16 @@ export function createSqlQuotaStore(sql: Sql): QuotaStore {
       `;
       return Number(rows[0]?.balance ?? 0);
     },
+    async listDailyUsed(userId, fromDay, toDay) {
+      const rows = await sql<{ day: string; used: number }>`
+        select to_char(beijing_day, 'YYYY-MM-DD') as day, used
+        from image_quota_days
+        where user_id = ${userId}
+          and beijing_day >= ${fromDay}::date
+          and beijing_day <= ${toDay}::date
+      `;
+      return rows.map((row) => ({ day: row.day, used: Number(row.used) }));
+    },
     async listBoostLedger(userId) {
       const rows = await sql<{
         kind: string;

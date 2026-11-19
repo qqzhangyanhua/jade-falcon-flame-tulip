@@ -29,7 +29,13 @@ import {
   unwrapProjectOp,
 } from "@/lib/image-jobs/projects";
 import { createSqlQuotaStore, createSqlRoleStore } from "@/lib/image-jobs/quota-sql";
-import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "@/lib/image-jobs/quota";
+import {
+  listImageUsage,
+  normalizeDailyCap,
+  resolveStudioRole,
+  setGlobalDailyCap,
+  type ImageUsageDay,
+} from "@/lib/image-jobs/quota";
 import {
   createSqlBlobStore,
   createSqlCatalogStore,
@@ -211,6 +217,13 @@ export async function getDailyQuotaFn(): Promise<StudioQuota> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
   return deps.quota.snapshot(userId, deps.now?.() ?? Date.now());
+}
+
+/** Last 30 Beijing days for the signed-in user. No caller-supplied user id. */
+export async function getImageUsageFn(): Promise<ImageUsageDay[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return listImageUsage(deps.quota, { userId, atMs: deps.now?.() ?? Date.now() });
 }
 
 export async function getStudioAccessFn(): Promise<{

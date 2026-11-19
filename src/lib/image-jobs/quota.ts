@@ -1,3 +1,4 @@
+import { beijingCalendarDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES } from "./errors.ts";
 import type {
   ActionAvailability,
@@ -96,10 +97,7 @@ export function normalizeDailyCap(value: number): number | null {
   return value;
 }
 
-export async function resolveStudioRole(
-  roles: RoleStore,
-  userId: string,
-): Promise<StudioRole> {
+export async function resolveStudioRole(roles: RoleStore, userId: string): Promise<StudioRole> {
   if (!userId) return "user";
   const existing = await roles.getRole(userId);
   if (existing === "admin") return existing;
@@ -195,4 +193,52 @@ export async function grantUserBoost(
     at: input.at ?? Date.now(),
   });
   return { ok: true, balance };
+}
+
+/** How many Beijing days the account usage chart covers, including today. */
+export const IMAGE_USAGE_DAY_COUNT = 30;
+
+export type ImageUsageDay = {
+  /** Beijing calendar day, YYYY-MM-DD. */
+  day: string;
+  /** Images spent from that day's cap. */
+  daily: number;
+  /** Images spent from the 加量包 that day. Ledger debits only, not grants. */
+  boost: number;
+};
+
+function shiftBeijingDay(day: string, deltaDays: number): string {
+  const noon = Date.parse(`${day}T12:00:00+08:00`);
+  return beijingCalendarDay(noon + deltaDays * 86_400_000);
+}
+
+/** Last 30 Beijing days ending on `atMs`, oldest first. Every day is present. */
+export async function listImageUsage(
+  quota: QuotaStore,
+  input: { userId: string; atMs: number },
+): Promise<ImageUsageDay[]> {
+  const today = beijingCalendarDay(input.atMs);
+  const days: string[] = [];
+  for (let ago = IMAGE_USAGE_DAY_COUNT - 1; ago >= 0; ago -= 1) {
+    days.push(shiftBeijingDay(today, -ago));
+  }
+  const fromDay = days[0] ?? today;
+  const toDay = days[days.length - 1] ?? today;
+  const [dailyRows, ledger] = await Promise.all([
+    quota.listDailyUsed(input.userId, fromDay, toDay),
+    quota.listBoostLedger(input.userId),
+  ]);
+  const daily = new Map(dailyRows.map((row) => [row.day, row.used]));
+  const boost = new Map<string, number>();
+  for (const entry of ledger) {
+    if (entry.kind !== "debit") continue;
+    const day = beijingCalendarDay(entry.at);
+    if (day < fromDay || day > toDay) continue;
+    boost.set(day, (boost.get(day) ?? 0) + entry.amount);
+  }
+  return days.map((day) => ({
+    day,
+    daily: daily.get(day) ?? 0,
+    boost: boost.get(day) ?? 0,
+  }));
 }

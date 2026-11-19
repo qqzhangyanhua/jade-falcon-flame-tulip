@@ -3,7 +3,13 @@ import { describe, it } from "node:test";
 import { runImageJob } from "./gateway.ts";
 import { DEFAULT_IMAGE_MODEL_ID, createMemoryGatewayWorld } from "./memory.ts";
 import { getStudioImageState } from "./projects.ts";
-import { clearUserDailyCap, grantUserBoost, setGlobalDailyCap, setUserDailyCap } from "./quota.ts";
+import {
+  clearUserDailyCap,
+  grantUserBoost,
+  listImageUsage,
+  setGlobalDailyCap,
+  setUserDailyCap,
+} from "./quota.ts";
 import type { RunImageJobInput } from "./types.ts";
 
 describe("user daily cap", () => {
@@ -598,11 +604,164 @@ describe("boost spend", () => {
     assert.equal(after.boost, 0);
     const rows = debits(await world.quota.listBoostLedger(world.userId));
     assert.equal(rows.length, 1);
-    assert.ok(rows.every((entry) => entry.amount === 1 && entry.adminId === null && entry.note.length > 0));
+    assert.ok(
+      rows.every((entry) => entry.amount === 1 && entry.adminId === null && entry.note.length > 0),
+    );
   });
 });
 
-function debits(entries: Awaited<ReturnType<ReturnType<typeof createMemoryGatewayWorld>["quota"]["listBoostLedger"]>>) {
+describe("image usage over 30 Beijing days", () => {
+  it("returns 30 days ending today and fills unused days with zero", async () => {
+    const now = Date.parse("2026-03-15T04:00:00.000Z");
+    const world = createMemoryGatewayWorld({ cap: 30, now: () => now });
+    const days = await listImageUsage(world.quota, { userId: world.userId, atMs: now });
+
+    assert.equal(days.length, 30);
+    assert.equal(days[0]?.day, "2026-02-14");
+    assert.equal(days[15]?.day, "2026-03-01");
+    assert.equal(days[29]?.day, "2026-03-15");
+    for (let index = 1; index < days.length; index += 1) {
+      assert.equal(days[index]?.day, nextUtcDay(days[index - 1]!.day));
+    }
+    assert.ok(days.every((day) => day.daily === 0 && day.boost === 0));
+  });
+
+  it("counts a day's cap spends and 加量包 debits separately, and ignores a grant", async () => {
+    let now = Date.parse("2026-03-10T04:00:00.000Z");
+    const world = createMemoryGatewayWorld({
+      cap: 1,
+      now: () => now,
+      roles: { "admin-1": "admin" },
+    });
+    const granted = await grantUserBoost(world.roles, world.quota, {
+      actorId: "admin-1",
+      userId: world.userId,
+      amount: 4,
+      note: "试用加量包",
+      at: now,
+    });
+    assert.equal(granted.ok, true);
+
+    now = Date.parse("2026-03-15T04:00:00.000Z");
+    assert.equal((await runImageJob(world, jobInput(world))).ok, true);
+    assert.equal((await runImageJob(world, jobInput(world))).ok, true);
+
+    const days = await listImageUsage(world.quota, { userId: world.userId, atMs: now });
+    assert.equal(days.length, 30);
+    assert.deepEqual(
+      days.find((day) => day.day === "2026-03-10"),
+      { day: "2026-03-10", daily: 0, boost: 0 },
+    );
+    assert.deepEqual(
+      days.find((day) => day.day === "2026-03-15"),
+      { day: "2026-03-15", daily: 1, boost: 1 },
+    );
+    assert.equal(
+      days.reduce((sum, day) => sum + day.daily, 0),
+      1,
+    );
+    assert.equal(
+      days.reduce((sum, day) => sum + day.boost, 0),
+      1,
+    );
+  });
+
+  it("lands a spend just before Beijing midnight and one just after on different days", async () => {
+    let now = Date.parse("2026-01-01T15:59:59.999Z");
+    const afterMidnight = Date.parse("2026-01-01T16:00:00.000Z");
+    const world = createMemoryGatewayWorld({
+      cap: 1,
+      now: () => now,
+      roles: { "admin-1": "admin" },
+    });
+    const granted = await grantUserBoost(world.roles, world.quota, {
+      actorId: "admin-1",
+      userId: world.userId,
+      amount: 1,
+      note: "跨日",
+      at: now,
+    });
+    assert.equal(granted.ok, true);
+    assert.equal((await runImageJob(world, jobInput(world))).ok, true);
+
+    now = afterMidnight;
+    assert.equal((await runImageJob(world, jobInput(world))).ok, true);
+    assert.equal((await runImageJob(world, jobInput(world))).ok, true);
+
+    const days = await listImageUsage(world.quota, { userId: world.userId, atMs: afterMidnight });
+    assert.equal(days.length, 30);
+    assert.equal(days[0]?.day, "2025-12-04");
+    assert.equal(days[29]?.day, "2026-01-02");
+    assert.deepEqual(
+      days.find((day) => day.day === "2026-01-01"),
+      { day: "2026-01-01", daily: 1, boost: 0 },
+    );
+    assert.deepEqual(
+      days.find((day) => day.day === "2026-01-02"),
+      { day: "2026-01-02", daily: 1, boost: 1 },
+    );
+  });
+
+  it("returns only the requested user's daily cap and 加量包 spends", async () => {
+    const now = Date.parse("2026-03-15T04:00:00.000Z");
+    const world = createMemoryGatewayWorld({
+      cap: 1,
+      now: () => now,
+      roles: { "admin-1": "admin" },
+    });
+    await world.projects.create({
+      id: "prj_other",
+      userId: "user-2",
+      currentImageModelId: DEFAULT_IMAGE_MODEL_ID,
+      createdAt: 1,
+      deletedAt: null,
+    });
+    const granted = await grantUserBoost(world.roles, world.quota, {
+      actorId: "admin-1",
+      userId: "user-2",
+      amount: 3,
+      note: "别人的加量包",
+      at: now,
+    });
+    assert.equal(granted.ok, true);
+    assert.equal(
+      (await runImageJob(world, jobInput(world, { userId: "user-2", projectId: "prj_other" }))).ok,
+      true,
+    );
+    assert.equal(
+      (await runImageJob(world, jobInput(world, { userId: "user-2", projectId: "prj_other" }))).ok,
+      true,
+    );
+
+    const mine = await listImageUsage(world.quota, { userId: world.userId, atMs: now });
+    assert.equal(mine.length, 30);
+    assert.ok(mine.every((day) => day.daily === 0 && day.boost === 0));
+
+    const theirs = await listImageUsage(world.quota, { userId: "user-2", atMs: now });
+    assert.deepEqual(
+      theirs.find((day) => day.day === "2026-03-15"),
+      { day: "2026-03-15", daily: 1, boost: 1 },
+    );
+    assert.equal(
+      theirs.reduce((sum, day) => sum + day.boost, 0),
+      1,
+    );
+  });
+});
+
+function nextUtcDay(day: string): string {
+  const [year, month, date] = day.split("-").map(Number);
+  const utc = new Date(Date.UTC(year!, (month ?? 1) - 1, date!) + 86_400_000);
+  const monthText = String(utc.getUTCMonth() + 1).padStart(2, "0");
+  const dateText = String(utc.getUTCDate()).padStart(2, "0");
+  return `${utc.getUTCFullYear()}-${monthText}-${dateText}`;
+}
+
+function debits(
+  entries: Awaited<
+    ReturnType<ReturnType<typeof createMemoryGatewayWorld>["quota"]["listBoostLedger"]>
+  >,
+) {
   return entries.filter((entry) => entry.kind === "debit");
 }
 

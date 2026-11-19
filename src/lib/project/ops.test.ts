@@ -4,6 +4,7 @@ import {
   addImageRevs,
   adoptImage,
   archiveStyle,
+  compareLines,
   createCustomSlot,
   deleteCustomSlot,
   editCustomSlot,
@@ -15,7 +16,7 @@ import {
   setStyleRev,
   writebackStyle,
 } from "./ops.ts";
-import { currentDna, projectDocumentSchema } from "./schema.ts";
+import { currentDna, projectDocumentSchema, type ImageRev } from "./schema.ts";
 import { BUILTIN_SLOTS, DEFAULT_ENABLED_SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
 import { slotPrompt } from "../prompts.ts";
 import { sampleCandidate, sampleDna, sampleProject, sampleStyle } from "./fixtures.ts";
@@ -593,7 +594,11 @@ describe("editCustomSlot", () => {
     );
     const id = created.customSlots[0]?.id ?? "";
     assert.equal(
-      editCustomSlot(created, "cslot_missing", { name: "别的", aspect: "1:1", purpose: "别的用途" }),
+      editCustomSlot(created, "cslot_missing", {
+        name: "别的",
+        aspect: "1:1",
+        purpose: "别的用途",
+      }),
       created,
     );
     assert.equal(
@@ -676,5 +681,157 @@ describe("custom slot prompt", () => {
     assert.equal(tall.includes("Brand key visual poster"), false);
     assert.equal(sticker.includes("centered graphic symbol"), false);
     assert.equal(sticker.includes("Website homepage hero"), false);
+  });
+});
+
+function imageRev(id: string, url: string, createdAt = 1): ImageRev {
+  return {
+    id,
+    parentId: null,
+    url,
+    createdAt,
+    action: "generate",
+    diff: "",
+    writeback: "none",
+    styleRev: 1,
+  };
+}
+
+describe("compareLines", () => {
+  it("lists live style lines in project order and leaves archived lines out", () => {
+    const project = sampleProject({
+      styles: [
+        sampleStyle("old", {
+          status: "archived",
+          assets: {
+            kv: {
+              slot: "kv",
+              adoptedId: "gone",
+              revs: [imageRev("gone", "/api/images/gone")],
+            },
+          },
+        }),
+        sampleStyle("a", {
+          status: "active",
+          assets: {
+            kv: {
+              slot: "kv",
+              adoptedId: "a1",
+              revs: [imageRev("a1", "/api/images/a")],
+            },
+          },
+        }),
+        sampleStyle("b", {
+          status: "standby",
+          assets: {
+            poster: {
+              slot: "poster",
+              adoptedId: "b1",
+              revs: [imageRev("b1", "/api/images/b")],
+            },
+          },
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      compareLines(project, "kv").map((row) => ({
+        styleId: row.styleId,
+        name: row.name,
+        status: row.status,
+        url: row.image?.url ?? null,
+      })),
+      [
+        { styleId: "a", name: "风格 a", status: "active", url: "/api/images/a" },
+        { styleId: "b", name: "风格 b", status: "standby", url: null },
+      ],
+    );
+    assert.deepEqual(
+      compareLines(project, "poster").map((row) => row.styleId),
+      ["a", "b"],
+    );
+  });
+
+  it("uses the adopted image, or the latest image when none is adopted", () => {
+    const older = imageRev("older", "/api/images/older", 30);
+    const newer = imageRev("newer", "/api/images/newer", 4);
+    const project = sampleProject({
+      styles: [
+        sampleStyle("picked", {
+          status: "active",
+          assets: {
+            cslot_poster: {
+              slot: "cslot_poster",
+              adoptedId: "older",
+              revs: [older, newer],
+            },
+          },
+        }),
+        sampleStyle("open", {
+          status: "standby",
+          assets: {
+            cslot_poster: {
+              slot: "cslot_poster",
+              adoptedId: null,
+              revs: [older, newer],
+            },
+          },
+        }),
+        sampleStyle("dangling", {
+          status: "standby",
+          assets: {
+            cslot_poster: {
+              slot: "cslot_poster",
+              adoptedId: "missing",
+              revs: [older, newer],
+            },
+          },
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      compareLines(project, "cslot_poster").map((row) => row.image?.id ?? null),
+      ["older", "newer", "newer"],
+    );
+    assert.equal(compareLines(project, "cslot_poster")[0]?.image?.url, "/api/images/older");
+    assert.equal(compareLines(project, "cslot_poster")[1]?.image?.url, "/api/images/newer");
+  });
+
+  it("returns no image when the slot has no revs or the asset is missing", () => {
+    const project = sampleProject({
+      styles: [
+        sampleStyle("empty", {
+          status: "active",
+          assets: {
+            kv: { slot: "kv", adoptedId: null, revs: [] },
+          },
+        }),
+        sampleStyle("partial", {
+          status: "standby",
+          assets: {
+            ui_hero: {
+              slot: "ui_hero",
+              adoptedId: "hero",
+              revs: [imageRev("hero", "/api/images/hero")],
+            },
+          },
+        }),
+        sampleStyle("kept", {
+          status: "archived",
+          assets: {
+            kv: { slot: "kv", adoptedId: "kept", revs: [imageRev("kept", "/api/images/kept")] },
+          },
+        }),
+      ],
+    });
+
+    assert.deepEqual(
+      compareLines(project, "kv").map((row) => ({ styleId: row.styleId, image: row.image })),
+      [
+        { styleId: "empty", image: null },
+        { styleId: "partial", image: null },
+      ],
+    );
   });
 });

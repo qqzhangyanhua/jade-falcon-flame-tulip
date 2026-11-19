@@ -18,6 +18,7 @@ import {
   StudioExportButton,
 } from "@/components/studio-export";
 import { StyleLineActions } from "@/components/style-line-actions";
+import { StyleLineCompare } from "@/components/style-line-compare";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
 import {
   StudioGenerateBar,
@@ -296,6 +297,7 @@ export function StudioView() {
             }))}
             onValueChange={setCurrentStyle}
           />
+          <StyleLineCompare disabled={generating} onGoGenerate={() => setMobile("canvas")} />
           <SelectField
             label="风格版本"
             className="w-40 shrink-0"
@@ -407,6 +409,7 @@ export function StudioView() {
         >
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:hidden">
             <p className="min-w-0 flex-1 truncate text-sm text-fg">{product}</p>
+            <StyleLineCompare disabled={generating} onGoGenerate={() => setMobile("canvas")} />
             <ImageModelPicker
               className="w-32 shrink-0"
               state={imageGate}

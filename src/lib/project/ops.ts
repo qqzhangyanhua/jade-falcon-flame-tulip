@@ -1,5 +1,6 @@
 import { diffDna, type DnaChange, type StyleDna } from "./dna.ts";
 import {
+  adoptedRev,
   currentDna,
   emptyAsset,
   emptyAssets,
@@ -370,5 +371,29 @@ export function adoptImage(
     const asset = style.assets[slot];
     if (!asset || !asset.revs.some((rev) => rev.id === imageId)) return style;
     return { ...style, assets: { ...style.assets, [slot]: { ...asset, adoptedId: imageId } } };
+  });
+}
+
+export type LineComparison = {
+  styleId: string;
+  name: string;
+  status: StyleBranch["status"];
+  image: ImageRev | null;
+};
+
+/**
+ * One row per live style line, in project order. The image is the slot's
+ * adopted rev, or the latest rev when nothing is adopted. Archived lines
+ * are left out. A missing asset or an empty rev list is a null image.
+ */
+export function compareLines(project: Project, slot: Slot): LineComparison[] {
+  return project.styles.filter(isLive).map((style) => {
+    const asset = style.assets[slot];
+    return {
+      styleId: style.id,
+      name: style.name,
+      status: style.status,
+      image: asset ? adoptedRev(asset) : null,
+    };
   });
 }

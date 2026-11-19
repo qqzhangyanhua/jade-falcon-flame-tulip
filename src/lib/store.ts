@@ -24,6 +24,7 @@ import {
   lockCandidate,
   restoreStyle,
   setCurrentStyle,
+  rollbackStyle,
   setStyleRev,
   writebackStyle,
 } from "./project/ops.ts";
@@ -75,6 +76,7 @@ type State = {
     dna: StyleDna;
     changes?: DnaChange[];
   }) => void;
+  rollbackStyle: (styleId: string, rev: number) => void;
   setStyleRev: (styleId: string, rev: number) => void;
   archiveStyle: (styleId: string) => ArchiveOutcome;
   restoreStyle: (styleId: string) => void;
@@ -217,6 +219,7 @@ export const useStudio = create<State>()(
         update(set, get, (p) =>
           writebackStyle(p, { styleId, changeLog, dna, changes }, { newId: uid }),
         ),
+      rollbackStyle: (styleId, rev) => update(set, get, (p) => rollbackStyle(p, styleId, rev)),
       setStyleRev: (styleId, rev) => update(set, get, (p) => setStyleRev(p, styleId, rev)),
       removeProject: (id) => {
         set((s) => ({

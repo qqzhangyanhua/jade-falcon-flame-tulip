@@ -11,6 +11,7 @@ import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
 import { StudioHistoryPanel, StyleCard } from "@/components/studio-panels";
+import { StyleRevCompare } from "@/components/style-rev-compare";
 import {
   StudioBrandGuideLink,
   StudioCopyMenu,
@@ -56,12 +57,14 @@ export function StudioView() {
   const addImageRevs = useStudio((s) => s.addImageRevs);
   const adoptImage = useStudio((s) => s.adoptImage);
   const writebackStyle = useStudio((s) => s.writebackStyle);
+  const rollbackStyle = useStudio((s) => s.rollbackStyle);
   const setStyleRev = useStudio((s) => s.setStyleRev);
   const setCurrentImageModel = useStudio((s) => s.setCurrentImageModel);
   const { state: imageGate, pick, refresh } = useStudioImageGate(project?.id);
 
   const [content, setContent] = useState("");
   const [tab, setTab] = useState<"image" | "style">("image");
+  const [compareOpen, setCompareOpen] = useState(false);
   const [mobile, setMobile] = useState<"canvas" | "style" | "history">("canvas");
   const [confirmWrite, setConfirmWrite] = useState<null | {
     instruction: string;
@@ -321,6 +324,14 @@ export function StudioView() {
             }))}
             onValueChange={(value) => setStyleRev(style.id, Number(value))}
           />
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={() => setCompareOpen(true)}
+          >
+            对比版本
+          </Button>
           <ImageModelPicker
             className="w-44 shrink-0"
             state={imageGate}
@@ -422,6 +433,14 @@ export function StudioView() {
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:hidden">
             <p className="min-w-0 flex-1 truncate text-sm text-fg">{product}</p>
             <StyleLineCompare disabled={generating} onGoGenerate={() => setMobile("canvas")} />
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              onClick={() => setCompareOpen(true)}
+            >
+              对比版本
+            </Button>
             <ImageModelPicker
               className="w-32 shrink-0"
               state={imageGate}
@@ -589,9 +608,19 @@ export function StudioView() {
               setMobile("canvas");
             }}
             onStyleRev={(rev) => setStyleRev(style.id, rev)}
+            onRollback={(rev) => rollbackStyle(style.id, rev)}
           />
         </aside>
       </div>
+
+      {compareOpen ? (
+        <StyleRevCompare
+          key={style.id}
+          style={style}
+          slots={enabledSlots.map((item) => ({ id: item.id, name: item.name }))}
+          onClose={() => setCompareOpen(false)}
+        />
+      ) : null}
 
       {confirmWrite ? (
         <div className="fixed inset-0 z-50 grid place-items-end bg-fg/40 p-4 md:place-items-center">

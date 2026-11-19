@@ -6,6 +6,7 @@ import { DEFAULT_DAILY_IMAGE_CAP, effectiveDailyCap, quotaFromParts } from "./qu
 import { decodeDataUrl } from "./durable.ts";
 import { projectCoverUrl } from "../project/summary.ts";
 import type {
+  BoostLedgerEntry,
   CatalogModel,
   ImageBlobRecord,
   ImageBytes,
@@ -150,11 +151,13 @@ export function createMemoryProjects(
 }
 
 export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaStore & {
-  tryReserve: (userId: string, atMs: number) => boolean;
+  tryReserve: (record: ImageJobRecord) => boolean;
 } {
   let cap = initialCap;
   const used = new Map<string, number>();
   const userCaps = new Map<string, number>();
+  const boost = new Map<string, number>();
+  const ledger: BoostLedgerEntry[] = [];
   const capFor = (userId: string) =>
     effectiveDailyCap(cap, userCaps.has(userId) ? (userCaps.get(userId) ?? null) : null);
   return {
@@ -171,16 +174,50 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
     async clearUserCap(userId) {
       userCaps.delete(userId);
     },
+    async addBoost(input) {
+      const next = (boost.get(input.userId) ?? 0) + input.amount;
+      boost.set(input.userId, next);
+      ledger.push({
+        userId: input.userId,
+        kind: "grant",
+        amount: input.amount,
+        at: input.at,
+        adminId: input.adminId,
+        note: input.note,
+      });
+      return next;
+    },
+    async listBoostLedger(userId) {
+      return ledger.filter((entry) => entry.userId === userId).map((entry) => ({ ...entry }));
+    },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);
-      return quotaFromParts(capFor(userId), used.get(`${userId}:${day}`) ?? 0, day);
+      return quotaFromParts(
+        capFor(userId),
+        used.get(`${userId}:${day}`) ?? 0,
+        day,
+        boost.get(userId) ?? 0,
+      );
     },
-    tryReserve(userId, atMs) {
-      const day = beijingCalendarDay(atMs);
-      const key = `${userId}:${day}`;
+    tryReserve(record) {
+      const day = beijingCalendarDay(record.createdAt);
+      const key = `${record.userId}:${day}`;
       const current = used.get(key) ?? 0;
-      if (current >= capFor(userId)) return false;
-      used.set(key, current + 1);
+      if (current < capFor(record.userId)) {
+        used.set(key, current + 1);
+        return true;
+      }
+      const balance = boost.get(record.userId) ?? 0;
+      if (balance <= 0) return false;
+      boost.set(record.userId, balance - 1);
+      ledger.push({
+        userId: record.userId,
+        kind: "debit",
+        amount: 1,
+        at: record.createdAt,
+        adminId: null,
+        note: record.id,
+      });
       return true;
     },
   };
@@ -373,7 +410,7 @@ export function createMemoryGatewayWorld(opts?: {
   return {
     catalog,
     projects,
-    jobs: createMemoryJobs((record) => quota.tryReserve(record.userId, record.createdAt)),
+    jobs: createMemoryJobs((record) => quota.tryReserve(record)),
     revs: createMemoryRevs(),
     blobs: createMemoryBlobs(),
     fetchImage: opts?.fetchImage ?? defaultMemoryFetchImage,

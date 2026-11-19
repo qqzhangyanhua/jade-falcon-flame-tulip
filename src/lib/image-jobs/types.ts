@@ -155,7 +155,23 @@ export type StudioQuota = {
   cap: number;
   used: number;
   remaining: number;
+  /** Non-expiring 加量包. Spent only after today's cap is full. */
+  boost: number;
   beijingDay: string;
+};
+
+export type BoostLedgerKind = "grant" | "debit";
+
+/** One grant or one debit. `amount` is a positive count. */
+export type BoostLedgerEntry = {
+  userId: string;
+  kind: BoostLedgerKind;
+  amount: number;
+  at: number;
+  /** Granting admin. Null on a debit, which has no admin. */
+  adminId: string | null;
+  /** Admin remark on a grant. Image job id on a debit. */
+  note: string;
 };
 
 /** One row of the admin user list. `cap` is the effective daily cap. */
@@ -167,6 +183,8 @@ export type AdminUserQuota = {
   cap: number;
   /** Null when the user follows the global cap. */
   userCap: number | null;
+  /** Non-expiring 加量包 balance. Zero when the user has none. */
+  boost: number;
   /** Latest image job or session activity, or null when neither exists. */
   lastActiveAt: number | null;
 };

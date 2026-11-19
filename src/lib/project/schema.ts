@@ -213,3 +213,42 @@ export function adoptedRev(asset: Asset): ImageRev | null {
   if (!asset.adoptedId) return asset.revs.at(-1) ?? null;
   return asset.revs.find((r) => r.id === asset.adoptedId) ?? asset.revs.at(-1) ?? null;
 }
+
+const DURABLE_IMAGE_PATH_PREFIX = "/api/images/";
+
+/** Blob id carried by `/api/images/<id>`. A rev id or any other url is not one. */
+export function imageIdFromUrl(url: string): string | null {
+  let path: string | null;
+  if (url.startsWith("/")) {
+    const cut = url.indexOf("?");
+    path = cut === -1 ? url : url.slice(0, cut);
+  } else {
+    try {
+      path = new URL(url).pathname;
+    } catch {
+      return null;
+    }
+  }
+  if (!path.startsWith(DURABLE_IMAGE_PATH_PREFIX)) return null;
+  const id = path.slice(DURABLE_IMAGE_PATH_PREFIX.length);
+  if (!id || id.includes("/") || id.includes("..")) return null;
+  return id;
+}
+
+/**
+ * The image an export would ship: the adopted rev, otherwise the latest.
+ * When that image id is excluded, the slot has no image. Do not walk to another rev.
+ * `adoptedRev` still falls back when the adopted id is missing from the list; that
+ * is a missing rev, not a hidden one, and exclusion is applied after the choice.
+ */
+export function revForExport(
+  asset: Asset,
+  excludeImageIds?: ReadonlySet<string>,
+): ImageRev | null {
+  const rev = adoptedRev(asset);
+  if (!rev) return null;
+  if (!excludeImageIds || excludeImageIds.size === 0) return rev;
+  const imageId = imageIdFromUrl(rev.url);
+  if (imageId !== null && excludeImageIds.has(imageId)) return null;
+  return rev;
+}

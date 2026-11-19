@@ -53,8 +53,12 @@ export function HiddenImageProvider({ children }: { children: ReactNode }) {
   return <HiddenImageContext.Provider value={ids}>{children}</HiddenImageContext.Provider>;
 }
 
+export function useHiddenImageIds(): ReadonlySet<string> {
+  return useContext(HiddenImageContext);
+}
+
 export function useImageHidden(url: string | null | undefined): boolean {
-  const ids = useContext(HiddenImageContext);
+  const ids = useHiddenImageIds();
   if (!url) return false;
   const id = imageIdFromUrl(url);
   if (!id) return false;

@@ -410,6 +410,54 @@ describe("brandGuideModel", () => {
       },
     ]);
   });
+
+  it("skips a slot whose exported image id is excluded and does not use another rev", () => {
+    const image = (id: string, url: string): ImageRev => ({
+      id,
+      parentId: null,
+      url,
+      createdAt: 1,
+      action: "generate",
+      diff: "",
+      writeback: "none",
+      styleRev: 1,
+    });
+    const line = sampleStyle("a", {
+      assets: {
+        kv: {
+          slot: "kv",
+          adoptedId: "img_k1",
+          revs: [image("img_k1", "/api/images/k1"), image("img_k2", "/api/images/k2")],
+        },
+        ui_hero: {
+          slot: "ui_hero",
+          adoptedId: null,
+          revs: [image("img_u1", "/api/images/u1"), image("img_u2", "/api/images/u2")],
+        },
+        poster: {
+          slot: "poster",
+          adoptedId: "img_p",
+          revs: [image("img_p", "/api/images/p")],
+        },
+      },
+    });
+    const slots = [
+      { id: "kv", name: "品牌主视觉", aspect: "16:9", purpose: "KV / 海报" },
+      { id: "ui_hero", name: "产品旗舰页", aspect: "9:16", purpose: "有原型则保结构" },
+      { id: "poster", name: "海报", aspect: "3:4", purpose: "竖版" },
+    ];
+
+    assert.deepEqual(brandGuideModel(line, slots, ["k1", "u2"]).slots, [
+      {
+        id: "poster",
+        name: "海报",
+        aspect: "3:4",
+        purpose: "竖版",
+        url: "/api/images/p",
+        revId: "img_p",
+      },
+    ]);
+  });
 });
 
 describe("styleForGuide", () => {

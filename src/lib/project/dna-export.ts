@@ -1,5 +1,5 @@
 import type { StyleDna } from "./dna.ts";
-import { adoptedRev, currentDna, type StyleBranch } from "./schema.ts";
+import { currentDna, revForExport, type StyleBranch } from "./schema.ts";
 
 export type RgbPixel = { r: number; g: number; b: number };
 
@@ -251,7 +251,7 @@ export type BrandGuideSwatch = {
   hex: string;
 };
 
-/** One slot that has an image: the adopted rev, otherwise the latest. */
+/** One slot that has an image: the adopted rev, otherwise the latest. An excluded image is absent. */
 export type BrandGuideSlot = {
   id: string;
   name: string;
@@ -278,19 +278,25 @@ export type BrandGuide = {
 
 /**
  * Page data for one style line's viewed rev. Do and don't lines come only from
- * mood words and forbidden styles. No model call.
+ * mood words and forbidden styles. An excluded image id drops that slot with no
+ * fallback rev. No model call.
  */
-export function brandGuideModel(styleLine: StyleBranch, slots: readonly PromptSlot[]): BrandGuide {
+export function brandGuideModel(
+  styleLine: StyleBranch,
+  slots: readonly PromptSlot[],
+  excludeImageIds?: readonly string[],
+): BrandGuide {
   const dna = currentDna(styleLine);
   const mood = [...dna.mood];
   const forbidden = [...dna.forbidden];
   const dos = mood.length > 0 ? [`情绪保持：${mood.join("、")}`] : [];
   const donts = forbidden.length > 0 ? forbidden.map((item) => `避免${item}`) : [];
+  const excluded = new Set(excludeImageIds ?? []);
   const shown: BrandGuideSlot[] = [];
   for (const slot of slots) {
     const asset = styleLine.assets[slot.id];
     if (!asset) continue;
-    const rev = adoptedRev(asset);
+    const rev = revForExport(asset, excluded);
     if (!rev) continue;
     shown.push({
       id: slot.id,

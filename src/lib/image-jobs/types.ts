@@ -94,6 +94,11 @@ export type ImageJobRecord = {
   errorCode: ImageJobErrorCode | null;
   createdAt: number;
   finishedAt: number | null;
+  /**
+   * Upstream fee in USD ticks (1 USD = 1e10). Null when usage was absent.
+   * Stay in ticks until a screen formats dollars.
+   */
+  costInUsdTicks: bigint | null;
 };
 
 export type ImageRevRecord = {
@@ -241,8 +246,8 @@ export type ImageUpstreamRequest = {
 };
 
 export type ImageUpstreamResult =
-  | { ok: true; urls: string[] }
-  | { ok: false };
+  | { ok: true; urls: string[]; costInUsdTicks?: bigint | null }
+  | { ok: false; costInUsdTicks?: bigint | null };
 
 export type ImageUpstream = {
   run: (request: ImageUpstreamRequest) => Promise<ImageUpstreamResult>;

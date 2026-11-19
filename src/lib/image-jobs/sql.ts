@@ -58,6 +58,8 @@ type JobRow = {
   error_code: string | null;
   created_at_ms: number;
   finished_at_ms: number | null;
+  /** Text, never a JS number — int8 past 2^53 would round. */
+  cost_in_usd_ticks: string | null;
 };
 
 type ReserveRow = JobRow & {
@@ -144,6 +146,12 @@ function toProject(row: ProjectRow): StudioProjectRecord {
   };
 }
 
+function toCostTicks(value: string | null | undefined): bigint | null {
+  if (value == null || value === "") return null;
+  if (!/^-?\d+$/.test(value)) return null;
+  return BigInt(value);
+}
+
 function toJob(row: JobRow): ImageJobRecord {
   const action = (IMAGE_JOB_ACTIONS as readonly string[]).includes(row.action)
     ? (row.action as ImageJobAction)
@@ -163,6 +171,7 @@ function toJob(row: JobRow): ImageJobRecord {
     errorCode: row.error_code as ImageJobErrorCode | null,
     createdAt: Number(row.created_at_ms),
     finishedAt: row.finished_at_ms === null ? null : Number(row.finished_at_ms),
+    costInUsdTicks: toCostTicks(row.cost_in_usd_ticks),
   };
 }
 
@@ -489,7 +498,8 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
               status, error_code,
               (extract(epoch from created_at) * 1000) as created_at_ms,
               case when finished_at is null then null
-                   else extract(epoch from finished_at) * 1000 end as finished_at_ms
+                   else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+              cost_in_usd_ticks::text as cost_in_usd_ticks
           )
           select
             gate.code as reject_code,
@@ -504,7 +514,8 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
             inserted.status,
             inserted.error_code,
             inserted.created_at_ms,
-            inserted.finished_at_ms
+            inserted.finished_at_ms,
+            inserted.cost_in_usd_ticks
           from gate
           left join inserted on true
         `;
@@ -526,7 +537,8 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
           case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
         from image_jobs
         where id = ${id}
       `;
@@ -540,20 +552,23 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
           case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
         from image_jobs
         where user_id = ${userId}
         order by created_at desc, id desc
       `;
       return rows.map(toJob);
     },
-    async finish(id, status, errorCode, finishedAt) {
+    async finish(id, status, errorCode, finishedAt, costInUsdTicks) {
+      const costText = costInUsdTicks === null ? null : costInUsdTicks.toString();
       const rows = await sql<JobRow>`
         update image_jobs
         set
           status = ${status},
           error_code = ${errorCode},
-          finished_at = to_timestamp(${finishedAt / 1000})
+          finished_at = to_timestamp(${finishedAt / 1000}),
+          cost_in_usd_ticks = ${costText}::bigint
         where id = ${id}
         returning
           id, user_id, project_id, action, slot,
@@ -561,9 +576,27 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
           status, error_code,
           (extract(epoch from created_at) * 1000) as created_at_ms,
           case when finished_at is null then null
-               else extract(epoch from finished_at) * 1000 end as finished_at_ms
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
       `;
       return rows[0] ? toJob(rows[0]) : null;
+    },
+    async listInRange(fromMs, toMs) {
+      const rows = await sql<JobRow>`
+        select
+          id, user_id, project_id, action, slot,
+          catalog_model_id, upstream_model_id, display_name_snapshot,
+          status, error_code,
+          (extract(epoch from created_at) * 1000) as created_at_ms,
+          case when finished_at is null then null
+               else extract(epoch from finished_at) * 1000 end as finished_at_ms,
+          cost_in_usd_ticks::text as cost_in_usd_ticks
+        from image_jobs
+        where created_at >= to_timestamp(${fromMs / 1000})
+          and created_at < to_timestamp(${toMs / 1000})
+        order by created_at asc, id asc
+      `;
+      return rows.map(toJob);
     },
   };
 }

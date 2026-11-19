@@ -9,8 +9,18 @@ type FetchLike = (
   init: { method: string; headers: Record<string, string>; body: string },
 ) => Promise<{
   ok: boolean;
-  json: () => Promise<unknown>;
+  text: () => Promise<string>;
 }>;
+
+/**
+ * Pull `usage.cost_in_usd_ticks` from the raw body. The digits stay a string
+ * so a value past 2^53 is not rounded by JSON.parse.
+ */
+function readCostInUsdTicks(raw: string): bigint | null {
+  const match = /"cost_in_usd_ticks"\s*:\s*("?)(\d+)\1/.exec(raw);
+  if (!match?.[2]) return null;
+  return BigInt(match[2]);
+}
 
 function parseUrls(body: unknown): string[] {
   if (!body || typeof body !== "object") return [];
@@ -79,10 +89,18 @@ export function createXaiImageUpstream(opts?: {
           },
           body: JSON.stringify(body),
         });
-        if (!res.ok) return { ok: false };
-        const urls = parseUrls(await res.json());
-        if (urls.length === 0) return { ok: false };
-        return { ok: true, urls };
+        const raw = await res.text();
+        const costInUsdTicks = readCostInUsdTicks(raw);
+        if (!res.ok) return { ok: false, costInUsdTicks };
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          return { ok: false, costInUsdTicks };
+        }
+        const urls = parseUrls(parsed);
+        if (urls.length === 0) return { ok: false, costInUsdTicks };
+        return { ok: true, urls, costInUsdTicks };
       } catch {
         return { ok: false };
       }

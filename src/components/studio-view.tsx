@@ -7,6 +7,8 @@ import { AuthSlot } from "@/components/auth-slot";
 import { getProjectSync } from "@/components/project-sync";
 import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { ProjectRenameControl } from "@/components/project-rename-control";
+import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -469,7 +471,7 @@ export function StudioView() {
           <Wordmark />
         </button>
         <div className="hidden min-w-0 items-center gap-2 overflow-x-auto md:flex">
-          <p className="shrink-0 truncate font-display text-lg tracking-tight">{product}</p>
+          <p className="shrink-0 truncate font-display text-lg tracking-tight">{project.name}</p>
           <SelectField
             label="风格线"
             className="w-44 shrink-0"
@@ -511,7 +513,7 @@ export function StudioView() {
             }}
           />
         </div>
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
           <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
           <StudioDownloadLink url={currentImg?.url} slot={slot} />
           <StudioCopyMenu
@@ -527,6 +529,11 @@ export function StudioView() {
             enabledSlotIds={project.enabledSlotIds}
             customSlots={customSlots}
             styleLine={style}
+          />
+          <ProjectRenameControl
+            projectId={project.id}
+            name={project.name}
+            onRenamed={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
           />
           <DeleteProjectControl projectId={project.id} compact />
           <JobHistoryLink compact />

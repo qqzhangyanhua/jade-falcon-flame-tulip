@@ -48,9 +48,7 @@ function cloneProject(project: StudioProjectRecord): StudioProjectRecord {
 }
 
 export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
-  const models = new Map(
-    seed.map((model) => [model.id, cloneModel(model)]),
-  );
+  const models = new Map(seed.map((model) => [model.id, cloneModel(model)]));
   return {
     async list() {
       return [...models.values()].map(cloneModel);
@@ -75,18 +73,12 @@ export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
   };
 }
 
-export function createMemoryProjects(
-  seed: StudioProjectRecord[] = [],
-): StudioProjectStore {
-  const projects = new Map(
-    seed.map((project) => [project.id, cloneProject(project)]),
-  );
+export function createMemoryProjects(seed: StudioProjectRecord[] = []): StudioProjectStore {
+  const projects = new Map(seed.map((project) => [project.id, cloneProject(project)]));
   const documents = new Map<string, ProjectDocumentSnapshot>();
   const snapshotOf = (id: string): ProjectDocumentSnapshot => {
     const stored = documents.get(id);
-    return stored
-      ? structuredClone(stored)
-      : { document: null, version: 0, updatedAt: null };
+    return stored ? structuredClone(stored) : { document: null, version: 0, updatedAt: null };
   };
   return {
     async create(record) {
@@ -116,7 +108,7 @@ export function createMemoryProjects(
     async getDocument(id) {
       return projects.has(id) ? snapshotOf(id) : null;
     },
-    async listSummaries(userId, limit) {
+    async listSummaries(userId) {
       const rows: ProjectSummary[] = [];
       for (const project of projects.values()) {
         if (project.userId !== userId || project.deletedAt !== null) continue;
@@ -128,10 +120,10 @@ export function createMemoryProjects(
           stage: stored.document.phase,
           coverUrl: projectCoverUrl(stored.document),
           updatedAt: stored.updatedAt,
+          createdAt: stored.document.createdAt,
         });
       }
-      rows.sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1));
-      return rows.slice(0, limit);
+      return rows;
     },
     async saveDocument(id, document, expectedVersion, now) {
       const project = projects.get(id);
@@ -186,9 +178,7 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
   };
 }
 
-export function createMemoryRoles(
-  seed: Record<string, StudioRole> = {},
-): RoleStore {
+export function createMemoryRoles(seed: Record<string, StudioRole> = {}): RoleStore {
   const roles = new Map<string, StudioRole>(Object.entries(seed));
   return {
     async getRole(userId) {
@@ -203,9 +193,7 @@ export function createMemoryRoles(
   };
 }
 
-export function createMemoryJobs(
-  reserve: (record: ImageJobRecord) => boolean,
-): ImageJobStore {
+export function createMemoryJobs(reserve: (record: ImageJobRecord) => boolean): ImageJobStore {
   const jobs = new Map<string, ImageJobRecord>();
   return {
     async insertReserved(record) {
@@ -324,9 +312,10 @@ export function defaultCatalogSeed(): CatalogModel[] {
   ];
 }
 
-export function recordingUpstream(
-  impl?: ImageUpstream["run"],
-): { upstream: ImageUpstream; calls: ImageUpstreamRequest[] } {
+export function recordingUpstream(impl?: ImageUpstream["run"]): {
+  upstream: ImageUpstream;
+  calls: ImageUpstreamRequest[];
+} {
   const calls: ImageUpstreamRequest[] = [];
   return {
     calls,

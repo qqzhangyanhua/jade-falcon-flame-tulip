@@ -30,7 +30,11 @@ import {
 } from "./project/ops.ts";
 import type { DnaChange } from "./project/dna.ts";
 import type { ArchiveResult, CustomSlotDraft } from "./project/ops.ts";
-import { DEFAULT_ENABLED_SLOT_IDS, normalizeProjectDocument } from "./project/schema.ts";
+import {
+  DEFAULT_ENABLED_SLOT_IDS,
+  PROJECT_NAME_MAX,
+  normalizeProjectDocument,
+} from "./project/schema.ts";
 import { uid } from "./utils";
 
 type State = {
@@ -83,6 +87,7 @@ type State = {
   restoreStyle: (styleId: string) => void;
   forkStyle: (styleId: string) => void;
   removeProject: (id: string) => void;
+  renameProject: (id: string, name: string) => void;
 };
 
 export type ArchiveOutcome = { ok: true } | Extract<ArchiveResult, { ok: false }>;
@@ -162,7 +167,7 @@ export const useStudio = create<State>()(
           projects: patchProject(s.projects, id, (p) => ({
             ...p,
             intent,
-            name: intent.productName || p.name,
+            name: (intent.productName || p.name).trim().slice(0, PROJECT_NAME_MAX) || p.name,
           })),
         }));
       },
@@ -195,8 +200,7 @@ export const useStudio = create<State>()(
       hideBuiltinSlot: (slotId) => update(set, get, (p) => hideBuiltinSlot(p, slotId)),
       createCustomSlot: (draft) =>
         update(set, get, (p) => createCustomSlot(p, draft, { newId: uid })),
-      editCustomSlot: (slotId, draft) =>
-        update(set, get, (p) => editCustomSlot(p, slotId, draft)),
+      editCustomSlot: (slotId, draft) => update(set, get, (p) => editCustomSlot(p, slotId, draft)),
       deleteCustomSlot: (slotId) => update(set, get, (p) => deleteCustomSlot(p, slotId)),
       setMode: (mode) => {
         const id = get().currentId;
@@ -231,6 +235,11 @@ export const useStudio = create<State>()(
         set((s) => ({
           projects: s.projects.filter((project) => project.id !== id),
           currentId: s.currentId === id ? null : s.currentId,
+        }));
+      },
+      renameProject: (id, name) => {
+        set((s) => ({
+          projects: patchProject(s.projects, id, (p) => ({ ...p, name })),
         }));
       },
       archiveStyle: (styleId) => {

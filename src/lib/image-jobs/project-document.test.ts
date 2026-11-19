@@ -5,6 +5,7 @@ import { deleteStudioProject } from "./projects.ts";
 import {
   MAX_PROJECT_DOCUMENT_BYTES,
   loadProjectDocument,
+  renameProject,
   saveProjectDocument,
 } from "./project-document.ts";
 import { sampleProject } from "../project/fixtures.ts";
@@ -18,8 +19,12 @@ function setup(now = 1_700_000_000_000) {
   const world = createMemoryGatewayWorld({ now: () => now });
   return {
     world,
-    save: (document: unknown, expectedVersion: number, userId = world.userId, projectId = world.projectId) =>
-      saveProjectDocument(world, { userId, projectId, document, expectedVersion }),
+    save: (
+      document: unknown,
+      expectedVersion: number,
+      userId = world.userId,
+      projectId = world.projectId,
+    ) => saveProjectDocument(world, { userId, projectId, document, expectedVersion }),
     load: (userId = world.userId, projectId = world.projectId) =>
       loadProjectDocument(world, { userId, projectId }),
   };
@@ -64,6 +69,119 @@ describe("project document: load", () => {
     await save(documentFor(world.projectId), 0);
     await deleteStudioProject(world, { userId: world.userId, projectId: world.projectId });
     assert.deepEqual(await load(), { ok: false, code: "project_deleted" });
+  });
+});
+
+describe("project document: rename", () => {
+  it("changes the name in the document and leaves the rest alone", async () => {
+    const { world, save, load } = setup(5_000);
+    const saved = await save(documentFor(world.projectId, { name: "旧名" }), 0);
+    assert.equal(saved.ok, true);
+    const renamed = await renameProject(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+      name: "  新名字  ",
+    });
+    assert.deepEqual(renamed, {
+      ok: true,
+      value: { name: "新名字", version: 2, updatedAt: 5_000 },
+    });
+    const loaded = await load();
+    assert.equal(loaded.ok, true);
+    if (!loaded.ok || !loaded.value.document) return;
+    assert.equal(loaded.value.document.name, "新名字");
+    assert.equal(loaded.value.document.brief, "一个示例项目");
+    assert.equal(loaded.value.version, 2);
+  });
+
+  it("rejects an empty name and keeps the old one", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { name: "旧名" }), 0);
+    assert.deepEqual(
+      await renameProject(world, { userId: world.userId, projectId: world.projectId, name: "   " }),
+      { ok: false, code: "invalid_document" },
+    );
+    const loaded = await load();
+    assert.equal(loaded.ok && loaded.value.document?.name, "旧名");
+    assert.equal(loaded.ok && loaded.value.version, 1);
+  });
+
+  it("rejects a name over 40 characters and accepts one of exactly 40", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { name: "旧名" }), 0);
+    const tooLong = "名".repeat(41);
+    assert.deepEqual(
+      await renameProject(world, {
+        userId: world.userId,
+        projectId: world.projectId,
+        name: tooLong,
+      }),
+      { ok: false, code: "invalid_document" },
+    );
+    const kept = await load();
+    assert.equal(kept.ok && kept.value.document?.name, "旧名");
+
+    const exact = "名".repeat(40);
+    const renamed = await renameProject(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+      name: exact,
+    });
+    assert.equal(renamed.ok, true);
+    if (!renamed.ok) return;
+    assert.equal(renamed.value.name, exact);
+    const loaded = await load();
+    assert.equal(loaded.ok && loaded.value.document?.name, exact);
+  });
+
+  it("rejects an anonymous caller", async () => {
+    const { world, save } = setup();
+    await save(documentFor(world.projectId), 0);
+    assert.deepEqual(
+      await renameProject(world, { userId: "", projectId: world.projectId, name: "新名字" }),
+      { ok: false, code: "unauthorized" },
+    );
+  });
+
+  it("rejects another user's project even when the name is empty, and keeps the old name", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { name: "旧名" }), 0);
+    assert.deepEqual(
+      await renameProject(world, {
+        userId: "someone-else",
+        projectId: world.projectId,
+        name: "   ",
+      }),
+      { ok: false, code: "forbidden" },
+    );
+    const loaded = await load();
+    assert.equal(loaded.ok && loaded.value.document?.name, "旧名");
+  });
+
+  it("rejects a deleted project", async () => {
+    const { world, save } = setup();
+    await save(documentFor(world.projectId), 0);
+    await deleteStudioProject(world, { userId: world.userId, projectId: world.projectId });
+    assert.deepEqual(
+      await renameProject(world, {
+        userId: world.userId,
+        projectId: world.projectId,
+        name: "新名字",
+      }),
+      { ok: false, code: "project_deleted" },
+    );
+  });
+
+  it("rejects a project that has no document yet", async () => {
+    const { world } = setup();
+    assert.deepEqual(
+      await renameProject(world, {
+        userId: world.userId,
+        projectId: world.projectId,
+        name: "新名字",
+      }),
+      { ok: false, code: "not_found" },
+    );
   });
 });
 

@@ -29,10 +29,10 @@ export type StudioProjectStore = {
   markDeleted: (id: string, deletedAt: number) => Promise<StudioProjectRecord | null>;
   getDocument: (id: string) => Promise<ProjectDocumentSnapshot | null>;
   /**
-   * The user's live projects that have a document, most recently updated
-   * first, at most `limit`. Never loads whole documents into the caller.
+   * Every live project of this user that has a document. The caller searches,
+   * sorts and pages. Never loads a whole document into the caller.
    */
-  listSummaries: (userId: string, limit: number) => Promise<ProjectSummary[]>;
+  listSummaries: (userId: string) => Promise<ProjectSummary[]>;
   /**
    * Replace the document only if the stored version still equals
    * `expectedVersion` and the project is not deleted; both checks and the write
@@ -47,8 +47,7 @@ export type StudioProjectStore = {
 };
 
 export type ReservedJobInsert =
-  | { ok: true; job: ImageJobRecord }
-  | { ok: false; code: "quota_exceeded" | "in_flight" };
+  { ok: true; job: ImageJobRecord } | { ok: false; code: "quota_exceeded" | "in_flight" };
 
 export type ImageJobStore = {
   /** Insert a running job and reserve today's cap in one atomic step. */
@@ -110,7 +109,7 @@ export type ImageJobGatewayDeps = {
 };
 
 export type ImageUpstreamLike = {
-  run: (request: import("./types.ts").ImageUpstreamRequest) => Promise<
-    import("./types.ts").ImageUpstreamResult
-  >;
+  run: (
+    request: import("./types.ts").ImageUpstreamRequest,
+  ) => Promise<import("./types.ts").ImageUpstreamResult>;
 };

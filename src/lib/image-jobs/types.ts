@@ -1,12 +1,7 @@
 import type { ProjectDocument } from "../project/schema.ts";
 import { SLOT_IDS } from "../project/slots.ts";
 
-export const IMAGE_JOB_ACTIONS = [
-  "direction",
-  "generate",
-  "tune",
-  "compose",
-] as const;
+export const IMAGE_JOB_ACTIONS = ["direction", "generate", "tune", "compose"] as const;
 
 export type ImageJobAction = (typeof IMAGE_JOB_ACTIONS)[number];
 
@@ -56,13 +51,15 @@ export type ProjectDocumentSnapshot = {
   updatedAt: number | null;
 };
 
-/** One row of the recent-projects list; deliberately omits everything else in the document. */
+/** One row of the project list; deliberately omits everything else in the document. */
 export type ProjectSummary = {
   id: string;
   name: string;
   stage: ProjectDocument["phase"];
   coverUrl: string | null;
   updatedAt: number;
+  /** Project document `createdAt`, not the row insert time. */
+  createdAt: number;
 };
 
 export type SaveDocumentOutcome =
@@ -233,8 +230,7 @@ export type ImageJobHistoryItem = {
 };
 
 export type ListUserJobsResult =
-  | { ok: true; jobs: ImageJobHistoryItem[] }
-  | { ok: false; code: "unauthorized" };
+  { ok: true; jobs: ImageJobHistoryItem[] } | { ok: false; code: "unauthorized" };
 
 export type ImageUpstreamRequest = {
   action: ImageJobAction;

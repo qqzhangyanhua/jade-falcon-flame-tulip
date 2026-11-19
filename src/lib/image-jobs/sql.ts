@@ -433,7 +433,13 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
               end as code
           ),
           cap_row as (
+            -- user_daily_caps overrides the global cap. A stored 0 still overrides.
             select coalesce(
+              (
+                select cap
+                from user_daily_caps
+                where user_id = ${record.userId}
+              ),
               (
                 select case
                   when value ~ '^[0-9]+$' then value::int

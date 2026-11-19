@@ -41,7 +41,7 @@ export function AccountScreen() {
         setBio(row.bio);
         setRole(access.role);
         setQuota(access.quota);
-        setCapDraft(String(access.quota.cap));
+        setCapDraft(String(access.globalCap));
       })
       .catch((e) => {
         if (cancelled) return;
@@ -206,6 +206,7 @@ export function AccountScreen() {
                         setCapDraft(String(saved.cap));
                         const access = await getStudioAccessFn();
                         setQuota(access.quota);
+                        setCapDraft(String(access.globalCap));
                         toast.success("全站每日额度已更新");
                       })
                       .catch((e) => {
@@ -214,7 +215,9 @@ export function AccountScreen() {
                       .finally(() => setSavingCap(false));
                   }}
                 >
-                  <p className="text-sm text-muted">管理员：修改全站每日上限（含管理员自己）</p>
+                  <p className="text-sm text-muted">
+                    管理员：修改全站每日上限。没有单独上限的用户都用这个数。
+                  </p>
                   <label className="block space-y-1.5">
                     <span className="text-sm text-muted">每日额度</span>
                     <Input
@@ -242,6 +245,18 @@ export function AccountScreen() {
                 </p>
                 <Link href="/models" className="btn btn-ink mt-4 h-11 px-4">
                   打开模型目录
+                </Link>
+              </section>
+            ) : null}
+
+            {role === "admin" ? (
+              <section className="rounded-xl border border-border bg-surface p-5">
+                <h2 className="font-display text-xl tracking-tight">用户</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  查看今日用量和生效上限，并为单个用户设置或清除每日上限。
+                </p>
+                <Link href="/admin/users" className="btn btn-ink mt-4 h-11 px-4">
+                  打开用户列表
                 </Link>
               </section>
             ) : null}

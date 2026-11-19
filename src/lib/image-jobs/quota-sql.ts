@@ -2,6 +2,7 @@ import type { Sql } from "../db";
 import { beijingCalendarDay } from "./beijing-day";
 import {
   DAILY_IMAGE_CAP_SETTING_KEY,
+  effectiveDailyCap,
   parseDailyCap,
   quotaFromParts,
 } from "./quota";
@@ -33,18 +34,32 @@ export function createSqlQuotaStore(sql: Sql): QuotaStore {
       `;
       return cap;
     },
+    async setUserCap(userId, cap) {
+      await sql`
+        insert into user_daily_caps (user_id, cap)
+        values (${userId}, ${cap})
+        on conflict (user_id) do update set cap = excluded.cap
+      `;
+    },
+    async clearUserCap(userId) {
+      await sql`delete from user_daily_caps where user_id = ${userId}`;
+    },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);
       const capRows = await sql<SettingRow>`
         select value from studio_settings where key = ${DAILY_IMAGE_CAP_SETTING_KEY}
       `;
+      const userCapRows = await sql<{ cap: number }>`
+        select cap from user_daily_caps where user_id = ${userId}
+      `;
       const usedRows = await sql<UsedRow>`
         select used from image_quota_days
         where user_id = ${userId} and beijing_day = ${day}::date
       `;
+      const userCap = userCapRows[0] ? Number(userCapRows[0].cap) : null;
       return quotaFromParts(
-        parseDailyCap(capRows[0]?.value),
-        usedRows[0]?.used ?? 0,
+        effectiveDailyCap(parseDailyCap(capRows[0]?.value), userCap),
+        Number(usedRows[0]?.used ?? 0),
         day,
       );
     },

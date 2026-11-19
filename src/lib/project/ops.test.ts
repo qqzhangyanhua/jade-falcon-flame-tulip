@@ -13,10 +13,11 @@ import {
   hideBuiltinSlot,
   lockCandidate,
   restoreStyle,
+  revTree,
   setStyleRev,
   writebackStyle,
 } from "./ops.ts";
-import { currentDna, projectDocumentSchema, type ImageRev } from "./schema.ts";
+import { currentDna, projectDocumentSchema, type Asset, type ImageRev } from "./schema.ts";
 import { BUILTIN_SLOTS, DEFAULT_ENABLED_SLOT_IDS, SUPPORTED_ASPECTS } from "./slots.ts";
 import { slotPrompt } from "../prompts.ts";
 import { sampleCandidate, sampleDna, sampleProject, sampleStyle } from "./fixtures.ts";
@@ -833,5 +834,93 @@ describe("compareLines", () => {
         { styleId: "partial", image: null },
       ],
     );
+  });
+});
+
+function treeImage(
+  patch: Pick<ImageRev, "id" | "parentId" | "styleRev" | "action"> & Partial<ImageRev>,
+): ImageRev {
+  return {
+    url: `/u/${patch.id}`,
+    createdAt: 1,
+    diff: patch.id,
+    writeback: "none",
+    ...patch,
+  };
+}
+
+function treeShape(nodes: ReturnType<typeof revTree>): unknown {
+  return nodes.map((node) => ({
+    id: node.rev.id,
+    styleRev: node.rev.styleRev,
+    children: treeShape(node.children),
+  }));
+}
+
+describe("revTree", () => {
+  it("nests multi-level parent links in rev order", () => {
+    const asset: Asset = {
+      slot: "kv",
+      adoptedId: "c",
+      revs: [
+        treeImage({ id: "a", parentId: null, styleRev: 1, action: "generate" }),
+        treeImage({ id: "b", parentId: "a", styleRev: 1, action: "tune" }),
+        treeImage({ id: "c", parentId: "b", styleRev: 1, action: "compose" }),
+        treeImage({ id: "d", parentId: "a", styleRev: 1, action: "tune" }),
+      ],
+    };
+
+    assert.deepEqual(treeShape(revTree(asset)), [
+      {
+        id: "a",
+        styleRev: 1,
+        children: [
+          { id: "b", styleRev: 1, children: [{ id: "c", styleRev: 1, children: [] }] },
+          { id: "d", styleRev: 1, children: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("makes a rev whose parent is missing a root", () => {
+    const asset: Asset = {
+      slot: "kv",
+      adoptedId: null,
+      revs: [
+        treeImage({ id: "kept", parentId: null, styleRev: 1, action: "generate" }),
+        treeImage({ id: "orphan", parentId: "gone", styleRev: 2, action: "tune" }),
+        treeImage({ id: "follow", parentId: "orphan", styleRev: 2, action: "compose" }),
+      ],
+    };
+
+    assert.deepEqual(treeShape(revTree(asset)), [
+      { id: "kept", styleRev: 1, children: [] },
+      {
+        id: "orphan",
+        styleRev: 2,
+        children: [{ id: "follow", styleRev: 2, children: [] }],
+      },
+    ]);
+  });
+
+  it("includes revs from every style rev", () => {
+    const asset: Asset = {
+      slot: "kv",
+      adoptedId: "later",
+      revs: [
+        treeImage({ id: "early", parentId: null, styleRev: 1, action: "generate" }),
+        treeImage({ id: "later", parentId: "early", styleRev: 3, action: "tune" }),
+        treeImage({ id: "side", parentId: null, styleRev: 2, action: "generate" }),
+      ],
+    };
+
+    assert.deepEqual(treeShape(revTree(asset)), [
+      {
+        id: "early",
+        styleRev: 1,
+        children: [{ id: "later", styleRev: 3, children: [] }],
+      },
+      { id: "side", styleRev: 2, children: [] },
+    ]);
   });
 });

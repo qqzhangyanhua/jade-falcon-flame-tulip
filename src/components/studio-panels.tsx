@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { DnaChangeList } from "@/components/dna-change-list";
+import { RevTree } from "@/components/rev-tree";
 import type { ImageRev, StyleBranch, StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -30,18 +32,23 @@ export function StudioHistoryPanel({
   onTab,
   assetRevs,
   adoptedId,
+  inspectingId,
   style,
   onAdopt,
+  onInspect,
   onStyleRev,
 }: {
   tab: "image" | "style";
   onTab: (tab: "image" | "style") => void;
   assetRevs: ImageRev[];
   adoptedId: string | null | undefined;
+  inspectingId: string | null;
   style: StyleBranch;
   onAdopt: (imageId: string) => void;
+  onInspect: (imageId: string | null) => void;
   onStyleRev: (rev: number) => void;
 }) {
+  const [imageView, setImageView] = useState<"list" | "tree">("list");
   return (
     <>
       <div className="grid grid-cols-2 border-b border-border">
@@ -68,34 +75,74 @@ export function StudioHistoryPanel({
         ))}
       </div>
       {tab === "image" ? (
-        <ul className="p-2">
-          {assetRevs
-            .slice()
-            .reverse()
-            .map((rev, idx, arr) => (
-              <li key={rev.id}>
-                <button
-                  type="button"
-                  className="flex min-h-11 w-full gap-3 rounded-md p-2 text-left transition-colors duration-150 hover:bg-surface-2"
-                  onClick={() => onAdopt(rev.id)}
-                >
-                  <img src={rev.url} alt="" className="frame h-12 w-16 shrink-0 rounded-sm object-cover" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm text-fg">
-                      v{arr.length - idx} · {rev.diff}
-                    </span>
-                    <span className="text-xs text-subtle">
-                      {rev.action}
-                      {adoptedId === rev.id ? " · 采用" : ""}
-                    </span>
-                  </span>
-                </button>
-              </li>
+        <div className="min-w-0 max-w-full">
+          <div className="flex gap-1 border-b border-border p-2">
+            {(
+              [
+                ["list", "列表"],
+                ["tree", "树"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={imageView === id}
+                className={cn(
+                  "h-11 flex-1 rounded-md text-sm transition-colors duration-150",
+                  imageView === id ? "bg-surface-2 text-fg" : "text-muted hover:text-fg",
+                )}
+                onClick={() => setImageView(id)}
+              >
+                {label}
+              </button>
             ))}
-          {!assetRevs.length ? (
-            <p className="px-3 py-8 text-center text-sm text-subtle">这个槽还没有图版本</p>
-          ) : null}
-        </ul>
+          </div>
+          {imageView === "list" ? (
+            <ul className="p-2">
+              {assetRevs
+                .slice()
+                .reverse()
+                .map((rev, idx, arr) => (
+                  <li key={rev.id}>
+                    <button
+                      type="button"
+                      className="flex min-h-11 w-full gap-3 rounded-md p-2 text-left transition-colors duration-150 hover:bg-surface-2"
+                      onClick={() => {
+                        onInspect(null);
+                        onAdopt(rev.id);
+                      }}
+                    >
+                      <img
+                        src={rev.url}
+                        alt=""
+                        className="frame h-12 w-16 shrink-0 rounded-sm object-cover"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm text-fg">
+                          v{arr.length - idx} · {rev.diff}
+                        </span>
+                        <span className="text-xs text-subtle">
+                          {rev.action}
+                          {adoptedId === rev.id ? " · 采用" : ""}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              {!assetRevs.length ? (
+                <p className="px-3 py-8 text-center text-sm text-subtle">这个槽还没有图版本</p>
+              ) : null}
+            </ul>
+          ) : (
+            <RevTree
+              revs={assetRevs}
+              adoptedId={adoptedId}
+              inspectingId={inspectingId}
+              onInspect={onInspect}
+              onAdopt={onAdopt}
+            />
+          )}
+        </div>
       ) : (
         <ul className="p-2">
           {style.revs

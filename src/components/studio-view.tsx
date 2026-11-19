@@ -7,6 +7,7 @@ import { AuthSlot } from "@/components/auth-slot";
 import { getProjectSync } from "@/components/project-sync";
 import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { ProjectCopyControl } from "@/components/project-copy-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
 import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { JobHistoryLink } from "@/components/job-history-link";
@@ -530,6 +531,11 @@ export function StudioView() {
             enabledSlotIds={project.enabledSlotIds}
             customSlots={customSlots}
             styleLine={style}
+          />
+          <ProjectCopyControl
+            projectId={project.id}
+            openAfter
+            onCopied={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
           />
           <ProjectRenameControl
             projectId={project.id}

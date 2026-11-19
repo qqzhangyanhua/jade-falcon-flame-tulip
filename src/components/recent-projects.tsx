@@ -6,6 +6,7 @@ import { listProjectSummariesFn } from "@/app/actions/studio";
 import { DeleteProjectControl } from "@/components/delete-project-control";
 import { OwnedImage } from "@/components/owned-image";
 import { getProjectSync } from "@/components/project-sync";
+import { ProjectCopyControl } from "@/components/project-copy-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -173,18 +174,27 @@ export function RecentProjects() {
                 </div>
               </button>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 py-1">
-                <ProjectRenameControl
-                  projectId={p.id}
-                  name={p.name}
-                  onRenamed={(next) => {
-                    setItems(
-                      (prev) =>
-                        prev?.map((item) => (item.id === p.id ? { ...item, name: next } : item)) ??
-                        prev,
-                    );
-                    window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
-                  }}
-                />
+                <div className="flex flex-wrap items-center">
+                  <ProjectRenameControl
+                    projectId={p.id}
+                    name={p.name}
+                    onRenamed={(next) => {
+                      setItems(
+                        (prev) =>
+                          prev?.map((item) =>
+                            item.id === p.id ? { ...item, name: next } : item,
+                          ) ?? prev,
+                      );
+                      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                    }}
+                  />
+                  <ProjectCopyControl
+                    projectId={p.id}
+                    onCopied={() => {
+                      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                    }}
+                  />
+                </div>
                 <DeleteProjectControl
                   projectId={p.id}
                   compact

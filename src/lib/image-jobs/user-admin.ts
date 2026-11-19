@@ -1,7 +1,7 @@
-import type { Sql } from "../db";
-import { beijingCalendarDay } from "./beijing-day";
-import { effectiveDailyCap } from "./quota";
-import type { AdminUserQuota } from "./types";
+import type { Sql } from "../db.ts";
+import { beijingCalendarDay } from "./beijing-day.ts";
+import { effectiveDailyCap } from "./quota.ts";
+import type { AdminUserQuota } from "./types.ts";
 
 type UserQuotaRow = {
   id: string;
@@ -52,7 +52,7 @@ export async function listAdminUserQuotas(
       u."id" as id,
       u."name" as name,
       u."email" as email,
-      coalesce(q.used, 0)::int as used,
+      (coalesce(q.used, 0) + coalesce(boost_today.spent, 0))::int as used,
       c.cap as user_cap,
       coalesce(b.balance, 0)::int as boost,
       case
@@ -64,6 +64,13 @@ export async function listAdminUserQuotas(
     left join user_boost_balances b on b.user_id = u."id"
     left join image_quota_days q
       on q.user_id = u."id" and q.beijing_day = ${day}::date
+    left join lateral (
+      select coalesce(sum(amount), 0) as spent
+      from user_boost_ledger
+      where user_id = u."id"
+        and kind = 'debit'
+        and (created_at at time zone 'Asia/Shanghai')::date = ${day}::date
+    ) boost_today on true
     left join lateral (
       select (extract(epoch from max(created_at)) * 1000) as last_ms
       from image_jobs
@@ -77,8 +84,8 @@ export async function listAdminUserQuotas(
     where (${userId}::text is null or u."id" = ${userId})
       and (
         ${pattern}::text is null
-        or u."name" ilike ${pattern} escape '\'
-        or u."email" ilike ${pattern} escape '\'
+        or u."name" ilike ${pattern} escape '\\'
+        or u."email" ilike ${pattern} escape '\\'
       )
     order by u."name" asc, u."email" asc
   `;

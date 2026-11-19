@@ -582,15 +582,23 @@ describe("daily quota (Beijing time)", () => {
     assert.equal(await world.roles.getRole("user-2"), "user");
   });
 
-  it("rejects a non-admin changing the global cap", async () => {
+  it("promotes the first user when they set the global cap, and still rejects a later user", async () => {
     const world = createMemoryGatewayWorld({ cap: 30 });
-    const denied = await setGlobalDailyCap(world.roles, world.quota, {
+    const changed = await setGlobalDailyCap(world.roles, world.quota, {
       userId: world.userId,
       cap: 5,
     });
+    assert.equal(changed.ok, true);
+    if (changed.ok) assert.equal(changed.cap, 5);
+    assert.equal(await world.roles.getRole(world.userId), "admin");
+
+    const denied = await setGlobalDailyCap(world.roles, world.quota, {
+      userId: "user-2",
+      cap: 9,
+    });
     assert.equal(denied.ok, false);
     if (!denied.ok) assert.equal(denied.code, "forbidden");
-    assert.equal(await world.quota.getCap(), 30);
+    assert.equal(await world.quota.getCap(), 5);
   });
 
   it("shows remaining count for today on the studio state", async () => {

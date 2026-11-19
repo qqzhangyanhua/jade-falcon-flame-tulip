@@ -32,8 +32,8 @@ import type { DnaChange } from "./project/dna.ts";
 import type { ArchiveResult, CustomSlotDraft } from "./project/ops.ts";
 import {
   DEFAULT_ENABLED_SLOT_IDS,
-  PROJECT_NAME_MAX,
   normalizeProjectDocument,
+  projectNameFromProduct,
 } from "./project/schema.ts";
 import { uid } from "./utils";
 
@@ -169,7 +169,7 @@ export const useStudio = create<State>()(
           projects: patchProject(s.projects, id, (p) => ({
             ...p,
             intent,
-            name: (intent.productName || p.name).trim().slice(0, PROJECT_NAME_MAX) || p.name,
+            name: projectNameFromProduct(p.name, intent.productName),
           })),
         }));
       },

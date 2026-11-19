@@ -1,7 +1,8 @@
-import { beijingCalendarDay } from "./beijing-day.ts";
+import { beijingCalendarDay, shiftBeijingDay } from "./beijing-day.ts";
 import { IMAGE_JOB_USER_MESSAGES } from "./errors.ts";
 import type {
   ActionAvailability,
+  BoostLedgerEntry,
   ImageJobAction,
   ImageJobErrorCode,
   StudioImageState,
@@ -111,10 +112,8 @@ export async function setGlobalDailyCap(
   quota: QuotaStore,
   input: { userId: string; cap: number },
 ): Promise<{ ok: true; cap: number } | { ok: false; code: ImageJobErrorCode }> {
-  if (!input.userId) return { ok: false, code: "unauthorized" };
-  if ((await roles.getRole(input.userId)) !== "admin") {
-    return { ok: false, code: "forbidden" };
-  }
+  const admin = await requireCapAdmin(roles, input.userId);
+  if (!admin.ok) return admin;
   const cap = normalizeDailyCap(input.cap);
   if (cap === null) return { ok: false, code: "forbidden" };
   return { ok: true, cap: await quota.setCap(cap) };
@@ -195,6 +194,19 @@ export async function grantUserBoost(
   return { ok: true, balance };
 }
 
+/** Admin read of one user's 加量包 ledger, oldest first. */
+export async function listUserBoostLedger(
+  roles: RoleStore,
+  quota: QuotaStore,
+  input: { actorId: string; userId: string },
+): Promise<{ ok: true; entries: BoostLedgerEntry[] } | { ok: false; code: ImageJobErrorCode }> {
+  const admin = await requireCapAdmin(roles, input.actorId);
+  if (!admin.ok) return admin;
+  const userId = input.userId.trim();
+  if (!userId) return { ok: false, code: "not_found" };
+  return { ok: true, entries: await quota.listBoostLedger(userId) };
+}
+
 /** How many Beijing days the account usage chart covers, including today. */
 export const IMAGE_USAGE_DAY_COUNT = 30;
 
@@ -206,11 +218,6 @@ export type ImageUsageDay = {
   /** Images spent from the 加量包 that day. Ledger debits only, not grants. */
   boost: number;
 };
-
-function shiftBeijingDay(day: string, deltaDays: number): string {
-  const noon = Date.parse(`${day}T12:00:00+08:00`);
-  return beijingCalendarDay(noon + deltaDays * 86_400_000);
-}
 
 /** Last 30 Beijing days ending on `atMs`, oldest first. Every day is present. */
 export async function listImageUsage(

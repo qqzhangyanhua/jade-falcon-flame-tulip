@@ -127,6 +127,10 @@ describe("review image list", () => {
     assert.equal(all.images.find((image) => image.id === "mid")?.reason, "不当内容");
     assert.equal(all.images.find((image) => image.id === "newer")?.hidden, false);
     assert.equal(all.images.find((image) => image.id === "newer")?.reason, null);
+    const hidden = all.images.find((image) => image.id === "mid");
+    assert.deepEqual(hidden?.events, [
+      { action: "hide", adminId: "admin-1", at: 1_700_000_000_000, reason: "不当内容" },
+    ]);
 
     const filtered = await listReviewImages(world, { actorId: "admin-1", userQuery: "user-a" });
     assert.equal(filtered.ok, true);
@@ -149,5 +153,51 @@ describe("review image list", () => {
 
     assert.equal((await unhideImage(world, { actorId: "admin-1", imageId: id })).ok, true);
     assert.equal((await readReviewImage(world, { actorId: "admin-1", imageId: id }))?.id, id);
+  });
+
+  it("returns images past the first page, including who later revoked a hide", async () => {
+    let now = 1_000;
+    const world = createMemoryGatewayWorld({
+      now: () => now,
+      roles: { "admin-1": "admin", "admin-2": "admin" },
+    });
+    for (let index = 0; index < 49; index += 1) {
+      await world.blobs.put(blob(`img_${String(index).padStart(2, "0")}`, "user-a", index, "job"));
+    }
+    assert.equal(
+      (await hideImage(world, { actorId: "admin-1", imageId: "img_00", reason: "不当内容" })).ok,
+      true,
+    );
+    now = 2_000;
+    assert.equal(
+      (await unhideImage(world, { actorId: "admin-2", imageId: "img_00" })).ok,
+      true,
+    );
+
+    const first = await listReviewImages(world, { actorId: "admin-1", userQuery: "" });
+    assert.equal(first.ok, true);
+    if (!first.ok) return;
+    assert.equal(first.images.length, 48);
+    assert.equal(first.images[0]?.id, "img_48");
+    assert.equal(
+      first.images.some((image) => image.id === "img_00"),
+      false,
+    );
+
+    const second = await listReviewImages(world, {
+      actorId: "admin-1",
+      userQuery: "",
+      offset: 48,
+    });
+    assert.equal(second.ok, true);
+    if (!second.ok) return;
+    assert.deepEqual(
+      second.images.map((image) => image.id),
+      ["img_00"],
+    );
+    assert.deepEqual(second.images[0]?.events, [
+      { action: "hide", adminId: "admin-1", at: 1_000, reason: "不当内容" },
+      { action: "unhide", adminId: "admin-2", at: 2_000, reason: null },
+    ]);
   });
 });

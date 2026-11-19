@@ -176,8 +176,10 @@ export type BoostLedgerEntry = {
   at: number;
   /** Granting admin. Null on a debit, which has no admin. */
   adminId: string | null;
-  /** Admin remark on a grant. Image job id on a debit. */
-  note: string;
+  /** Admin remark. Set on a grant; null on a debit. */
+  remark: string | null;
+  /** Image job id. Set on a debit; null on a grant. */
+  jobId: string | null;
 };
 
 /** One row of the admin user list. `cap` is the effective daily cap. */

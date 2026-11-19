@@ -16,7 +16,7 @@ export type AdminModelStatDto = {
   catalogModelId: string;
   displayName: string;
   jobCount: number;
-  failureRate: number;
+  failureRate: number | null;
   p50Ms: number | null;
   p90Ms: number | null;
   /** Decimal ticks, or null when no job in the group has a fee. */

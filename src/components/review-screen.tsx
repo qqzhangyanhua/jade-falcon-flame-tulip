@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { imageJobErrorCode, messageForImageJobError } from "@/lib/image-jobs";
-import { HIDE_REASON_MAX, type ReviewImage } from "@/lib/image-jobs/image-hide";
+import { HIDE_REASON_MAX, REVIEW_IMAGE_LIMIT, type ReviewImage } from "@/lib/image-jobs/image-hide";
 import type { StudioRole } from "@/lib/image-jobs/types";
 import { formatJobTime } from "@/lib/open-from-job";
 
@@ -39,18 +39,28 @@ export function ReviewScreen() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [applied, setApplied] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const generation = useRef(0);
 
   const load = useCallback((userQuery: string) => {
+    const ticket = ++generation.current;
     setLoading(true);
-    return listReviewImagesFn({ data: { userQuery } })
+    setLoadingMore(false);
+    return listReviewImagesFn({ data: { userQuery, offset: 0 } })
       .then((payload) => {
+        if (ticket !== generation.current) return;
         setRole(payload.role);
         setImages(payload.images);
+        setHasMore(payload.images.length >= REVIEW_IMAGE_LIMIT);
       })
       .catch((err) => {
+        if (ticket !== generation.current) return;
         toast.error(reviewError(err));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (ticket === generation.current) setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -150,19 +160,48 @@ export function ReviewScreen() {
                 {applied ? "没有符合的图片。" : "还没有生成的图片。"}
               </p>
             ) : (
-              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {images.map((image) => (
-                  <li key={image.id}>
-                    <ReviewCard
-                      image={image}
-                      onChanged={() => {
-                        window.dispatchEvent(new Event(HIDDEN_IMAGES_CHANGED_EVENT));
-                        void load(applied);
-                      }}
-                    />
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {images.map((image) => (
+                    <li key={image.id}>
+                      <ReviewCard
+                        image={image}
+                        onChanged={() => {
+                          window.dispatchEvent(new Event(HIDDEN_IMAGES_CHANGED_EVENT));
+                          void load(applied);
+                        }}
+                      />
+                    </li>
+                  ))}
+                </ul>
+                {hasMore ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={loadingMore}
+                    onClick={() => {
+                      const ticket = generation.current;
+                      const offset = images.length;
+                      setLoadingMore(true);
+                      void listReviewImagesFn({ data: { userQuery: applied, offset } })
+                        .then((payload) => {
+                          if (ticket !== generation.current) return;
+                          setImages((current) => [...current, ...payload.images]);
+                          setHasMore(payload.images.length >= REVIEW_IMAGE_LIMIT);
+                        })
+                        .catch((err) => {
+                          if (ticket !== generation.current) return;
+                          toast.error(reviewError(err));
+                        })
+                        .finally(() => {
+                          if (ticket === generation.current) setLoadingMore(false);
+                        });
+                    }}
+                  >
+                    {loadingMore ? "加载中…" : "加载更多"}
+                  </Button>
+                ) : null}
+              </>
             )}
           </>
         )}
@@ -197,8 +236,19 @@ function ReviewCard({ image, onChanged }: { image: ReviewImage; onChanged: () =>
           <p className="truncate text-sm text-fg">{userLabel(image)}</p>
           <p className="truncate font-mono text-xs text-subtle">{image.userId}</p>
           <p className="mt-1 text-xs text-subtle">{formatJobTime(image.createdAt)}</p>
-          {image.hidden && image.reason ? (
-            <p className="mt-2 text-sm leading-relaxed text-muted">原因：{image.reason}</p>
+          {image.events.length > 0 ? (
+            <ul className="mt-2 flex flex-col gap-1">
+              {image.events.map((event, index) => (
+                <li key={`${event.at}-${event.action}-${index}`} className="text-sm leading-relaxed text-muted">
+                  <span className="text-fg">{event.action === "hide" ? "隐藏" : "撤销"}</span>
+                  {" "}
+                  <span className="font-mono text-xs text-subtle">{event.adminId}</span>
+                  {" "}
+                  <span className="text-xs text-subtle">{formatJobTime(event.at)}</span>
+                  {event.action === "hide" && event.reason ? <span> · 原因：{event.reason}</span> : null}
+                </li>
+              ))}
+            </ul>
           ) : null}
         </div>
         {image.hidden ? (

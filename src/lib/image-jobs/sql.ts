@@ -537,6 +537,7 @@ export function createSqlJobStore(sql: Sql): ImageJobStore {
             returning user_id
           ),
           debited as (
+            -- Column note on a debit is the image job id, not an admin remark.
             insert into user_boost_ledger (
               user_id, kind, amount, created_at, admin_id, note
             )
@@ -775,6 +776,11 @@ export function createSqlHideAudit(sql: Sql): ImageHideAuditStore {
   };
 }
 
+function listOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) return 0;
+  return offset;
+}
+
 export function createSqlBlobStore(sql: Sql): ImageBlobStore {
   return {
     async put(record) {
@@ -829,9 +835,10 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
       `;
       return Boolean(rows[0]);
     },
-    async listGenerated({ query, limit }) {
+    async listGenerated({ query, limit, offset }) {
       const trimmed = query.trim();
       const pattern = `%${trimmed.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+      const start = listOffset(offset);
       const rows = await sql<ReviewBlobRow>`
         select
           b.id,
@@ -853,6 +860,7 @@ export function createSqlBlobStore(sql: Sql): ImageBlobStore {
           )
         order by b.created_at desc, b.id desc
         limit ${limit}
+        offset ${start}
       `;
       return rows.map(toReviewImage);
     },

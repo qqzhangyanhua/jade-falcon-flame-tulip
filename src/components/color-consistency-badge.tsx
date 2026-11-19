@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { HiddenImagePlaceholder, useImageHidden } from "@/components/owned-image";
+import { HiddenImagePlaceholder, useOwnedImageFrame } from "@/components/owned-image";
 import { Button } from "@/components/ui/button";
 import { consistencyScore, type RgbPixel } from "@/lib/project/dna-export";
 import { cn } from "@/lib/utils";
@@ -33,11 +33,11 @@ function samplePixels(image: HTMLImageElement): RgbPixel[] {
 }
 
 function useConsistencyScore(url: string, paletteKey: string): number | null {
-  const hidden = useImageHidden(url);
+  const frame = useOwnedImageFrame(url);
   const [score, setScore] = useState<number | null>(null);
 
   useEffect(() => {
-    if (hidden) {
+    if (frame !== "image") {
       setScore(null);
       return;
     }
@@ -66,7 +66,7 @@ function useConsistencyScore(url: string, paletteKey: string): number | null {
     return () => {
       cancelled = true;
     };
-  }, [url, paletteKey, hidden]);
+  }, [url, paletteKey, frame]);
 
   return score;
 }
@@ -214,8 +214,11 @@ export function ConsistencyImage(props: {
   disabled?: boolean;
   disabledReason?: string | null;
 }) {
-  const hidden = useImageHidden(props.url);
-  if (hidden) return <HiddenImagePlaceholder className="h-full min-h-48 w-full" />;
+  const frame = useOwnedImageFrame(props.url);
+  if (frame === "pending") {
+    return <div aria-hidden className="h-full min-h-48 w-full bg-surface-2" />;
+  }
+  if (frame === "hidden") return <HiddenImagePlaceholder className="h-full min-h-48 w-full" />;
   return <ConsistencyImageFrame {...props} />;
 }
 

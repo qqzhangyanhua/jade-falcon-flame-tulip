@@ -120,7 +120,12 @@ export type ImageBlobStore = {
    * Generated images only (`kind = job`), newest first.
    * `query` matches user id, and in SQL also name or email. Empty query lists everyone.
    */
-  listGenerated: (input: { query: string; limit: number }) => Promise<GeneratedImageRow[]>;
+  listGenerated: (input: {
+    query: string;
+    limit: number;
+    /** Skip this many newest rows. Missing, negative, or non-integer means 0. */
+    offset?: number;
+  }) => Promise<GeneratedImageRow[]>;
   /** Hidden image ids owned by this user. No bytes. */
   listHiddenIds: (userId: string) => Promise<string[]>;
 };

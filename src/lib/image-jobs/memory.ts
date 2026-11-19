@@ -185,7 +185,8 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
         amount: input.amount,
         at: input.at,
         adminId: input.adminId,
-        note: input.note,
+        remark: input.note,
+        jobId: null,
       });
       return next;
     },
@@ -228,7 +229,8 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
         amount: 1,
         at: record.createdAt,
         adminId: null,
-        note: record.id,
+        remark: null,
+        jobId: record.id,
       });
       return true;
     },
@@ -328,6 +330,11 @@ export function createMemoryHideAudit(): ImageHideAuditStore {
   };
 }
 
+function listOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) return 0;
+  return offset;
+}
+
 export function createMemoryBlobs(): ImageBlobStore {
   const blobs = new Map<string, ImageBlobRecord>();
   return {
@@ -351,13 +358,14 @@ export function createMemoryBlobs(): ImageBlobStore {
       blob.hidden = hidden;
       return true;
     },
-    async listGenerated({ query, limit }) {
+    async listGenerated({ query, limit, offset }) {
       const q = query.trim().toLowerCase();
+      const start = listOffset(offset);
       return [...blobs.values()]
         .filter((blob) => blob.kind === "job")
         .filter((blob) => !q || blob.userId.toLowerCase().includes(q))
         .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
-        .slice(0, limit)
+        .slice(start, start + limit)
         .map((blob) => ({
           id: blob.id,
           userId: blob.userId,

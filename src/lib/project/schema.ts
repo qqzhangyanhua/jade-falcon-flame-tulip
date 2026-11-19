@@ -19,6 +19,12 @@ export function parseProjectName(raw: string): { ok: true; name: string } | { ok
   return { ok: true, name };
 }
 
+/** Product name copied onto a project. A blank product name keeps the current name. Rename cap does not apply. */
+export function projectNameFromProduct(currentName: string, productName: string): string {
+  const trimmed = productName.trim();
+  return trimmed || currentName;
+}
+
 export function parseProjectTag(raw: string): { ok: true; tag: string } | { ok: false } {
   const tag = raw.trim();
   if (!tag || tag.length > PROJECT_TAG_MAX_LENGTH) return { ok: false };
@@ -120,7 +126,8 @@ export type BriefIntent = z.infer<typeof briefIntentSchema>;
  */
 const projectDocumentObject = z.object({
   id: z.string(),
-  name: z.string().trim().min(1).max(PROJECT_NAME_MAX),
+  // Rename rejects names past PROJECT_NAME_MAX. A stored document may be longer.
+  name: z.string().trim().min(1),
   brief: z.string(),
   // Image bytes live in image_blobs; the document only holds an /api/images/<id> address.
   prototypeDataUrl: z
@@ -201,11 +208,7 @@ export function normalizeProjectDocument<T>(input: T): T {
     : input.styles;
   const customSlots = input.customSlots === undefined ? [] : input.customSlots;
   const tags = normalizeTags(input.tags);
-  // A product name copied onto the project can be longer than the rename cap.
-  // Shorten it here so an older document can still be saved; rename itself rejects overflow.
-  const name =
-    typeof input.name === "string" ? input.name.trim().slice(0, PROJECT_NAME_MAX) : input.name;
-  return { ...input, name, enabledSlotIds, currentSlot, styles, customSlots, tags };
+  return { ...input, enabledSlotIds, currentSlot, styles, customSlots, tags };
 }
 
 /** Missing tags become none. Repeated tags, including ones that differ only by surrounding spaces, collapse. */
@@ -268,9 +271,20 @@ export function imageIdFromUrl(url: string): string | null {
     }
   }
   if (!path.startsWith(DURABLE_IMAGE_PATH_PREFIX)) return null;
-  const id = path.slice(DURABLE_IMAGE_PATH_PREFIX.length);
-  if (!id || id.includes("/") || id.includes("..")) return null;
+  const raw = path.slice(DURABLE_IMAGE_PATH_PREFIX.length);
+  if (!isImageIdSegment(raw)) return null;
+  let id: string;
+  try {
+    id = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  if (!isImageIdSegment(id)) return null;
   return id;
+}
+
+function isImageIdSegment(id: string): boolean {
+  return Boolean(id) && id !== "/" && !id.includes("/") && !id.includes("..");
 }
 
 /**

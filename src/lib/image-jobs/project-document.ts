@@ -1,9 +1,11 @@
 import {
+  PROJECT_NAME_MAX,
   PROJECT_TAG_MAX_COUNT,
   parseProjectName,
   parseProjectTag,
   projectDocumentSchema,
 } from "../project/schema.ts";
+import { newEntityId } from "./ids.ts";
 import { loadOwnedProject, type ProjectOpResult } from "./projects.ts";
 import type { ImageJobGatewayDeps } from "./stores.ts";
 import type { ProjectDocumentSnapshot } from "./types.ts";
@@ -11,7 +13,16 @@ import type { ProjectDocumentSnapshot } from "./types.ts";
 /** Whole-document saves carry every style rev and image rev, so cap what one row can hold. */
 export const MAX_PROJECT_DOCUMENT_BYTES = 2 * 1024 * 1024;
 
-type DocumentDeps = Pick<ImageJobGatewayDeps, "projects" | "now">;
+/** Appended to the source name. Kept whole even when the source name is already at the cap. */
+const COPY_SUFFIX = " 副本";
+
+type DocumentDeps = Pick<ImageJobGatewayDeps, "projects" | "now" | "newId">;
+
+function copyProjectName(sourceName: string): string {
+  const next = `${sourceName}${COPY_SUFFIX}`;
+  if (next.length <= PROJECT_NAME_MAX) return next;
+  return `${sourceName.slice(0, PROJECT_NAME_MAX - COPY_SUFFIX.length)}${COPY_SUFFIX}`;
+}
 
 export async function loadProjectDocument(
   deps: DocumentDeps,
@@ -126,6 +137,40 @@ export async function removeProjectTag(
     ok: true,
     value: { tags, version: saved.value.version, updatedAt: saved.value.updatedAt },
   };
+}
+
+export async function copyProject(
+  deps: DocumentDeps,
+  input: { userId: string; projectId: string },
+): Promise<ProjectOpResult<{ id: string; name: string; version: number }>> {
+  const loaded = await loadOwnedProject(deps.projects, input);
+  if (!loaded.ok) return loaded;
+
+  const snapshot = await deps.projects.getDocument(loaded.value.id);
+  if (!snapshot?.document) return { ok: false, code: "not_found" };
+
+  const name = copyProjectName(snapshot.document.name);
+  const id = deps.newId?.("prj") ?? newEntityId("prj");
+  const document = structuredClone(snapshot.document);
+  document.id = id;
+  document.name = name;
+
+  await deps.projects.create({
+    id,
+    userId: loaded.value.userId,
+    currentImageModelId: loaded.value.currentImageModelId,
+    createdAt: deps.now?.() ?? Date.now(),
+    deletedAt: null,
+  });
+
+  const saved = await saveProjectDocument(deps, {
+    userId: input.userId,
+    projectId: id,
+    document,
+    expectedVersion: 0,
+  });
+  if (!saved.ok) return saved;
+  return { ok: true, value: { id, name, version: saved.value.version } };
 }
 
 export async function saveProjectDocument(

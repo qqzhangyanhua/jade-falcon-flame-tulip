@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { listProjectSummariesFn } from "@/app/actions/studio";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { OwnedImage } from "@/components/owned-image";
 import { getProjectSync } from "@/components/project-sync";
+import { ProjectCopyControl } from "@/components/project-copy-control";
 import { ProjectRenameControl } from "@/components/project-rename-control";
 import { ProjectTagControl, ProjectTagFilter } from "@/components/project-tag-control";
 import { Button } from "@/components/ui/button";
@@ -160,7 +162,12 @@ export function RecentProjects() {
               >
                 <div className="aspect-video overflow-hidden bg-surface-2">
                   {p.coverUrl ? (
-                    <img src={p.coverUrl} alt="" className="frame size-full object-cover" />
+                    <OwnedImage
+                      src={p.coverUrl}
+                      alt=""
+                      className="frame size-full object-cover"
+                      placeholderClassName="size-full"
+                    />
                   ) : (
                     <div className="flex size-full items-center justify-center text-xs text-subtle">
                       尚未出图
@@ -190,18 +197,27 @@ export function RecentProjects() {
                 />
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 py-1">
-                <ProjectRenameControl
-                  projectId={p.id}
-                  name={p.name}
-                  onRenamed={(next) => {
-                    setItems(
-                      (prev) =>
-                        prev?.map((item) => (item.id === p.id ? { ...item, name: next } : item)) ??
-                        prev,
-                    );
-                    window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
-                  }}
-                />
+                <div className="flex flex-wrap items-center">
+                  <ProjectRenameControl
+                    projectId={p.id}
+                    name={p.name}
+                    onRenamed={(next) => {
+                      setItems(
+                        (prev) =>
+                          prev?.map((item) =>
+                            item.id === p.id ? { ...item, name: next } : item,
+                          ) ?? prev,
+                      );
+                      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                    }}
+                  />
+                  <ProjectCopyControl
+                    projectId={p.id}
+                    onCopied={() => {
+                      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                    }}
+                  />
+                </div>
                 <DeleteProjectControl
                   projectId={p.id}
                   compact

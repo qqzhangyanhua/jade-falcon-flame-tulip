@@ -14,25 +14,41 @@ export const DEFAULT_DAILY_IMAGE_CAP = 30;
 export const DAILY_IMAGE_CAP_SETTING_KEY = "daily_image_cap";
 export const DAILY_IMAGE_CAP_MAX = 9999;
 
-export function emptyQuota(cap: number, beijingDay: string): StudioQuota {
+export function emptyQuota(cap: number, beijingDay: string, boost = 0): StudioQuota {
   const safeCap = Math.max(0, cap);
   return {
     cap: safeCap,
     used: 0,
     remaining: safeCap,
+    boost: Math.max(0, boost),
     beijingDay,
   };
 }
 
-export function quotaFromParts(cap: number, used: number, beijingDay: string): StudioQuota {
+export function quotaFromParts(
+  cap: number,
+  used: number,
+  beijingDay: string,
+  boost = 0,
+): StudioQuota {
   const safeCap = Math.max(0, cap);
   const safeUsed = Math.max(0, used);
   return {
     cap: safeCap,
     used: safeUsed,
     remaining: Math.max(0, safeCap - safeUsed),
+    boost: Math.max(0, boost),
     beijingDay,
   };
+}
+
+/** Today's remaining plus the non-expiring 加量包. */
+export function quotaSpendable(quota: Pick<StudioQuota, "remaining" | "boost">): number {
+  return Math.max(0, quota.remaining) + Math.max(0, quota.boost);
+}
+
+export function quotaExhausted(quota: Pick<StudioQuota, "remaining" | "boost">): boolean {
+  return quotaSpendable(quota) <= 0;
 }
 
 function overlayQuota(
@@ -47,7 +63,7 @@ export function applyQuotaToStudioState(
   state: StudioImageState,
   quota: StudioQuota,
 ): StudioImageState {
-  if (quota.remaining > 0) return { ...state, quota };
+  if (!quotaExhausted(quota)) return { ...state, quota };
   const blocked: ActionAvailability = {
     enabled: false,
     code: "quota_exceeded",
@@ -142,4 +158,41 @@ export async function clearUserDailyCap(
   if (!userId) return { ok: false, code: "not_found" };
   await quota.clearUserCap(userId);
   return { ok: true };
+}
+
+export const BOOST_GRANT_MAX = DAILY_IMAGE_CAP_MAX;
+export const BOOST_NOTE_MAX = 200;
+
+export function normalizeBoostGrant(value: number): number | null {
+  if (!Number.isInteger(value) || value < 1 || value > BOOST_GRANT_MAX) return null;
+  return value;
+}
+
+export function normalizeBoostNote(note: string): string | null {
+  const trimmed = note.trim();
+  if (!trimmed || trimmed.length > BOOST_NOTE_MAX) return null;
+  return trimmed;
+}
+
+export async function grantUserBoost(
+  roles: RoleStore,
+  quota: QuotaStore,
+  input: { actorId: string; userId: string; amount: number; note: string; at?: number },
+): Promise<{ ok: true; balance: number } | { ok: false; code: ImageJobErrorCode }> {
+  const admin = await requireCapAdmin(roles, input.actorId);
+  if (!admin.ok) return admin;
+  const userId = input.userId.trim();
+  if (!userId) return { ok: false, code: "not_found" };
+  const amount = normalizeBoostGrant(input.amount);
+  if (amount === null) return { ok: false, code: "forbidden" };
+  const note = normalizeBoostNote(input.note);
+  if (note === null) return { ok: false, code: "forbidden" };
+  const balance = await quota.addBoost({
+    userId,
+    amount,
+    adminId: input.actorId,
+    note,
+    at: input.at ?? Date.now(),
+  });
+  return { ok: true, balance };
 }

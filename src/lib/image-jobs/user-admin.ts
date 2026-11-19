@@ -9,6 +9,7 @@ type UserQuotaRow = {
   email: string;
   used: number | string;
   user_cap: number | string | null;
+  boost: number | string | null;
   last_active_ms: number | string | null;
 };
 
@@ -34,6 +35,7 @@ function toAdminUser(row: UserQuotaRow, globalCap: number): AdminUserQuota {
     used: finiteNumber(row.used) ?? 0,
     cap: effectiveDailyCap(globalCap, userCap),
     userCap,
+    boost: finiteNumber(row.boost) ?? 0,
     lastActiveAt: lastActiveAt === null ? null : Math.round(lastActiveAt),
   };
 }
@@ -52,12 +54,14 @@ export async function listAdminUserQuotas(
       u."email" as email,
       coalesce(q.used, 0)::int as used,
       c.cap as user_cap,
+      coalesce(b.balance, 0)::int as boost,
       case
         when j.last_ms is null and s.last_ms is null then null
         else greatest(coalesce(j.last_ms, 0), coalesce(s.last_ms, 0))
       end as last_active_ms
     from "user" u
     left join user_daily_caps c on c.user_id = u."id"
+    left join user_boost_balances b on b.user_id = u."id"
     left join image_quota_days q
       on q.user_id = u."id" and q.beijing_day = ${day}::date
     left join lateral (

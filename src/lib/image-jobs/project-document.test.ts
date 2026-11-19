@@ -5,12 +5,14 @@ import { deleteStudioProject } from "./projects.ts";
 import {
   MAX_PROJECT_DOCUMENT_BYTES,
   addProjectTag,
+  copyProject,
   loadProjectDocument,
   removeProjectTag,
   renameProject,
   saveProjectDocument,
 } from "./project-document.ts";
-import { sampleProject } from "../project/fixtures.ts";
+import { sampleProject, sampleStyle } from "../project/fixtures.ts";
+import { emptyAssets } from "../project/schema.ts";
 
 function documentFor(projectId: string, patch: Record<string, unknown> = {}) {
   const { mode: _mode, ...rest } = sampleProject({ id: projectId });
@@ -344,6 +346,193 @@ describe("project document: tags", () => {
       await removeProjectTag(world, { userId: "", projectId: world.projectId, tag: "客户" }),
       { ok: false, code: "unauthorized" },
     );
+  });
+});
+
+describe("project document: copy", () => {
+  it("creates a new project for the same owner, named '<原名> 副本', keeping the current image model", async () => {
+    const { world, save, load } = setup(5_000);
+    await world.projects.updateCurrentModel(world.projectId, "mdl-kept");
+    await save(documentFor(world.projectId, { name: "茶空间", currentImageModelId: "mdl-doc" }), 0);
+    const quotaBefore = await world.quota.snapshot(world.userId, 5_000);
+    const copied = await copyProject(
+      { ...world, newId: () => "prj_copy" },
+      { userId: world.userId, projectId: world.projectId },
+    );
+    assert.deepEqual(copied, {
+      ok: true,
+      value: { id: "prj_copy", name: "茶空间 副本", version: 1 },
+    });
+    const row = await world.projects.get("prj_copy");
+    assert.equal(row?.userId, world.userId);
+    assert.equal(row?.currentImageModelId, "mdl-kept");
+    assert.equal(row?.deletedAt, null);
+    const source = await load();
+    assert.equal(source.ok && source.value.document?.name, "茶空间");
+    assert.equal(source.ok && source.value.version, 1);
+    const opened = await load(world.userId, "prj_copy");
+    assert.equal(opened.ok && opened.value.document?.name, "茶空间 副本");
+    assert.equal(opened.ok && opened.value.document?.currentImageModelId, "mdl-doc");
+    assert.deepEqual(await world.quota.snapshot(world.userId, 5_000), quotaBefore);
+    assert.deepEqual(world.calls, []);
+    assert.deepEqual(await world.jobs.listByUser(world.userId), []);
+  });
+
+  it("deep-copies the document so editing the copy leaves the source and its image ids alone", async () => {
+    const { world, save, load } = setup();
+    const assets = emptyAssets();
+    assets.kv = {
+      slot: "kv",
+      adoptedId: "img_kv",
+      revs: [
+        {
+          id: "img_kv",
+          parentId: null,
+          url: "/api/images/img_kv",
+          createdAt: 1,
+          action: "generate",
+          diff: "",
+          writeback: "none",
+          styleRev: 1,
+        },
+      ],
+    };
+    await save(
+      documentFor(world.projectId, {
+        name: "茶空间",
+        brief: "原文",
+        prototypeDataUrl: "/api/images/wire",
+        referenceImageUrls: ["/api/images/ref"],
+        styles: [
+          sampleStyle("a", {
+            status: "active",
+            candidateUrl: "/api/images/preview_a",
+            assets,
+          }),
+        ],
+      }),
+      0,
+    );
+    const copied = await copyProject(
+      { ...world, newId: () => "prj_copy" },
+      { userId: world.userId, projectId: world.projectId },
+    );
+    assert.equal(copied.ok, true);
+
+    const opened = await load(world.userId, "prj_copy");
+    assert.equal(opened.ok, true);
+    if (!opened.ok || !opened.value.document) return;
+    const copyDoc = opened.value.document;
+    assert.equal(copyDoc.id, "prj_copy");
+    assert.equal(copyDoc.prototypeDataUrl, "/api/images/wire");
+    assert.deepEqual(copyDoc.referenceImageUrls, ["/api/images/ref"]);
+    assert.equal(copyDoc.styles[0]?.candidateUrl, "/api/images/preview_a");
+    assert.equal(copyDoc.styles[0]?.assets.kv?.revs[0]?.id, "img_kv");
+    assert.equal(copyDoc.styles[0]?.assets.kv?.revs[0]?.url, "/api/images/img_kv");
+    assert.equal(copyDoc.styles[0]?.assets.kv?.adoptedId, "img_kv");
+
+    const edited = {
+      ...copyDoc,
+      brief: "改过的副本",
+      prototypeDataUrl: "/api/images/other-wire",
+      styles: copyDoc.styles.map((style, index) =>
+        index === 0
+          ? {
+              ...style,
+              name: "被改的风格",
+              candidateUrl: "/api/images/other-preview",
+              assets: {
+                ...style.assets,
+                kv: {
+                  ...style.assets.kv!,
+                  adoptedId: "img_other",
+                  revs: style.assets.kv!.revs.map((rev) => ({
+                    ...rev,
+                    id: "img_other",
+                    url: "/api/images/other",
+                  })),
+                },
+              },
+            }
+          : style,
+      ),
+    };
+    const saved = await save(edited, opened.value.version, world.userId, "prj_copy");
+    assert.equal(saved.ok, true);
+
+    const source = await load();
+    assert.equal(source.ok, true);
+    if (!source.ok || !source.value.document) return;
+    assert.equal(source.value.document.name, "茶空间");
+    assert.equal(source.value.document.brief, "原文");
+    assert.equal(source.value.document.prototypeDataUrl, "/api/images/wire");
+    assert.deepEqual(source.value.document.referenceImageUrls, ["/api/images/ref"]);
+    assert.equal(source.value.document.styles[0]?.name, "风格 a");
+    assert.equal(source.value.document.styles[0]?.candidateUrl, "/api/images/preview_a");
+    assert.equal(source.value.document.styles[0]?.assets.kv?.adoptedId, "img_kv");
+    assert.equal(source.value.document.styles[0]?.assets.kv?.revs[0]?.id, "img_kv");
+    assert.equal(source.value.document.styles[0]?.assets.kv?.revs[0]?.url, "/api/images/img_kv");
+    assert.equal(source.value.version, 1);
+  });
+
+  it("rejects copying someone else's project and leaves it unchanged", async () => {
+    const { world, save, load } = setup();
+    await save(documentFor(world.projectId, { name: "茶空间" }), 0);
+    assert.deepEqual(
+      await copyProject(
+        { ...world, newId: () => "prj_stolen" },
+        { userId: "someone-else", projectId: world.projectId },
+      ),
+      { ok: false, code: "forbidden" },
+    );
+    assert.equal(await world.projects.get("prj_stolen"), null);
+    const source = await load();
+    assert.equal(source.ok && source.value.document?.name, "茶空间");
+    assert.equal(source.ok && source.value.version, 1);
+  });
+
+  it("rejects a deleted project", async () => {
+    const { world, save } = setup();
+    await save(documentFor(world.projectId, { name: "茶空间" }), 0);
+    await deleteStudioProject(world, { userId: world.userId, projectId: world.projectId });
+    assert.deepEqual(
+      await copyProject(
+        { ...world, newId: () => "prj_ghost" },
+        { userId: world.userId, projectId: world.projectId },
+      ),
+      { ok: false, code: "project_deleted" },
+    );
+    assert.equal(await world.projects.get("prj_ghost"), null);
+  });
+
+  it("rejects a missing project and a project with no document", async () => {
+    const { world } = setup();
+    assert.deepEqual(await copyProject(world, { userId: world.userId, projectId: "prj_nope" }), {
+      ok: false,
+      code: "not_found",
+    });
+    assert.deepEqual(
+      await copyProject(world, { userId: world.userId, projectId: world.projectId }),
+      { ok: false, code: "not_found" },
+    );
+  });
+
+  it("keeps the 副本 suffix when the source name is already 40 characters", async () => {
+    const { world, save, load } = setup();
+    const sourceName = "名".repeat(40);
+    await save(documentFor(world.projectId, { name: sourceName }), 0);
+    const copied = await copyProject(
+      { ...world, newId: () => "prj_long" },
+      { userId: world.userId, projectId: world.projectId },
+    );
+    assert.equal(copied.ok, true);
+    if (!copied.ok) return;
+    assert.equal(copied.value.name, `${"名".repeat(37)} 副本`);
+    assert.equal(copied.value.name.length, 40);
+    const opened = await load(world.userId, "prj_long");
+    assert.equal(opened.ok && opened.value.document?.name, `${"名".repeat(37)} 副本`);
+    const source = await load();
+    assert.equal(source.ok && source.value.document?.name, sourceName);
   });
 });
 

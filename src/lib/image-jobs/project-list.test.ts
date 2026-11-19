@@ -8,7 +8,11 @@ import {
   listUsedProjectTags,
   PROJECT_SUMMARY_LIMIT,
 } from "./project-list.ts";
-import { loadProjectDocument, saveProjectDocument } from "./project-document.ts";
+import {
+  copyProject,
+  loadProjectDocument,
+  saveProjectDocument,
+} from "./project-document.ts";
 import { emptyAssets } from "../project/schema.ts";
 import { sampleProject, sampleStyle } from "../project/fixtures.ts";
 
@@ -433,6 +437,54 @@ describe("listUsedProjectTags", () => {
       ok: false,
       code: "unauthorized",
     });
+  });
+});
+
+describe("copyProject in the list", () => {
+  it("shows the copy in the list so it can be opened, and editing it leaves the source", async () => {
+    const world = createMemoryGatewayWorld({ now: () => 9_000 });
+    await seedProject(world, "src", 1_000, { name: "茶空间", brief: "原文", createdAt: 50 });
+    const copied = await copyProject(
+      { ...world, newId: () => "prj_copy" },
+      { userId: world.userId, projectId: "src" },
+    );
+    assert.deepEqual(copied, {
+      ok: true,
+      value: { id: "prj_copy", name: "茶空间 副本", version: 1 },
+    });
+
+    const listed = page(await listProjectSummaries(world, { userId: world.userId }));
+    const copyRow = listed.items.find((item) => item.id === "prj_copy");
+    assert.ok(copyRow);
+    assert.equal(copyRow.name, "茶空间 副本");
+    assert.equal(
+      listed.items.some((item) => item.id === "src" && item.name === "茶空间"),
+      true,
+    );
+
+    const opened = await loadProjectDocument(world, {
+      userId: world.userId,
+      projectId: "prj_copy",
+    });
+    assert.equal(opened.ok, true);
+    if (!opened.ok || !opened.value.document) return;
+    assert.equal(opened.value.document.name, "茶空间 副本");
+    assert.equal(opened.value.document.brief, "原文");
+
+    const edited = await saveProjectDocument(world, {
+      userId: world.userId,
+      projectId: "prj_copy",
+      document: { ...opened.value.document, brief: "只改副本" },
+      expectedVersion: opened.value.version,
+    });
+    assert.equal(edited.ok, true);
+
+    const source = await loadProjectDocument(world, { userId: world.userId, projectId: "src" });
+    assert.equal(source.ok && source.value.document?.name, "茶空间");
+    assert.equal(source.ok && source.value.document?.brief, "原文");
+    const owner = await world.projects.get("prj_copy");
+    assert.equal(owner?.userId, world.userId);
+    assert.equal(owner?.currentImageModelId, "m");
   });
 });
 

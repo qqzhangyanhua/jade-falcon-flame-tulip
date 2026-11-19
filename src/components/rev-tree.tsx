@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { OwnedImage } from "@/components/owned-image";
 import type { ImageRev } from "@/lib/types";
 import { revTree, type RevTreeNode } from "@/lib/project/ops";
 import { cn } from "@/lib/utils";
@@ -120,7 +121,12 @@ function RevNode({
         aria-label={`${action}，rev${rev.styleRev}${adopted ? "，已采用" : ""}`}
         onClick={() => onInspect(inspecting ? null : rev.id)}
       >
-        <img src={rev.url} alt="" className="frame h-20 w-full rounded-sm object-cover" />
+        <OwnedImage
+          src={rev.url}
+          alt=""
+          className="frame h-20 w-full rounded-sm object-cover"
+          placeholderClassName="h-20 w-full rounded-sm px-1 text-center text-xs leading-tight"
+        />
         <span className="px-1 pt-1 text-xs text-fg">{action}</span>
         <span className="px-1 pb-1 text-xs text-subtle">rev{rev.styleRev}</span>
         {adopted ? (

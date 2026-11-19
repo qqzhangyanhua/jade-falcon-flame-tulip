@@ -8,6 +8,7 @@ import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
 import {
   addProjectTag,
+  copyProject,
   loadProjectDocument,
   removeProjectTag,
   renameProject,
@@ -35,6 +36,7 @@ import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "@/lib/i
 import {
   createSqlBlobStore,
   createSqlCatalogStore,
+  createSqlHideAudit,
   createSqlJobStore,
   createSqlProjectStore,
   createSqlRevStore,
@@ -65,6 +67,7 @@ async function createSqlGatewayDeps(): Promise<ImageJobGatewayDeps> {
     jobs: createSqlJobStore(sql),
     revs: createSqlRevStore(sql),
     blobs: createSqlBlobStore(sql),
+    audit: createSqlHideAudit(sql),
     quota: createSqlQuotaStore(sql),
     roles: createSqlRoleStore(sql),
     upstream: createXaiImageUpstream(),
@@ -522,6 +525,15 @@ export async function removeProjectTagFn(input: {
     projectId: ctx.projectId,
     tag: input.data.tag,
   });
+}
+
+export async function copyProjectFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<{ id: string; name: string; version: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return copyProject(deps, { userId: ctx.userId, projectId: ctx.projectId });
 }
 
 export async function renameProjectFn(input: {

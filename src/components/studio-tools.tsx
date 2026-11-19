@@ -5,6 +5,13 @@ import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select";
 import { RangeSlider } from "@/components/ui/slider";
 import type { StudioImageState } from "@/lib/image-jobs";
+import {
+  canSubmitCopyRewrite,
+  canSubmitTuneInstruction,
+  copyRewriteInstruction,
+  mergeTuneInstruction,
+  TUNE_INSTRUCTION_MAX_LENGTH,
+} from "@/lib/prompts";
 import { customSlotIssue, type CustomSlotDraft } from "@/lib/project/ops";
 import { SUPPORTED_ASPECTS } from "@/lib/project/slots";
 import type { Slot } from "@/lib/types";
@@ -48,21 +55,8 @@ export const TUNE_PRESETS = [
   },
 ];
 
-export function sliderInstruction(sliders: {
-  brightness: number;
-  warmth: number;
-  contrast: number;
-}): string {
-  const bits: string[] = [];
-  if (sliders.brightness !== 50) bits.push(sliders.brightness > 50 ? "brighter" : "darker");
-  if (sliders.warmth !== 50)
-    bits.push(sliders.warmth > 50 ? "warmer color temperature" : "cooler color temperature");
-  if (sliders.contrast !== 50)
-    bits.push(sliders.contrast > 50 ? "higher contrast" : "softer contrast");
-  return bits.length
-    ? `Adjust: ${bits.join(", ")}. Keep composition.`
-    : "Subtle polish, keep composition.";
-}
+const tuneFieldClass =
+  "mt-1 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-base leading-relaxed text-fg outline-none placeholder:text-subtle focus:border-accent";
 
 export function StudioTunePanel({
   imageGate,
@@ -79,7 +73,16 @@ export function StudioTunePanel({
   onSlider: (key: "brightness" | "warmth" | "contrast", value: number) => void;
   onTune: (instruction: string, writeback: boolean, action: "tune" | "compose") => void;
 }) {
+  const [freeText, setFreeText] = useState("");
+  const [copyText, setCopyText] = useState("");
   const tuneBlocked = Boolean(imageGate && !imageGate.actions.tune.enabled);
+  const instruction = mergeTuneInstruction(freeText, sliders);
+  const tuneReady = canSubmitTuneInstruction(instruction);
+  const copyReady = canSubmitCopyRewrite(copyText);
+  const overLimit = instruction.trim().length > TUNE_INSTRUCTION_MAX_LENGTH;
+  const copyOver = copyText.trim().length > TUNE_INSTRUCTION_MAX_LENGTH;
+  const fieldsLocked = generating || !hasImage || tuneBlocked;
+
   return (
     <div className="shrink-0 border-t border-border bg-surface px-4 py-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -111,25 +114,39 @@ export function StudioTunePanel({
             <RangeSlider
               className="h-9"
               value={sliders[key]}
-              disabled={generating || !hasImage || tuneBlocked}
+              disabled={fieldsLocked}
               onValueChange={(value) => onSlider(key, value)}
             />
           </label>
         ))}
       </div>
+      <label className="mt-2 block text-xs text-muted">
+        自由文字
+        <textarea
+          value={freeText}
+          disabled={fieldsLocked}
+          rows={2}
+          placeholder="例如：把背景换成户外"
+          className={tuneFieldClass}
+          onChange={(event) => setFreeText(event.target.value)}
+        />
+      </label>
+      <p className="mt-1 text-xs text-subtle">局部修改请在这里用文字描述，不能框选。</p>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button
           size="sm"
-          disabled={generating || !hasImage || tuneBlocked}
-          onClick={() => onTune(sliderInstruction(sliders), false, "tune")}
+          className="min-h-11"
+          disabled={fieldsLocked || !tuneReady}
+          onClick={() => onTune(instruction, false, "tune")}
         >
           只改此图
         </Button>
         <Button
           size="sm"
           variant="outline"
-          disabled={generating || !hasImage || tuneBlocked}
-          onClick={() => onTune(sliderInstruction(sliders), true, "tune")}
+          className="min-h-11"
+          disabled={fieldsLocked || !tuneReady}
+          onClick={() => onTune(instruction, true, "tune")}
         >
           写回风格…
         </Button>
@@ -138,7 +155,44 @@ export function StudioTunePanel({
         ) : (
           <p className="text-xs text-subtle">默认只改这一张；写回才影响以后的新图。</p>
         )}
+        {overLimit ? (
+          <p className="text-xs text-danger">指令最多 {TUNE_INSTRUCTION_MAX_LENGTH} 个字</p>
+        ) : null}
       </div>
+      {hasImage ? (
+        <form
+          className="mt-2 flex flex-col gap-2 border-t border-border pt-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (fieldsLocked || !copyReady) return;
+            onTune(copyRewriteInstruction(copyText), false, "tune");
+          }}
+        >
+          <label className="block text-xs text-muted">
+            换成的标题或文案
+            <textarea
+              value={copyText}
+              disabled={fieldsLocked}
+              rows={2}
+              placeholder="输入要替换的文字"
+              className={tuneFieldClass}
+              onChange={(event) => setCopyText(event.target.value)}
+            />
+          </label>
+          <p className="text-xs text-subtle">只是尽量保持版式、画面和色板，不保证完全一致。</p>
+          {copyOver ? (
+            <p className="text-xs text-danger">文案最多 {TUNE_INSTRUCTION_MAX_LENGTH} 个字</p>
+          ) : null}
+          <Button
+            type="submit"
+            size="sm"
+            className="min-h-11 self-start"
+            disabled={fieldsLocked || !copyReady}
+          >
+            换文案
+          </Button>
+        </form>
+      ) : null}
     </div>
   );
 }

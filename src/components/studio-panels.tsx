@@ -214,7 +214,7 @@ export function StudioHistoryPanel({
               回到此版本？
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              {`会追加一个新的风格版本，DNA 复制 rev${pending.rev}，修改说明为「回滚至 rev${pending.rev}」。历史版本保持原样。不调用模型，也不扣额度。`}
+              {`会追加一个新的风格版本，DNA 复制 rev${pending.rev}，修改说明为「回滚至 rev${pending.rev}」。风格版本保持原样。不调用模型，也不扣额度。`}
             </p>
             <div className="mt-4 max-h-64 overflow-y-auto rounded-md bg-bg p-3 shadow-border">
               <p className="mb-2 section-label">将改动 {pendingChanges.length} 个字段</p>

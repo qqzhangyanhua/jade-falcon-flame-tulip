@@ -87,14 +87,17 @@ export function mergeTuneInstruction(freeText: string, sliders: TuneSliders): st
   return `${text} ${slider}`;
 }
 
+function canSubmitInstructionText(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed.length <= TUNE_INSTRUCTION_MAX_LENGTH;
+}
+
 export function canSubmitTuneInstruction(instruction: string): boolean {
-  const text = instruction.trim();
-  return text.length > 0 && text.length <= TUNE_INSTRUCTION_MAX_LENGTH;
+  return canSubmitInstructionText(instruction);
 }
 
 export function canSubmitCopyRewrite(text: string): boolean {
-  const trimmed = text.trim();
-  return trimmed.length > 0 && trimmed.length <= TUNE_INSTRUCTION_MAX_LENGTH;
+  return canSubmitInstructionText(text);
 }
 
 export function copyRewriteInstruction(text: string): string {

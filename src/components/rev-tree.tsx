@@ -36,7 +36,7 @@ export function RevTree({
     <div className="min-w-0 max-w-full overflow-x-auto">
       <ul className="flex w-max min-w-full flex-col gap-3 p-2">
         {tree.map((node) => (
-          <RevBranch
+          <RevTreeItem
             key={node.rev.id}
             node={node}
             adoptedId={adoptedId}
@@ -50,7 +50,7 @@ export function RevTree({
   );
 }
 
-function RevBranch({
+function RevTreeItem({
   node,
   adoptedId,
   inspectingId,
@@ -75,7 +75,7 @@ function RevBranch({
       {node.children.length > 0 ? (
         <ul className="flex flex-col gap-3 border-l border-border pl-3">
           {node.children.map((child) => (
-            <RevBranch
+            <RevTreeItem
               key={child.rev.id}
               node={child}
               adoptedId={adoptedId}

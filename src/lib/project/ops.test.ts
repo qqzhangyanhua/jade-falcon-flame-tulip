@@ -14,6 +14,7 @@ import {
   compareRevs,
   lockCandidate,
   restoreStyle,
+  latestGenerateRevs,
   revTree,
   rollbackStyle,
   setStyleRev,
@@ -268,13 +269,13 @@ function lineWithImages(
   project: ReturnType<typeof sampleProject>,
   images: { kv?: ImageRev[]; ui_hero?: ImageRev[] },
 ): StyleBranch {
-  const branch = style(project, "a");
+  const line = style(project, "a");
   return {
-    ...branch,
+    ...line,
     assets: {
-      ...branch.assets,
-      kv: { ...branch.assets.kv, revs: images.kv ?? [] },
-      ui_hero: { ...branch.assets.ui_hero, revs: images.ui_hero ?? [] },
+      ...line.assets,
+      kv: { ...line.assets.kv, revs: images.kv ?? [] },
+      ui_hero: { ...line.assets.ui_hero, revs: images.ui_hero ?? [] },
     },
   };
 }
@@ -287,7 +288,7 @@ describe("compareRevs", () => {
       changeLog: "v2",
       dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
     });
-    const branch = lineWithImages(project, {
+    const line = lineWithImages(project, {
       kv: [
         imageRev("kv-old", 1, 10, "/api/images/kv-old"),
         imageRev("kv-new", 1, 30, "/api/images/kv-new"),
@@ -297,7 +298,7 @@ describe("compareRevs", () => {
       ui_hero: [imageRev("hero-1", 1, 5, "/api/images/hero")],
     });
 
-    const compared = compareRevs(branch, 1, 2, ["kv", "web_home", "ui_hero"]);
+    const compared = compareRevs(line, 1, 2, ["kv", "web_home", "ui_hero"]);
 
     assert.deepEqual(compared.changes, [{ field: "light", from: "柔和顶光", to: "侧逆光" }]);
     assert.deepEqual(
@@ -319,7 +320,7 @@ describe("compareRevs", () => {
       changeLog: "v2",
       dna: sampleDna({ name: "风格 a", light: "侧逆光" }),
     });
-    const branch = lineWithImages(project, {
+    const line = lineWithImages(project, {
       kv: [
         imageRev("tie-a", 1, 30, "/api/images/tie-a"),
         imageRev("other-rev", 2, 99, "/api/images/other"),
@@ -327,7 +328,7 @@ describe("compareRevs", () => {
       ],
     });
 
-    const compared = compareRevs(branch, 1, 2, ["missing", "kv"]);
+    const compared = compareRevs(line, 1, 2, ["missing", "kv"]);
 
     assert.deepEqual(
       compared.slots.map((slot) => [slot.slot, slot.revA?.url ?? null, slot.revB?.url ?? null]),
@@ -1111,5 +1112,87 @@ describe("revTree", () => {
       },
       { id: "side", styleRev: 2, children: [] },
     ]);
+  });
+});
+
+function generateRev(
+  id: string,
+  jobId?: string,
+  action: ImageRev["action"] = "generate",
+): ImageRev {
+  return {
+    id,
+    parentId: null,
+    url: `/u/${id}`,
+    createdAt: 1,
+    action,
+    diff: id,
+    writeback: "none",
+    styleRev: 1,
+    ...(jobId ? { jobId } : {}),
+  };
+}
+
+describe("latestGenerateRevs", () => {
+  it("returns every tail rev that shares the last generate's job id", () => {
+    const four = [
+      generateRev("old", "job-old"),
+      generateRev("a", "job-4"),
+      generateRev("b", "job-4"),
+      generateRev("c", "job-4"),
+      generateRev("d", "job-4"),
+    ];
+    assert.deepEqual(
+      latestGenerateRevs(four).map((rev) => rev.id),
+      ["a", "b", "c", "d"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([generateRev("old", "job-old"), generateRev("only", "job-1")]).map(
+        (rev) => rev.id,
+      ),
+      ["only"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([
+        generateRev("kept", "job-2"),
+        generateRev("gap", "job-other"),
+        generateRev("tail", "job-2"),
+      ]).map((rev) => rev.id),
+      ["tail"],
+    );
+  });
+
+  it("keeps at most two trailing generates when the last one has no job id", () => {
+    assert.deepEqual(
+      latestGenerateRevs([generateRev("a"), generateRev("b"), generateRev("c")]).map(
+        (rev) => rev.id,
+      ),
+      ["b", "c"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([generateRev("job", "job-1"), generateRev("bare")]).map((rev) => rev.id),
+      ["bare"],
+    );
+    assert.deepEqual(
+      latestGenerateRevs([
+        generateRev("tuned", undefined, "tune"),
+        generateRev("a"),
+        generateRev("b"),
+      ]).map((rev) => rev.id),
+      ["a", "b"],
+    );
+  });
+
+  it("returns nothing when the last rev is not a generate", () => {
+    assert.deepEqual(latestGenerateRevs([]), []);
+    assert.deepEqual(
+      latestGenerateRevs([
+        generateRev("a", "job-1"),
+        generateRev("b", "job-1"),
+        generateRev("tuned", undefined, "tune"),
+      ]),
+      [],
+    );
+    assert.deepEqual(latestGenerateRevs([generateRev("composed", undefined, "compose")]), []);
   });
 });

@@ -454,6 +454,29 @@ export function adoptImage(
   });
 }
 
+/**
+ * Canvas tail for the latest generate.
+ * A job id returns every rev at the tail that shares it, so one, two, or four all show.
+ * A generate with no job id keeps at most two trailing generates that also have no job id.
+ * Any other tail is empty so the canvas can fall back to the adopted image.
+ */
+export function latestGenerateRevs(revs: readonly ImageRev[]): ImageRev[] {
+  const last = revs.at(-1);
+  if (!last || last.action !== "generate") return [];
+  if (last.jobId) {
+    let start = revs.length - 1;
+    while (start > 0 && revs[start - 1]?.jobId === last.jobId) start -= 1;
+    return revs.slice(start);
+  }
+  let start = revs.length - 1;
+  while (start > 0 && revs.length - start < 2) {
+    const prev = revs[start - 1];
+    if (!prev || prev.action !== "generate" || prev.jobId) break;
+    start -= 1;
+  }
+  return revs.slice(start);
+}
+
 export type LineComparison = {
   styleId: string;
   name: string;
@@ -485,7 +508,7 @@ export type RevTreeNode = {
 
 /**
  * Parent links for one slot. A rev whose parent is null or not in this asset is a root.
- * Every rev is included once, including revs from older style versions.
+ * Every rev is included once, including revs from older style revs.
  */
 export function revTree(asset: Asset): RevTreeNode[] {
   const byId = new Map(asset.revs.map((rev) => [rev.id, rev]));

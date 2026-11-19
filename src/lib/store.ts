@@ -60,6 +60,7 @@ type State = {
   deleteCustomSlot: (slotId: string) => void;
   setMode: (mode: Project["mode"]) => void;
   addImageRevs: (opts: {
+    projectId?: string;
     styleId: string;
     slot: Slot;
     urls: string[];
@@ -202,14 +203,19 @@ export const useStudio = create<State>()(
         if (!id) return;
         set((s) => ({ projects: patchProject(s.projects, id, (p) => ({ ...p, mode })) }));
       },
-      addImageRevs: ({ writeback = "none", ...opts }) => {
-        const id = get().currentId;
+      addImageRevs: ({ projectId, writeback = "none", ...opts }) => {
+        const id = projectId ?? get().currentId;
         if (!id) return [];
         let ids: string[] = [];
-        update(set, get, (p) => {
-          const result = addImageRevs(p, { ...opts, writeback }, { newId: uid });
+        set((s) => {
+          const project = s.projects.find((p) => p.id === id);
+          if (!project) return s;
+          const result = addImageRevs(project, { ...opts, writeback }, { newId: uid });
           ids = result.ids;
-          return result.project;
+          if (result.project === project) return s;
+          return {
+            projects: s.projects.map((p) => (p.id === id ? result.project : p)),
+          };
         });
         return ids;
       },

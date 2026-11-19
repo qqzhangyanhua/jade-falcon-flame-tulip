@@ -37,6 +37,7 @@ import { createBatchQueue, planBatch, type BatchTaskStatus } from "@/lib/batch-g
 import { mergeStyleInstructionFn } from "@/app/actions/writeback";
 import type { DnaChange } from "@/lib/project/dna";
 import { paletteForStyleRev } from "@/lib/project/dna-export";
+import { latestGenerateRevs } from "@/lib/project/ops";
 import { messageForMergeError } from "@/lib/style-ai/shared";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
@@ -44,6 +45,56 @@ import { BUILTIN_SLOTS } from "@/lib/project/slots";
 import { useStudio } from "@/lib/store";
 import { adoptedRev, currentDna, type Slot, type StyleDna } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function findProject(projectId: string) {
+  return useStudio.getState().projects.find((item) => item.id === projectId) ?? null;
+}
+
+/** Writes a finished generate onto the project that started it, even if it is no longer current. */
+async function generateOntoProject(input: {
+  projectId: string;
+  styleId: string;
+  slotId: string;
+  productName: string;
+  contentText: string;
+  n: GenerateCount;
+}): Promise<string[] | null> {
+  const live = findProject(input.projectId);
+  const styleLine = live?.styles.find((entry) => entry.id === input.styleId);
+  if (!live || !styleLine) return null;
+  const dnaNow = currentDna(styleLine);
+  const priorAsset = styleLine.assets[input.slotId];
+  const priorParent = priorAsset ? adoptedRev(priorAsset) : null;
+  const refUrl = input.slotId === "ui_hero" ? live.prototypeDataUrl : styleLine.candidateUrl;
+  await getProjectSync()?.flush(input.projectId);
+  const res = await generateSlotFn({
+    data: {
+      projectId: input.projectId,
+      dna: dnaNow,
+      slot: input.slotId,
+      product: input.productName,
+      content: input.contentText,
+      refUrl,
+      n: input.n,
+    },
+  });
+  const saved = findProject(input.projectId);
+  const savedStyle = saved?.styles.find((entry) => entry.id === input.styleId);
+  if (!saved || !savedStyle) return null;
+  const savedAsset = savedStyle.assets[input.slotId];
+  const parentNow = savedAsset ? adoptedRev(savedAsset) : priorParent;
+  const ids = useStudio.getState().addImageRevs({
+    projectId: input.projectId,
+    styleId: input.styleId,
+    slot: input.slotId,
+    urls: res.urls,
+    action: "generate",
+    diff: input.contentText.trim() || "首次生成",
+    parentId: parentNow?.id ?? null,
+    jobId: res.jobId,
+  });
+  return ids.length > 0 ? res.urls : null;
+}
 
 export function StudioView() {
   const project = useStudio((s) => s.current());
@@ -80,6 +131,7 @@ export function StudioView() {
     palette: readonly string[] | null;
   } | null>(null);
   const [busyLabel, setBusyLabel] = useState<string | null>(null);
+  const busyToken = useRef(0);
   const [inspecting, setInspecting] = useState<{
     styleId: string;
     slot: string;
@@ -131,9 +183,9 @@ export function StudioView() {
   const pair = useMemo(() => {
     if (!asset) return [];
     if (inspectedRev) return [inspectedRev];
-    const last = asset.revs.slice(-2);
-    if (last.length === 2 && last.every((r) => r.action === "generate")) return last;
-    return currentImg ? [currentImg] : last;
+    const generated = latestGenerateRevs(asset.revs);
+    if (generated.length > 0) return generated;
+    return currentImg ? [currentImg] : [];
   }, [asset, currentImg, inspectedRev]);
 
   if (!project || !style || !dna) return null;
@@ -174,44 +226,65 @@ export function StudioView() {
     await getProjectSync()?.flush(project.id);
   }
 
-  async function runGenerate(n: GenerateCount) {
+  function onSlotStatus(id: string, status: BatchTaskStatus) {
+    if (!mountedRef.current) return;
+    setSlotPhase(id, status);
+  }
+
+  function holdBusy(label: string) {
+    const token = ++busyToken.current;
+    if (mountedRef.current) setBusyLabel(label);
+    return token;
+  }
+
+  function releaseBusy(token: number) {
+    if (busyToken.current !== token || !mountedRef.current) return;
+    setBusyLabel(null);
+  }
+
+  // No global "generating" mode: that overlay hides per-slot progress.
+  // The busy label stays on this slot while its own task runs.
+  function runGenerate(n: GenerateCount) {
     if (!project || !style || !dna) return;
-    const currentPhase = phasesRef.current[slot];
+    const slotId = slot;
+    const currentPhase = phasesRef.current[slotId];
     if (currentPhase === "queued" || currentPhase === "running") return;
     if (generateBlocked) {
       toast.error(generateReason ?? "出图暂不可用");
       return;
     }
-    setMode("generating");
-    setSlotPhase(slot, "running");
-    await flushDocument();
-    setBusyLabel("出图中");
-    try {
-      const ref = slot === "ui_hero" ? project.prototypeDataUrl : style.candidateUrl;
-      const res = await generateSlotFn({
-        data: { projectId: project.id, dna, slot, product, content, refUrl: ref, n },
-      });
-      addImageRevs({
-        styleId: style.id,
-        slot,
-        urls: res.urls,
-        action: "generate",
-        diff: content.trim() || "首次生成",
-        parentId: currentImg?.id ?? null,
-        jobId: res.jobId,
-      });
-      if (mountedRef.current) setSlotPhase(slot, "done");
-      toast.success(`已生成 ${res.urls.length} 张变体，点「采用」选定`);
-    } catch (e) {
-      if (mountedRef.current) setSlotPhase(slot, "failed");
-      toast.error(messageForImageJobError(e));
-    } finally {
-      setMode("idle");
-      if (mountedRef.current) {
-        setBusyLabel(null);
-        void refresh();
-      }
-    }
+    const projectId = project.id;
+    const styleId = style.id;
+    const productName = product;
+    const contentText = content;
+    void batchQueue().enqueue(
+      [
+        {
+          id: slotId,
+          run: async () => {
+            const token = holdBusy("出图中");
+            try {
+              const urls = await generateOntoProject({
+                projectId,
+                styleId,
+                slotId,
+                productName,
+                contentText,
+                n,
+              });
+              if (urls) toast.success(`已生成 ${urls.length} 张变体，点「采用」`);
+            } catch (error) {
+              toast.error(messageForImageJobError(error));
+              throw error;
+            } finally {
+              releaseBusy(token);
+              if (mountedRef.current) void refresh();
+            }
+          },
+        },
+      ],
+      onSlotStatus,
+    );
   }
 
   function runningSlotIds() {
@@ -220,7 +293,6 @@ export function StudioView() {
       .map(([id]) => id);
   }
 
-  // A batch must not set mode to "generating": that overlay hides per-slot progress.
   function startBatch(n: GenerateCount, slotIds: readonly string[]) {
     if (!project || !style || !dna) return;
     const quotaRemaining = imageGate?.quota.remaining;
@@ -248,6 +320,7 @@ export function StudioView() {
       toast.error(generateReason ?? "出图暂不可用");
       return;
     }
+    const projectId = project.id;
     const styleId = style.id;
     const productName = product;
     const contentText = content;
@@ -256,39 +329,15 @@ export function StudioView() {
         id: item.id,
         run: async () => {
           try {
-            const live = useStudio.getState().current();
-            const styleLine = live?.styles.find((entry) => entry.id === styleId);
-            if (!live || !styleLine) throw new Error("missing project");
-            const dnaNow = currentDna(styleLine);
-            const asset = styleLine.assets[item.id];
-            const parent = asset ? adoptedRev(asset) : null;
-            const refUrl = item.id === "ui_hero" ? live.prototypeDataUrl : styleLine.candidateUrl;
-            await getProjectSync()?.flush(live.id);
-            const res = await generateSlotFn({
-              data: {
-                projectId: live.id,
-                dna: dnaNow,
-                slot: item.id,
-                product: productName,
-                content: contentText,
-                refUrl,
-                n,
-              },
-            });
-            const saved = useStudio.getState().current();
-            const savedStyle = saved?.styles.find((entry) => entry.id === styleId);
-            const savedAsset = savedStyle?.assets[item.id];
-            const parentNow = savedAsset ? adoptedRev(savedAsset) : parent;
-            useStudio.getState().addImageRevs({
+            const urls = await generateOntoProject({
+              projectId,
               styleId,
-              slot: item.id,
-              urls: res.urls,
-              action: "generate",
-              diff: contentText.trim() || "首次生成",
-              parentId: parentNow?.id ?? null,
-              jobId: res.jobId,
+              slotId: item.id,
+              productName,
+              contentText,
+              n,
             });
-            toast.success(`${item.name} 已生成 ${res.urls.length} 张`);
+            if (urls) toast.success(`${item.name} 已生成 ${urls.length} 张`);
           } catch (error) {
             toast.error(`${item.name}：${messageForImageJobError(error)}`);
             throw error;
@@ -297,10 +346,7 @@ export function StudioView() {
           }
         },
       })),
-      (id, status) => {
-        if (!mountedRef.current) return;
-        setSlotPhase(id, status);
-      },
+      onSlotStatus,
     );
   }
 
@@ -324,7 +370,7 @@ export function StudioView() {
   async function previewWriteback(instruction: string) {
     if (!style || !dna) return;
     setMerging(true);
-    setBusyLabel("合并风格中");
+    const token = holdBusy("合并风格中");
     try {
       const merged = await mergeStyleInstructionFn({ data: { dna, instruction } });
       if (!merged.ok) {
@@ -341,7 +387,7 @@ export function StudioView() {
       toast.error(messageForMergeError("network"));
     } finally {
       setMerging(false);
-      setBusyLabel(null);
+      releaseBusy(token);
     }
   }
 
@@ -371,7 +417,7 @@ export function StudioView() {
     });
     setMode("generating");
     await flushDocument();
-    setBusyLabel(action === "compose" ? "换构图中" : "微调中");
+    const token = holdBusy(action === "compose" ? "换构图中" : "微调中");
     try {
       const fn = action === "compose" ? composeImageFn : tuneImageFn;
       const res = await fn({
@@ -404,7 +450,7 @@ export function StudioView() {
       );
     } finally {
       setMode("idle");
-      setBusyLabel(null);
+      releaseBusy(token);
       void refresh();
     }
   }
@@ -453,7 +499,7 @@ export function StudioView() {
             className="shrink-0"
             onClick={() => setCompareOpen(true)}
           >
-            对比版本
+            对比风格版本
           </Button>
           <ImageModelPicker
             className="w-44 shrink-0"
@@ -563,7 +609,7 @@ export function StudioView() {
               className="shrink-0"
               onClick={() => setCompareOpen(true)}
             >
-              对比版本
+              对比风格版本
             </Button>
             <ImageModelPicker
               className="w-32 shrink-0"
@@ -587,7 +633,7 @@ export function StudioView() {
                 <ImageIcon className="mb-4 size-6 text-subtle" />
                 <p className="font-display text-xl tracking-tight">还没有图</p>
                 <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted">
-                  选物料槽，填一句内容，出两张变体。
+                  选物料槽，填一句内容，出图。
                 </p>
                 {generateReason ? (
                   <p className="mt-3 text-xs text-danger">{generateReason}</p>

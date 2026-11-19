@@ -720,6 +720,11 @@ export function StudioGenerateBar({
                 <Loader2 className="size-4 animate-spin" />
                 {busyLabel ?? "生成中"}
               </>
+            ) : slotPhase === "running" && busyLabel ? (
+              <>
+                <Loader2 className="size-4 animate-spin" />
+                {busyLabel}
+              </>
             ) : slotPhase === "queued" || slotPhase === "running" ? (
               SLOT_PHASE_LABEL[slotPhase]
             ) : generateBlocked ? (

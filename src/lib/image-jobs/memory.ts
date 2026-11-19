@@ -34,6 +34,12 @@ import type {
   StudioProjectStore,
 } from "./stores.ts";
 
+function splitUsageKey(key: string): { userId: string; day: string } | null {
+  const index = key.lastIndexOf(":");
+  if (index <= 0) return null;
+  return { userId: key.slice(0, index), day: key.slice(index + 1) };
+}
+
 function cloneJob(job: ImageJobRecord): ImageJobRecord {
   return { ...job };
 }
@@ -183,6 +189,16 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
     },
     async listBoostLedger(userId) {
       return ledger.filter((entry) => entry.userId === userId).map((entry) => ({ ...entry }));
+    },
+    async listDailyUsed(userId, fromDay, toDay) {
+      const rows: { day: string; used: number }[] = [];
+      for (const [key, count] of used) {
+        const split = splitUsageKey(key);
+        if (!split || split.userId !== userId) continue;
+        if (split.day < fromDay || split.day > toDay) continue;
+        rows.push({ day: split.day, used: count });
+      }
+      return rows;
     },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);

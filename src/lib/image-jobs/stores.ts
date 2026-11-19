@@ -87,6 +87,15 @@ export type QuotaStore = {
   addBoost: (input: BoostGrantWrite) => Promise<number>;
   /** Grants and debits for one user, oldest first. */
   listBoostLedger: (userId: string) => Promise<BoostLedgerEntry[]>;
+  /**
+   * Daily-cap images already spent on each Beijing day in [fromDay, toDay].
+   * Days with no row are omitted. `day` is YYYY-MM-DD.
+   */
+  listDailyUsed: (
+    userId: string,
+    fromDay: string,
+    toDay: string,
+  ) => Promise<{ day: string; used: number }[]>;
 };
 
 export type RoleStore = {

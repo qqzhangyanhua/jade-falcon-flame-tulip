@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { summarizeAdminStats, type AdminStatsJob } from "./admin-stats.ts";
+import { formatFailureRate, summarizeAdminStats, type AdminStatsJob } from "./admin-stats.ts";
 
 const day1 = Date.parse("2026-11-18T10:00:00+08:00");
 const day1Later = Date.parse("2026-11-18T18:00:00+08:00");
@@ -79,11 +79,26 @@ describe("admin stats", () => {
     assert.deepEqual(summarizeAdminStats([]), { models: [], days: [] });
   });
 
-  it("counts failures over every job, including ones still running", () => {
-    assert.equal(model("mdl-a").failureRate, 0.2);
+  it("counts failures over finished jobs, and has no rate when every job is still running", () => {
+    assert.equal(model("mdl-a").failureRate, 0.25);
     assert.equal(model("mdl-a").jobCount, 5);
     assert.equal(model("mdl-b").failureRate, 1);
     assert.equal(model("mdl-c").failureRate, 1);
+
+    const running = summarizeAdminStats([
+      {
+        catalogModelId: "mdl-run",
+        displayNameSnapshot: "进行中",
+        status: "running",
+        createdAt: day1,
+        finishedAt: null,
+        costInUsdTicks: null,
+      },
+    ]);
+    assert.equal(running.models[0]?.failureRate, null);
+    assert.equal(running.models[0]?.jobCount, 1);
+    assert.equal(formatFailureRate(null), "—");
+    assert.equal(formatFailureRate(0), "0%");
   });
 
   it("reports nearest-rank P50 and P90 from finishedAt minus createdAt", () => {

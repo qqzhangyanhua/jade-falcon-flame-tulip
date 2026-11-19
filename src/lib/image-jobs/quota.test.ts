@@ -7,6 +7,7 @@ import {
   clearUserDailyCap,
   grantUserBoost,
   listImageUsage,
+  listUserBoostLedger,
   setGlobalDailyCap,
   setUserDailyCap,
 } from "./quota.ts";
@@ -269,12 +270,55 @@ describe("boost grant", () => {
         amount: entry.amount,
         at: entry.at,
         adminId: entry.adminId,
-        note: entry.note,
+        remark: entry.remark,
+        jobId: entry.jobId,
       })),
       [
-        { kind: "grant", amount: 5, at, adminId: "admin-1", note: "试用客户" },
-        { kind: "grant", amount: 2, at: at + 1000, adminId: "admin-1", note: "再补一次" },
+        {
+          kind: "grant",
+          amount: 5,
+          at,
+          adminId: "admin-1",
+          remark: "试用客户",
+          jobId: null,
+        },
+        {
+          kind: "grant",
+          amount: 2,
+          at: at + 1000,
+          adminId: "admin-1",
+          remark: "再补一次",
+          jobId: null,
+        },
       ],
+    );
+
+    const denied = await listUserBoostLedger(world.roles, world.quota, {
+      actorId: world.userId,
+      userId: "user-2",
+    });
+    assert.deepEqual(denied, { ok: false, code: "forbidden" });
+    const read = await listUserBoostLedger(world.roles, world.quota, {
+      actorId: "admin-1",
+      userId: "user-2",
+    });
+    assert.equal(read.ok, true);
+    if (!read.ok) return;
+    assert.deepEqual(
+      read.entries.map((entry) => ({
+        kind: entry.kind,
+        amount: entry.amount,
+        adminId: entry.adminId,
+        remark: entry.remark,
+        jobId: entry.jobId,
+      })),
+      ledger.map((entry) => ({
+        kind: entry.kind,
+        amount: entry.amount,
+        adminId: entry.adminId,
+        remark: entry.remark,
+        jobId: entry.jobId,
+      })),
     );
   });
 
@@ -385,7 +429,8 @@ describe("boost spend", () => {
     assert.equal(firstDebit.length, 1);
     assert.equal(firstDebit[0]?.amount, 1);
     assert.equal(firstDebit[0]?.adminId, null);
-    assert.equal(firstDebit[0]?.note, second.job.id);
+    assert.equal(firstDebit[0]?.jobId, second.job.id);
+    assert.equal(firstDebit[0]?.remark, null);
     assert.equal(firstDebit[0]?.at, second.job.createdAt);
     snap = await world.quota.snapshot(world.userId, now);
     assert.equal(snap.used, 1);
@@ -539,7 +584,8 @@ describe("boost spend", () => {
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.amount, 1);
     assert.equal(rows[0]?.adminId, null);
-    assert.equal(rows[0]?.note, boosted.job?.id);
+    assert.equal(rows[0]?.jobId, boosted.job?.id);
+    assert.equal(rows[0]?.remark, null);
   });
 
   it("does not overspend the daily cap plus the boost when generates run together", async () => {
@@ -605,7 +651,13 @@ describe("boost spend", () => {
     const rows = debits(await world.quota.listBoostLedger(world.userId));
     assert.equal(rows.length, 1);
     assert.ok(
-      rows.every((entry) => entry.amount === 1 && entry.adminId === null && entry.note.length > 0),
+      rows.every(
+        (entry) =>
+          entry.amount === 1 &&
+          entry.adminId === null &&
+          entry.remark === null &&
+          (entry.jobId?.length ?? 0) > 0,
+      ),
     );
   });
 });

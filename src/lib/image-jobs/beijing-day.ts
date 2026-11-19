@@ -11,3 +11,12 @@ const beijingDayFormatter = new Intl.DateTimeFormat("en-CA", {
 export function beijingCalendarDay(atMs: number): string {
   return beijingDayFormatter.format(new Date(atMs));
 }
+
+/**
+ * Move a Beijing calendar day by whole days. Noon +08:00 is the only anchor,
+ * so a copy of this shift cannot drift from the quota chart.
+ */
+export function shiftBeijingDay(day: string, deltaDays: number): string {
+  const noon = Date.parse(`${day}T12:00:00+08:00`);
+  return beijingCalendarDay(noon + deltaDays * 86_400_000);
+}

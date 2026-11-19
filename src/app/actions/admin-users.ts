@@ -9,6 +9,7 @@ import { createSqlQuotaStore, createSqlRoleStore } from "@/lib/image-jobs/quota-
 import {
   clearUserDailyCap,
   grantUserBoost,
+  listUserBoostLedger,
   normalizeBoostGrant,
   normalizeBoostNote,
   normalizeDailyCap,
@@ -16,7 +17,7 @@ import {
   setUserDailyCap,
 } from "@/lib/image-jobs/quota";
 import { listAdminUserQuotas } from "@/lib/image-jobs/user-admin";
-import type { AdminUserQuota, StudioRole } from "@/lib/image-jobs/types";
+import type { AdminUserQuota, BoostLedgerEntry, StudioRole } from "@/lib/image-jobs/types";
 
 export type AdminUserList = {
   role: StudioRole;
@@ -108,6 +109,18 @@ export async function clearUserDailyCapFn(input: {
     });
     if (!result.ok) throw new ImageJobError(result.code);
   });
+}
+
+export async function listUserBoostLedgerFn(input: {
+  data: { userId: string };
+}): Promise<BoostLedgerEntry[]> {
+  const { userId: actorId } = await requireActionUser();
+  const userId = input.data.userId.trim();
+  if (!userId) throw new ImageJobError("not_found");
+  const deps = await adminQuotaDeps();
+  const result = await listUserBoostLedger(deps.roles, deps.quota, { actorId, userId });
+  if (!result.ok) throw new ImageJobError(result.code);
+  return result.entries;
 }
 
 export async function grantUserBoostFn(input: {

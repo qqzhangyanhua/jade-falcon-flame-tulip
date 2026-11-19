@@ -1,5 +1,4 @@
 import {
-  PROJECT_NAME_MAX,
   PROJECT_TAG_MAX_COUNT,
   parseProjectName,
   parseProjectTag,
@@ -19,9 +18,7 @@ const COPY_SUFFIX = " 副本";
 type DocumentDeps = Pick<ImageJobGatewayDeps, "projects" | "now" | "newId">;
 
 function copyProjectName(sourceName: string): string {
-  const next = `${sourceName}${COPY_SUFFIX}`;
-  if (next.length <= PROJECT_NAME_MAX) return next;
-  return `${sourceName.slice(0, PROJECT_NAME_MAX - COPY_SUFFIX.length)}${COPY_SUFFIX}`;
+  return `${sourceName}${COPY_SUFFIX}`;
 }
 
 export async function loadProjectDocument(
@@ -151,15 +148,17 @@ export async function copyProject(
 
   const name = copyProjectName(snapshot.document.name);
   const id = deps.newId?.("prj") ?? newEntityId("prj");
+  const at = deps.now?.() ?? Date.now();
   const document = structuredClone(snapshot.document);
   document.id = id;
   document.name = name;
+  document.createdAt = at;
 
   await deps.projects.create({
     id,
     userId: loaded.value.userId,
     currentImageModelId: loaded.value.currentImageModelId,
-    createdAt: deps.now?.() ?? Date.now(),
+    createdAt: at,
     deletedAt: null,
   });
 

@@ -19,8 +19,8 @@ export type ModelAdminStat = {
   catalogModelId: string;
   displayName: string;
   jobCount: number;
-  /** Failed jobs divided by every job in the range, including ones still running. */
-  failureRate: number;
+  /** Failed divided by succeeded + failed. Null when every job is still running. */
+  failureRate: number | null;
   p50Ms: number | null;
   p90Ms: number | null;
   /** Sum of known fees, in ticks. Null when every job's fee is unknown. */
@@ -45,6 +45,7 @@ type ModelBucket = {
   displayName: string;
   namedAt: number;
   jobCount: number;
+  succeeded: number;
   failed: number;
   durations: number[];
   costTicks: bigint | null;
@@ -75,6 +76,7 @@ export function summarizeAdminStats(jobs: readonly AdminStatsJob[]): AdminStats 
         displayName: job.displayNameSnapshot,
         namedAt: job.createdAt,
         jobCount: 0,
+        succeeded: 0,
         failed: 0,
         durations: [],
         costTicks: null,
@@ -87,6 +89,7 @@ export function summarizeAdminStats(jobs: readonly AdminStatsJob[]): AdminStats 
       bucket.displayName = job.displayNameSnapshot;
       bucket.namedAt = job.createdAt;
     }
+    if (job.status === "succeeded") bucket.succeeded += 1;
     if (job.status === "failed") bucket.failed += 1;
     if (job.finishedAt !== null && job.finishedAt >= job.createdAt) {
       bucket.durations.push(job.finishedAt - job.createdAt);
@@ -110,7 +113,7 @@ export function summarizeAdminStats(jobs: readonly AdminStatsJob[]): AdminStats 
         catalogModelId: bucket.catalogModelId,
         displayName: bucket.displayName,
         jobCount: bucket.jobCount,
-        failureRate: bucket.jobCount === 0 ? 0 : bucket.failed / bucket.jobCount,
+        failureRate: failureRate(bucket.succeeded, bucket.failed),
         p50Ms: percentileNearestRank(bucket.durations, 50),
         p90Ms: percentileNearestRank(bucket.durations, 90),
         costTicks: bucket.costTicks,
@@ -119,6 +122,19 @@ export function summarizeAdminStats(jobs: readonly AdminStatsJob[]): AdminStats 
       .sort((a, b) => b.jobCount - a.jobCount || (a.catalogModelId < b.catalogModelId ? -1 : 1)),
     days: [...days.values()].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0)),
   };
+}
+
+function failureRate(succeeded: number, failed: number): number | null {
+  const finished = succeeded + failed;
+  if (finished === 0) return null;
+  return failed / finished;
+}
+
+/** Null means no finished job yet, shown as an em dash. A known 0 is "0%". */
+export function formatFailureRate(rate: number | null): string {
+  if (rate === null) return "—";
+  const pct = Math.round(rate * 1000) / 10;
+  return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
 }
 
 /** Null stays 未知. A known 0 is "0 美元", never rewritten as unknown. */

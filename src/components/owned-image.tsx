@@ -3,41 +3,46 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { listMyHiddenImageIdsFn } from "@/app/actions/review";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import {
+  hiddenImageKnowledge,
+  nextHiddenImageKnowledge,
+  ownedImageFrame,
+  type HiddenImageKnowledge,
+  type OwnedImageFrame,
+} from "@/lib/image-jobs/hidden-image-state";
 import { cn } from "@/lib/utils";
-
-const DURABLE_IMAGE_PATH_PREFIX = "/api/images/";
-
-function imageIdFromUrl(url: string): string | null {
-  if (!url.startsWith("/")) return null;
-  const path = url.split("?")[0] ?? url;
-  if (!path.startsWith(DURABLE_IMAGE_PATH_PREFIX)) return null;
-  const id = path.slice(DURABLE_IMAGE_PATH_PREFIX.length);
-  if (!id || id.includes("/") || id.includes("..")) return null;
-  return decodeURIComponent(id);
-}
 
 export const HIDDEN_IMAGE_LABEL = "已被管理员隐藏";
 export const HIDDEN_IMAGES_CHANGED_EVENT = "keystone:hidden-images-changed";
 
-const HiddenImageContext = createContext<ReadonlySet<string>>(new Set());
+const HiddenImageContext = createContext<HiddenImageKnowledge>(hiddenImageKnowledge(null));
 
-export function HiddenImageProvider({ children }: { children: ReactNode }) {
+export function HiddenImageProvider({
+  children,
+  initialIds = null,
+}: {
+  children: ReactNode;
+  initialIds?: readonly string[] | null;
+}) {
   const { user, isPending } = useCurrentUserState();
-  const [ids, setIds] = useState<ReadonlySet<string>>(new Set());
+  const [knowledge, setKnowledge] = useState(() => hiddenImageKnowledge(initialIds));
 
   useEffect(() => {
-    if (isPending || !user) {
-      setIds(new Set());
+    if (isPending) return;
+    if (!user) {
+      setKnowledge((current) => nextHiddenImageKnowledge(current, { type: "signed-out" }));
       return;
     }
     let cancelled = false;
     const load = () => {
       void listMyHiddenImageIdsFn()
         .then((list) => {
-          if (!cancelled) setIds(new Set(list));
+          if (cancelled) return;
+          setKnowledge((current) => nextHiddenImageKnowledge(current, { type: "loaded", ids: list }));
         })
         .catch(() => {
-          if (!cancelled) setIds(new Set());
+          if (cancelled) return;
+          setKnowledge((current) => nextHiddenImageKnowledge(current, { type: "failed" }));
         });
     };
     load();
@@ -50,19 +55,21 @@ export function HiddenImageProvider({ children }: { children: ReactNode }) {
     };
   }, [isPending, user]);
 
-  return <HiddenImageContext.Provider value={ids}>{children}</HiddenImageContext.Provider>;
+  return <HiddenImageContext.Provider value={knowledge}>{children}</HiddenImageContext.Provider>;
 }
 
 export function useHiddenImageIds(): ReadonlySet<string> {
-  return useContext(HiddenImageContext);
+  return useContext(HiddenImageContext).ids;
+}
+
+export function useOwnedImageFrame(url: string | null | undefined): OwnedImageFrame {
+  const knowledge = useContext(HiddenImageContext);
+  if (!url) return "image";
+  return ownedImageFrame(knowledge, url);
 }
 
 export function useImageHidden(url: string | null | undefined): boolean {
-  const ids = useHiddenImageIds();
-  if (!url) return false;
-  const id = imageIdFromUrl(url);
-  if (!id) return false;
-  return ids.has(id);
+  return useOwnedImageFrame(url) === "hidden";
 }
 
 export function HiddenImagePlaceholder({ className }: { className?: string }) {
@@ -91,8 +98,11 @@ export function OwnedImage({
   className?: string;
   placeholderClassName?: string;
 }) {
-  const hidden = useImageHidden(src);
-  if (hidden) {
+  const frame = useOwnedImageFrame(src);
+  if (frame === "pending") {
+    return <div aria-hidden className={cn("bg-surface-2", placeholderClassName ?? className)} />;
+  }
+  if (frame === "hidden") {
     return <HiddenImagePlaceholder className={placeholderClassName ?? className} />;
   }
   return <img src={src} alt={alt} className={className} />;

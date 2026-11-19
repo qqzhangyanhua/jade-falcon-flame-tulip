@@ -7,6 +7,7 @@ import {
   clearUserDailyCapFn,
   grantUserBoostFn,
   listAdminUsersFn,
+  listUserBoostLedgerFn,
   setUserDailyCapFn,
   type AdminUserList,
 } from "@/app/actions/admin-users";
@@ -17,7 +18,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { messageForImageJobError } from "@/lib/image-jobs";
 import { BEIJING_TIME_ZONE } from "@/lib/image-jobs/beijing-day";
-import type { AdminUserQuota } from "@/lib/image-jobs/types";
+import type { AdminUserQuota, BoostLedgerEntry } from "@/lib/image-jobs/types";
 
 const lastActiveFormat = new Intl.DateTimeFormat("zh-CN", {
   timeZone: BEIJING_TIME_ZONE,
@@ -211,7 +212,9 @@ function UserRow({
   const [draft, setDraft] = useState(user.userCap === null ? "" : String(user.userCap));
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState<"cap" | "boost" | null>(null);
+  const [busy, setBusy] = useState<"cap" | "boost" | "ledger" | null>(null);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const [ledger, setLedger] = useState<BoostLedgerEntry[] | null>(null);
 
   useEffect(() => {
     setDraft(user.userCap === null ? "" : String(user.userCap));
@@ -361,6 +364,58 @@ function UserRow({
           {busy === "boost" ? "发放中…" : "发放加量包"}
         </Button>
       </form>
+
+      <div className="mt-4 border-t border-border pt-4">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={busy !== null}
+          onClick={() => {
+            if (ledgerOpen) {
+              setLedgerOpen(false);
+              return;
+            }
+            setBusy("ledger");
+            void listUserBoostLedgerFn({ data: { userId: user.id } })
+              .then((entries) => {
+                setLedger(entries);
+                setLedgerOpen(true);
+              })
+              .catch(toastActionError)
+              .finally(() => setBusy(null));
+          }}
+        >
+          {busy === "ledger" ? "读取中…" : ledgerOpen ? "收起流水" : "查看流水"}
+        </Button>
+        {ledgerOpen && ledger ? (
+          ledger.length === 0 ? (
+            <p className="mt-3 text-sm leading-relaxed text-muted">还没有加量包流水</p>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-2">
+              {ledger.map((entry, index) => (
+                <li
+                  key={`${entry.at}-${entry.kind}-${index}`}
+                  className="rounded-xl bg-surface-2 px-3 py-3 text-sm"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-fg">
+                      {entry.kind === "grant" ? "发放" : "扣除"} {entry.amount}
+                    </span>
+                    <span className="text-subtle">{lastActiveFormat.format(new Date(entry.at))}</span>
+                  </div>
+                  {entry.adminId ? (
+                    <p className="mt-1 font-mono text-xs text-subtle">管理员 {entry.adminId}</p>
+                  ) : null}
+                  {entry.remark ? <p className="mt-1 text-muted">备注 {entry.remark}</p> : null}
+                  {entry.jobId ? (
+                    <p className="mt-1 font-mono text-xs text-subtle">任务 {entry.jobId}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )
+        ) : null}
+      </div>
     </article>
   );
 }

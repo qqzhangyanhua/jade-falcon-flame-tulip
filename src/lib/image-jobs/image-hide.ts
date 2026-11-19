@@ -12,6 +12,13 @@ import type { ImageBlobRecord, ImageJobErrorCode } from "./types.ts";
 export const HIDE_REASON_MAX = 200;
 export const REVIEW_IMAGE_LIMIT = 48;
 
+export type ReviewImageEvent = {
+  action: ImageHideAction;
+  adminId: string;
+  at: number;
+  reason: string | null;
+};
+
 export type ReviewImage = {
   id: string;
   userId: string;
@@ -21,7 +28,10 @@ export type ReviewImage = {
   createdAt: number;
   hidden: boolean;
   contentType: string;
+  /** Latest hide reason while the image is hidden. Null once it is visible again. */
   reason: string | null;
+  /** Hide and unhide events, oldest first, including after the image is visible again. */
+  events: ReviewImageEvent[];
 };
 
 export type ImageHideDeps = {
@@ -50,9 +60,14 @@ export async function unhideImage(
   return changeImageHidden(deps, input, "unhide");
 }
 
+function listOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) return 0;
+  return offset;
+}
+
 export async function listReviewImages(
   deps: ImageHideDeps & { blobs: Pick<ImageBlobStore, "listGenerated"> },
-  input: { actorId: string; userQuery?: string | null },
+  input: { actorId: string; userQuery?: string | null; offset?: number },
 ): Promise<
   { ok: true; images: ReviewImage[] } | { ok: false; code: "forbidden" | "unauthorized" }
 > {
@@ -63,19 +78,26 @@ export async function listReviewImages(
   const rows = await deps.blobs.listGenerated({
     query: input.userQuery?.trim() ?? "",
     limit: REVIEW_IMAGE_LIMIT,
+    offset: listOffset(input.offset),
   });
   const images: ReviewImage[] = [];
   for (const row of rows) {
-    images.push({ ...row, reason: row.hidden ? await latestHideReason(deps.audit, row.id) : null });
+    const audit = await deps.audit.listByImage(row.id);
+    images.push({
+      ...row,
+      reason: row.hidden ? latestHideReason(audit) : null,
+      events: audit.map((event) => ({
+        action: event.action,
+        adminId: event.adminId,
+        at: event.at,
+        reason: event.reason,
+      })),
+    });
   }
   return { ok: true, images };
 }
 
-async function latestHideReason(
-  audit: Pick<ImageHideAuditStore, "listByImage">,
-  imageId: string,
-): Promise<string | null> {
-  const rows = await audit.listByImage(imageId);
+function latestHideReason(rows: readonly ImageHideAuditRecord[]): string | null {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
     if (row?.action === "hide") return row.reason;

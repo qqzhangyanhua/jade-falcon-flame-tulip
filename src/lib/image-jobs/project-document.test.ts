@@ -527,12 +527,25 @@ describe("project document: copy", () => {
     );
     assert.equal(copied.ok, true);
     if (!copied.ok) return;
-    assert.equal(copied.value.name, `${"名".repeat(37)} 副本`);
-    assert.equal(copied.value.name.length, 40);
+    assert.equal(copied.value.name, `${sourceName} 副本`);
     const opened = await load(world.userId, "prj_long");
-    assert.equal(opened.ok && opened.value.document?.name, `${"名".repeat(37)} 副本`);
+    assert.equal(opened.ok && opened.value.document?.name, `${sourceName} 副本`);
     const source = await load();
     assert.equal(source.ok && source.value.document?.name, sourceName);
+  });
+
+  it("stamps the copy document with the copy time", async () => {
+    const { world, save, load } = setup(9_000);
+    await save(documentFor(world.projectId, { name: "茶空间", createdAt: 100 }), 0);
+    const copied = await copyProject(
+      { ...world, newId: () => "prj_copy" },
+      { userId: world.userId, projectId: world.projectId },
+    );
+    assert.equal(copied.ok, true);
+    const opened = await load(world.userId, "prj_copy");
+    assert.equal(opened.ok && opened.value.document?.createdAt, 9_000);
+    const source = await load();
+    assert.equal(source.ok && source.value.document?.createdAt, 100);
   });
 });
 

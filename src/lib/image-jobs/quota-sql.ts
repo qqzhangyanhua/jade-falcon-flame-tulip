@@ -54,6 +54,7 @@ export function createSqlQuotaStore(sql: Sql): QuotaStore {
           returning balance
         ),
         noted as (
+          -- Column note holds the grant remark. A debit row stores the job id there instead.
           insert into user_boost_ledger (user_id, kind, amount, created_at, admin_id, note)
           select ${input.userId}, 'grant', ${input.amount}, to_timestamp(${input.at / 1000}), ${input.adminId}, ${input.note}
           returning id
@@ -92,14 +93,18 @@ export function createSqlQuotaStore(sql: Sql): QuotaStore {
         where user_id = ${userId}
         order by created_at asc, id asc
       `;
-      return rows.map((row): BoostLedgerEntry => ({
-        userId,
-        kind: asBoostKind(row.kind),
-        amount: Number(row.amount),
-        at: Math.round(Number(row.created_at_ms)),
-        adminId: row.admin_id,
-        note: row.note,
-      }));
+      return rows.map((row): BoostLedgerEntry => {
+        const kind = asBoostKind(row.kind);
+        return {
+          userId,
+          kind,
+          amount: Number(row.amount),
+          at: Math.round(Number(row.created_at_ms)),
+          adminId: row.admin_id,
+          remark: kind === "grant" ? row.note : null,
+          jobId: kind === "debit" ? row.note : null,
+        };
+      });
     },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);

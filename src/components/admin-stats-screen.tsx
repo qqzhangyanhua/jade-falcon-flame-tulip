@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { beijingCalendarDay } from "@/lib/image-jobs/beijing-day";
-import { formatCostUsd } from "@/lib/image-jobs/admin-stats";
+import { beijingCalendarDay, shiftBeijingDay } from "@/lib/image-jobs/beijing-day";
+import { formatCostUsd, formatFailureRate } from "@/lib/image-jobs/admin-stats";
 import { messageForImageJobError } from "@/lib/image-jobs";
 
 const StatsChart = dynamic(
@@ -28,21 +28,11 @@ const PRESETS = [
   { id: "30", label: "近 30 天", back: 29 },
 ] as const;
 
-function shiftBeijingDay(day: string, deltaDays: number): string {
-  const ms = Date.parse(`${day}T00:00:00+08:00`) + deltaDays * 86_400_000;
-  return beijingCalendarDay(ms);
-}
-
 function formatDuration(ms: number | null): string {
   if (ms === null) return "—";
   if (ms < 1000) return `${Math.round(ms)} 毫秒`;
   const seconds = Math.round((ms / 1000) * 10) / 10;
   return Number.isInteger(seconds) ? `${seconds} 秒` : `${seconds.toFixed(1)} 秒`;
-}
-
-function formatFailureRate(rate: number): string {
-  const pct = Math.round(rate * 1000) / 10;
-  return Number.isInteger(pct) ? `${pct}%` : `${pct.toFixed(1)}%`;
 }
 
 function CostValue({ ticks }: { ticks: string | null }) {

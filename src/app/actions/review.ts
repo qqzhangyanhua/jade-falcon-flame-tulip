@@ -25,7 +25,7 @@ async function reviewDeps() {
 }
 
 export async function listReviewImagesFn(input?: {
-  data?: { userQuery?: string };
+  data?: { userQuery?: string; offset?: number };
 }): Promise<{ role: StudioRole; images: ReviewImage[] }> {
   const { userId } = await requireActionUser();
   const deps = await reviewDeps();
@@ -34,6 +34,7 @@ export async function listReviewImagesFn(input?: {
   const result = await listReviewImages(deps, {
     actorId: userId,
     userQuery: input?.data?.userQuery ?? "",
+    offset: input?.data?.offset,
   });
   if (!result.ok) return { role, images: [] };
   return { role, images: result.images };

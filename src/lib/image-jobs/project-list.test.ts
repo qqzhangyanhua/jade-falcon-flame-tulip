@@ -486,6 +486,23 @@ describe("copyProject in the list", () => {
     assert.equal(owner?.userId, world.userId);
     assert.equal(owner?.currentImageModelId, "m");
   });
+
+  it("sorts a copy as newly created, using the copy time rather than the source time", async () => {
+    const world = createMemoryGatewayWorld({ now: () => 9_000 });
+    await seedProject(world, "src", 1_000, { name: "茶空间", createdAt: 100 });
+    const copied = await copyProject(
+      { ...world, newId: () => "zzz_copy" },
+      { userId: world.userId, projectId: "src" },
+    );
+    assert.equal(copied.ok, true);
+    const listed = page(
+      await listProjectSummaries(world, { userId: world.userId, sort: "created" }),
+    );
+    assert.equal(listed.items[0]?.id, "zzz_copy");
+    assert.equal(listed.items[0]?.createdAt, 9_000);
+    assert.equal(listed.items[1]?.id, "src");
+    assert.equal(listed.items[1]?.createdAt, 100);
+  });
 });
 
 describe("importLocalProject", () => {

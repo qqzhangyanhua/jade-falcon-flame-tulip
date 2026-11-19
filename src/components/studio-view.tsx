@@ -7,6 +7,10 @@ import { AuthSlot } from "@/components/auth-slot";
 import { getProjectSync } from "@/components/project-sync";
 import { DnaChangeList } from "@/components/dna-change-list";
 import { DeleteProjectControl } from "@/components/delete-project-control";
+import { ProjectCopyControl } from "@/components/project-copy-control";
+import { ProjectRenameControl } from "@/components/project-rename-control";
+import { ProjectTagControl } from "@/components/project-tag-control";
+import { PROJECTS_CHANGED_EVENT } from "@/components/recent-projects";
 import { JobHistoryLink } from "@/components/job-history-link";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { QuotaMeter } from "@/components/quota-meter";
@@ -21,6 +25,7 @@ import {
 import { StyleLineActions } from "@/components/style-line-actions";
 import { StyleLineCompare } from "@/components/style-line-compare";
 import { ConsistencyImage } from "@/components/color-consistency-badge";
+import { OwnedImage } from "@/components/owned-image";
 import {
   StudioGenerateBar,
   StudioSlotList,
@@ -39,7 +44,7 @@ import type { DnaChange } from "@/lib/project/dna";
 import { paletteForStyleRev } from "@/lib/project/dna-export";
 import { latestGenerateRevs } from "@/lib/project/ops";
 import { messageForMergeError } from "@/lib/style-ai/shared";
-import { messageForImageJobError } from "@/lib/image-jobs";
+import { messageForImageJobError, quotaSpendable } from "@/lib/image-jobs";
 import { useStudioImageGate } from "@/hooks/use-studio-image-gate";
 import { BUILTIN_SLOTS } from "@/lib/project/slots";
 import { useStudio } from "@/lib/store";
@@ -295,7 +300,7 @@ export function StudioView() {
 
   function startBatch(n: GenerateCount, slotIds: readonly string[]) {
     if (!project || !style || !dna) return;
-    const quotaRemaining = imageGate?.quota.remaining;
+    const quotaRemaining = imageGate ? quotaSpendable(imageGate.quota) : undefined;
     if (quotaRemaining == null) {
       toast.error("还没有拿到剩余额度，无法开始");
       return;
@@ -469,7 +474,7 @@ export function StudioView() {
           <Wordmark />
         </button>
         <div className="hidden min-w-0 items-center gap-2 overflow-x-auto md:flex">
-          <p className="shrink-0 truncate font-display text-lg tracking-tight">{product}</p>
+          <p className="shrink-0 truncate font-display text-lg tracking-tight">{project.name}</p>
           <SelectField
             label="风格线"
             className="w-44 shrink-0"
@@ -511,7 +516,7 @@ export function StudioView() {
             }}
           />
         </div>
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex flex-wrap items-center justify-end gap-1">
           <QuotaMeter quota={imageGate?.quota} className="hidden sm:inline-flex" />
           <StudioDownloadLink url={currentImg?.url} slot={slot} />
           <StudioCopyMenu
@@ -522,17 +527,37 @@ export function StudioView() {
           />
           <StudioBrandGuideLink projectId={project.id} styleId={style.id} rev={style.currentRev} />
           <StudioExportButton
+            projectId={project.id}
             projectName={project.name}
             product={product}
             enabledSlotIds={project.enabledSlotIds}
             customSlots={customSlots}
             styleLine={style}
           />
+          <ProjectCopyControl
+            projectId={project.id}
+            openAfter
+            onCopied={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+          />
+          <ProjectRenameControl
+            projectId={project.id}
+            name={project.name}
+            onRenamed={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+          />
           <DeleteProjectControl projectId={project.id} compact />
           <JobHistoryLink compact />
           <AuthSlot compact />
         </div>
       </header>
+      <div className="border-b border-border px-3 py-3 md:px-4">
+        <div className="max-w-md">
+          <ProjectTagControl
+            projectId={project.id}
+            tags={project.tags ?? []}
+            onChange={() => window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT))}
+          />
+        </div>
+      </div>
 
       <div className="flex gap-1 border-b border-border p-2 md:hidden">
         {(["canvas", "style", "history"] as const).map((k) => (
@@ -567,10 +592,11 @@ export function StudioView() {
                     title={s.name}
                   >
                     {s.candidateUrl ? (
-                      <img
+                      <OwnedImage
                         src={s.candidateUrl}
                         alt={s.name}
                         className="frame h-14 w-20 object-cover"
+                        placeholderClassName="h-14 w-20 px-1 text-center text-xs leading-tight"
                       />
                     ) : (
                       <span className="block h-14 w-20 bg-surface-2" />
@@ -745,7 +771,7 @@ export function StudioView() {
               busyLabel={busyLabel}
               slotPhases={slotPhases}
               runningIds={runningSlotIds()}
-              remaining={imageGate ? imageGate.quota.remaining : null}
+              remaining={imageGate ? quotaSpendable(imageGate.quota) : null}
               onSlot={setSlot}
               onEnable={enableBuiltinSlot}
               onHide={hideBuiltinSlot}

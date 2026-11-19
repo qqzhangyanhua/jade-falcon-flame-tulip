@@ -1,5 +1,5 @@
 import { zipSync } from "fflate";
-import { exportManifest } from "./manifest.ts";
+import { exportManifest, type ExportManifest } from "./manifest.ts";
 import type { StyleBranch } from "./schema.ts";
 import type { SlotPromptMeta } from "./slots.ts";
 
@@ -32,21 +32,15 @@ export type ExportZip = { fileName: string; bytes: Uint8Array };
  * files and prompts.md. The extension comes from the response content type,
  * since /api/images/<id> urls carry none. Token text is the viewed rev; no model call.
  */
-export async function buildExportZip(input: {
+export async function packExportManifest(input: {
   projectName: string;
-  styleLine: StyleBranch;
+  styleName: string;
+  rev: number;
+  manifest: ExportManifest;
   fetchImpl?: typeof fetch;
-  enabledSlotIds?: readonly string[];
-  customSlots?: readonly SlotPromptMeta[];
-  product?: string;
 }): Promise<ExportZip> {
-  const { styleLine } = input;
+  const { manifest } = input;
   const fetchImpl = input.fetchImpl ?? fetch;
-  const manifest = exportManifest(styleLine, {
-    enabledSlotIds: input.enabledSlotIds,
-    customSlots: input.customSlots,
-    product: input.product,
-  });
   if (manifest.images.length === 0) throw new Error("没有可导出的图片");
 
   const files: Record<string, Uint8Array> = {};
@@ -67,7 +61,33 @@ export async function buildExportZip(input: {
   files[manifest.prompts.fileName] = encode(manifest.prompts.content);
 
   return {
-    fileName: exportZipName(input.projectName, styleLine.name, styleLine.currentRev),
+    fileName: exportZipName(input.projectName, input.styleName, input.rev),
     bytes: zipSync(files),
   };
+}
+
+export async function buildExportZip(input: {
+  projectName: string;
+  styleLine: StyleBranch;
+  fetchImpl?: typeof fetch;
+  enabledSlotIds?: readonly string[];
+  customSlots?: readonly SlotPromptMeta[];
+  product?: string;
+  /** Passed through to the manifest. An excluded chosen image is not packed. */
+  excludeImageIds?: readonly string[];
+}): Promise<ExportZip> {
+  const { styleLine } = input;
+  const manifest = exportManifest(styleLine, {
+    enabledSlotIds: input.enabledSlotIds,
+    customSlots: input.customSlots,
+    product: input.product,
+    excludeImageIds: input.excludeImageIds,
+  });
+  return packExportManifest({
+    projectName: input.projectName,
+    styleName: styleLine.name,
+    rev: styleLine.currentRev,
+    manifest,
+    fetchImpl: input.fetchImpl,
+  });
 }

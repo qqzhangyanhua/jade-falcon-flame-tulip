@@ -1,12 +1,7 @@
 import type { ProjectDocument } from "../project/schema.ts";
 import { SLOT_IDS } from "../project/slots.ts";
 
-export const IMAGE_JOB_ACTIONS = [
-  "direction",
-  "generate",
-  "tune",
-  "compose",
-] as const;
+export const IMAGE_JOB_ACTIONS = ["direction", "generate", "tune", "compose"] as const;
 
 export type ImageJobAction = (typeof IMAGE_JOB_ACTIONS)[number];
 
@@ -56,13 +51,17 @@ export type ProjectDocumentSnapshot = {
   updatedAt: number | null;
 };
 
-/** One row of the recent-projects list; deliberately omits everything else in the document. */
+/** One row of the project list; deliberately omits everything else in the document. */
 export type ProjectSummary = {
   id: string;
   name: string;
   stage: ProjectDocument["phase"];
   coverUrl: string | null;
   updatedAt: number;
+  /** Project document `createdAt`, not the row insert time. */
+  createdAt: number;
+  /** Free-form tags from the project document. Empty when the document has none. */
+  tags: string[];
 };
 
 export type SaveDocumentOutcome =
@@ -94,6 +93,11 @@ export type ImageJobRecord = {
   errorCode: ImageJobErrorCode | null;
   createdAt: number;
   finishedAt: number | null;
+  /**
+   * Upstream fee in USD ticks (1 USD = 1e10). Null when usage was absent.
+   * Stay in ticks until a screen formats dollars.
+   */
+  costInUsdTicks: bigint | null;
 };
 
 export type ImageRevRecord = {
@@ -119,6 +123,8 @@ export type ImageBlobRecord = {
   contentType: string;
   bytes: Uint8Array;
   createdAt: number;
+  /** Set when an admin has hidden this image. Missing means visible. */
+  hidden?: boolean;
 };
 
 export type DurableImageRef = {
@@ -155,7 +161,40 @@ export type StudioQuota = {
   cap: number;
   used: number;
   remaining: number;
+  /** Non-expiring 加量包. Spent only after today's cap is full. */
+  boost: number;
   beijingDay: string;
+};
+
+export type BoostLedgerKind = "grant" | "debit";
+
+/** One grant or one debit. `amount` is a positive count. */
+export type BoostLedgerEntry = {
+  userId: string;
+  kind: BoostLedgerKind;
+  amount: number;
+  at: number;
+  /** Granting admin. Null on a debit, which has no admin. */
+  adminId: string | null;
+  /** Admin remark. Set on a grant; null on a debit. */
+  remark: string | null;
+  /** Image job id. Set on a debit; null on a grant. */
+  jobId: string | null;
+};
+
+/** One row of the admin user list. `cap` is the effective daily cap. */
+export type AdminUserQuota = {
+  id: string;
+  name: string;
+  email: string;
+  used: number;
+  cap: number;
+  /** Null when the user follows the global cap. */
+  userCap: number | null;
+  /** Non-expiring 加量包 balance. Zero when the user has none. */
+  boost: number;
+  /** Latest image job or session activity, or null when neither exists. */
+  lastActiveAt: number | null;
 };
 
 export type StudioRole = "user" | "admin";
@@ -215,8 +254,7 @@ export type ImageJobHistoryItem = {
 };
 
 export type ListUserJobsResult =
-  | { ok: true; jobs: ImageJobHistoryItem[] }
-  | { ok: false; code: "unauthorized" };
+  { ok: true; jobs: ImageJobHistoryItem[] } | { ok: false; code: "unauthorized" };
 
 export type ImageUpstreamRequest = {
   action: ImageJobAction;
@@ -228,8 +266,8 @@ export type ImageUpstreamRequest = {
 };
 
 export type ImageUpstreamResult =
-  | { ok: true; urls: string[] }
-  | { ok: false };
+  | { ok: true; urls: string[]; costInUsdTicks?: bigint | null }
+  | { ok: false; costInUsdTicks?: bigint | null };
 
 export type ImageUpstream = {
   run: (request: ImageUpstreamRequest) => Promise<ImageUpstreamResult>;

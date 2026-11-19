@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { addImageRevs } from "./ops.ts";
-import { projectDocumentSchema } from "./schema.ts";
+import { imageIdFromUrl, projectDocumentSchema, projectNameFromProduct } from "./schema.ts";
 import { sampleDna, sampleProject } from "./fixtures.ts";
 
 describe("projectDocumentSchema", () => {
@@ -116,6 +116,13 @@ describe("projectDocumentSchema", () => {
     assert.deepEqual(added.project.styles[0]?.assets.ui_hero.revs, [hidden]);
   });
 
+  it("parses an old document with no tags as an empty list", () => {
+    const { mode: _mode, ...document } = sampleProject();
+    delete (document as { tags?: unknown }).tags;
+    const parsed = projectDocumentSchema.parse(document);
+    assert.deepEqual(parsed.tags, []);
+  });
+
   it("defaults missing reference images to an empty list", () => {
     const { mode: _mode, referenceImageUrls: _urls, ...legacy } = sampleProject();
     const parsed = projectDocumentSchema.parse(legacy);
@@ -127,6 +134,41 @@ describe("projectDocumentSchema", () => {
     const urls = ["/api/images/img_a", "/api/images/img_b", "/api/images/img_c"];
     const parsed = projectDocumentSchema.parse({ ...document, referenceImageUrls: urls });
     assert.deepEqual(parsed.referenceImageUrls, urls);
+  });
+
+  it("reads one image id from a relative url and an absolute url, including an encoded id", () => {
+    assert.equal(imageIdFromUrl("/api/images/img_a"), "img_a");
+    assert.equal(imageIdFromUrl("https://cdn.example/api/images/img_a?x=1"), "img_a");
+    assert.equal(imageIdFromUrl("/api/images/a%20b"), "a b");
+    assert.equal(imageIdFromUrl("https://cdn.example/api/images/a%20b"), "a b");
+    assert.equal(imageIdFromUrl("/api/images/a%2F.."), null);
+    assert.equal(imageIdFromUrl("https://cdn.example/other/img_a"), null);
+  });
+
+  it("keeps a stored name and product name that are longer than the rename cap", () => {
+    const { mode: _mode, ...document } = sampleProject();
+    const name = `${"名".repeat(40)} 副本`;
+    const productName = "品".repeat(80);
+    const parsed = projectDocumentSchema.parse({
+      ...document,
+      name,
+      intent: {
+        productName,
+        category: "茶",
+        audience: "人",
+        platform: "web",
+        mood: [],
+        forbidden: [],
+      },
+    });
+    assert.equal(parsed.name, name);
+    assert.equal(parsed.intent?.productName, productName);
+  });
+
+  it("copies a product name onto a project without the rename cap", () => {
+    const productName = `${"品".repeat(40)} 特调`;
+    assert.equal(projectNameFromProduct("旧名", productName), productName);
+    assert.equal(projectNameFromProduct("旧名", "   "), "旧名");
   });
 
   it("rejects data urls and a fourth reference image", () => {

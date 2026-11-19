@@ -91,6 +91,14 @@ export function CatalogScreen() {
           <p className="mt-2 text-sm leading-relaxed text-muted">
             管理员可改显示名、开关模型，并把一个出图模型设为新项目默认。上游 ID 只读。
           </p>
+          {role === "admin" ? (
+            <Link
+              href="/admin/users"
+              className="mt-4 inline-flex h-11 items-center text-sm text-fg hover:text-accent"
+            >
+              用户列表
+            </Link>
+          ) : null}
         </div>
 
         {loading ? (

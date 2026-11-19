@@ -6,11 +6,21 @@ import { fetchRemoteImage, listJobImages, openJobImage } from "@/lib/image-jobs/
 import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
-import { loadProjectDocument, saveProjectDocument } from "@/lib/image-jobs/project-document";
+import {
+  addProjectTag,
+  copyProject,
+  loadProjectDocument,
+  removeProjectTag,
+  renameProject,
+  saveProjectDocument,
+} from "@/lib/image-jobs/project-document";
 import {
   importLocalProject,
   listProjectSummaries,
+  listUsedProjectTags,
   type ImportLocalResult,
+  type ProjectListPage,
+  type ProjectListSort,
 } from "@/lib/image-jobs/project-list";
 import {
   createStudioProject,
@@ -22,10 +32,17 @@ import {
   unwrapProjectOp,
 } from "@/lib/image-jobs/projects";
 import { createSqlQuotaStore, createSqlRoleStore } from "@/lib/image-jobs/quota-sql";
-import { normalizeDailyCap, resolveStudioRole, setGlobalDailyCap } from "@/lib/image-jobs/quota";
+import {
+  listImageUsage,
+  normalizeDailyCap,
+  resolveStudioRole,
+  setGlobalDailyCap,
+  type ImageUsageDay,
+} from "@/lib/image-jobs/quota";
 import {
   createSqlBlobStore,
   createSqlCatalogStore,
+  createSqlHideAudit,
   createSqlJobStore,
   createSqlProjectStore,
   createSqlRevStore,
@@ -37,7 +54,6 @@ import type {
   ImageJobHistoryItem,
   PickerImageModel,
   ProjectDocumentSnapshot,
-  ProjectSummary,
   StudioImageState,
   StudioQuota,
   StudioRole,
@@ -57,6 +73,7 @@ async function createSqlGatewayDeps(): Promise<ImageJobGatewayDeps> {
     jobs: createSqlJobStore(sql),
     revs: createSqlRevStore(sql),
     blobs: createSqlBlobStore(sql),
+    audit: createSqlHideAudit(sql),
     quota: createSqlQuotaStore(sql),
     roles: createSqlRoleStore(sql),
     upstream: createXaiImageUpstream(),
@@ -73,7 +90,9 @@ function parseProjectId(input: { projectId: string }): { projectId: string } {
 /** The result-returning actions answer a blank id with a code instead of throwing. */
 async function resolveActionContext(input: {
   projectId: string;
-}): Promise<{ ok: true; userId: string; projectId: string } | { ok: false; code: ImageJobErrorCode }> {
+}): Promise<
+  { ok: true; userId: string; projectId: string } | { ok: false; code: ImageJobErrorCode }
+> {
   const userId = await signedInUserId();
   if (!userId) return { ok: false, code: "unauthorized" };
   const projectId = input.projectId.trim();
@@ -203,18 +222,32 @@ export async function getDailyQuotaFn(): Promise<StudioQuota> {
   return deps.quota.snapshot(userId, deps.now?.() ?? Date.now());
 }
 
-export async function getStudioAccessFn(): Promise<{ role: StudioRole; quota: StudioQuota }> {
+/** Last 30 Beijing days for the signed-in user. No caller-supplied user id. */
+export async function getImageUsageFn(): Promise<ImageUsageDay[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return listImageUsage(deps.quota, { userId, atMs: deps.now?.() ?? Date.now() });
+}
+
+export async function getStudioAccessFn(): Promise<{
+  role: StudioRole;
+  quota: StudioQuota;
+  globalCap: number;
+}> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
   const now = deps.now?.() ?? Date.now();
-  const [role, quota] = await Promise.all([
+  const [role, quota, globalCap] = await Promise.all([
     resolveStudioRole(deps.roles, userId),
     deps.quota.snapshot(userId, now),
+    deps.quota.getCap(),
   ]);
-  return { role, quota };
+  return { role, quota, globalCap };
 }
 
-export async function setDailyImageCapFn(input: { data: { cap: number } }): Promise<{ cap: number }> {
+export async function setDailyImageCapFn(input: {
+  data: { cap: number };
+}): Promise<{ cap: number }> {
   const { userId } = await requireActionUser();
   const cap = normalizeDailyCap(input.data.cap);
   if (cap === null) throw new Error("额度须为 0–9999 的整数");
@@ -304,8 +337,7 @@ export async function generateSlotFn(input: {
     ? loaded.value.document?.customSlots?.find((item) => item.id === data.slot)
     : undefined;
   const prompt = slotPrompt(data.dna, data.slot, data.product, data.content, custom);
-  const ref =
-    data.refUrl && !data.refUrl.startsWith("data:image/svg") ? data.refUrl : undefined;
+  const ref = data.refUrl && !data.refUrl.startsWith("data:image/svg") ? data.refUrl : undefined;
   return runOwnedImageJob(userId, {
     projectId: data.projectId,
     action: "generate",
@@ -457,10 +489,77 @@ export async function saveProjectDocumentFn(input: {
   });
 }
 
-export async function listProjectSummariesFn(): Promise<ProjectSummary[]> {
+export async function listProjectSummariesFn(input?: {
+  data?: { keyword?: string; sort?: ProjectListSort; offset?: number; tags?: string[] };
+}): Promise<ProjectListPage> {
   const { userId } = await requireActionUser();
   const deps = await createSqlGatewayDeps();
-  return unwrapProjectOp(await listProjectSummaries(deps, { userId }));
+  const data = input?.data;
+  return unwrapProjectOp(
+    await listProjectSummaries(deps, {
+      userId,
+      keyword: data?.keyword,
+      sort: data?.sort,
+      offset: data?.offset,
+      tags: data?.tags,
+    }),
+  );
+}
+
+export async function listUsedProjectTagsFn(input?: {
+  data?: { prefix?: string };
+}): Promise<string[]> {
+  const { userId } = await requireActionUser();
+  const deps = await createSqlGatewayDeps();
+  return unwrapProjectOp(await listUsedProjectTags(deps, { userId, prefix: input?.data?.prefix }));
+}
+
+export async function addProjectTagFn(input: {
+  data: { projectId: string; tag: string };
+}): Promise<ProjectDocumentActionResult<{ tags: string[]; version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return addProjectTag(deps, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    tag: input.data.tag,
+  });
+}
+
+export async function removeProjectTagFn(input: {
+  data: { projectId: string; tag: string };
+}): Promise<ProjectDocumentActionResult<{ tags: string[]; version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return removeProjectTag(deps, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    tag: input.data.tag,
+  });
+}
+
+export async function copyProjectFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<{ id: string; name: string; version: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return copyProject(deps, { userId: ctx.userId, projectId: ctx.projectId });
+}
+
+export async function renameProjectFn(input: {
+  data: { projectId: string; name: string };
+}): Promise<ProjectDocumentActionResult<{ name: string; version: number; updatedAt: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return renameProject(deps, {
+    userId: ctx.userId,
+    projectId: ctx.projectId,
+    name: input.data.name,
+  });
 }
 
 export async function importLocalProjectFn(input: {

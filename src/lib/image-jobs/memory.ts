@@ -2,10 +2,12 @@ import { beijingCalendarDay } from "./beijing-day.ts";
 import { concurrencyBlock } from "./concurrency.ts";
 import { newEntityId } from "./ids.ts";
 import { cloneModel } from "./availability.ts";
-import { DEFAULT_DAILY_IMAGE_CAP, quotaFromParts } from "./quota.ts";
+import { DEFAULT_DAILY_IMAGE_CAP, effectiveDailyCap, quotaFromParts } from "./quota.ts";
 import { decodeDataUrl } from "./durable.ts";
+import { readProjectTags } from "../project/schema.ts";
 import { projectCoverUrl } from "../project/summary.ts";
 import type {
+  BoostLedgerEntry,
   CatalogModel,
   ImageBlobRecord,
   ImageBytes,
@@ -22,6 +24,8 @@ import type {
 } from "./types.ts";
 import type {
   ImageBlobStore,
+  ImageHideAuditRecord,
+  ImageHideAuditStore,
   ImageJobGatewayDeps,
   ImageJobStore,
   ImageRevStore,
@@ -30,6 +34,12 @@ import type {
   RoleStore,
   StudioProjectStore,
 } from "./stores.ts";
+
+function splitUsageKey(key: string): { userId: string; day: string } | null {
+  const index = key.lastIndexOf(":");
+  if (index <= 0) return null;
+  return { userId: key.slice(0, index), day: key.slice(index + 1) };
+}
 
 function cloneJob(job: ImageJobRecord): ImageJobRecord {
   return { ...job };
@@ -48,9 +58,7 @@ function cloneProject(project: StudioProjectRecord): StudioProjectRecord {
 }
 
 export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
-  const models = new Map(
-    seed.map((model) => [model.id, cloneModel(model)]),
-  );
+  const models = new Map(seed.map((model) => [model.id, cloneModel(model)]));
   return {
     async list() {
       return [...models.values()].map(cloneModel);
@@ -75,18 +83,12 @@ export function createMemoryCatalog(seed: CatalogModel[]): ModelCatalogStore {
   };
 }
 
-export function createMemoryProjects(
-  seed: StudioProjectRecord[] = [],
-): StudioProjectStore {
-  const projects = new Map(
-    seed.map((project) => [project.id, cloneProject(project)]),
-  );
+export function createMemoryProjects(seed: StudioProjectRecord[] = []): StudioProjectStore {
+  const projects = new Map(seed.map((project) => [project.id, cloneProject(project)]));
   const documents = new Map<string, ProjectDocumentSnapshot>();
   const snapshotOf = (id: string): ProjectDocumentSnapshot => {
     const stored = documents.get(id);
-    return stored
-      ? structuredClone(stored)
-      : { document: null, version: 0, updatedAt: null };
+    return stored ? structuredClone(stored) : { document: null, version: 0, updatedAt: null };
   };
   return {
     async create(record) {
@@ -116,7 +118,7 @@ export function createMemoryProjects(
     async getDocument(id) {
       return projects.has(id) ? snapshotOf(id) : null;
     },
-    async listSummaries(userId, limit) {
+    async listSummaries(userId) {
       const rows: ProjectSummary[] = [];
       for (const project of projects.values()) {
         if (project.userId !== userId || project.deletedAt !== null) continue;
@@ -128,10 +130,11 @@ export function createMemoryProjects(
           stage: stored.document.phase,
           coverUrl: projectCoverUrl(stored.document),
           updatedAt: stored.updatedAt,
+          createdAt: stored.document.createdAt,
+          tags: readProjectTags(stored.document.tags),
         });
       }
-      rows.sort((a, b) => b.updatedAt - a.updatedAt || (a.id < b.id ? -1 : 1));
-      return rows.slice(0, limit);
+      return rows;
     },
     async saveDocument(id, document, expectedVersion, now) {
       const project = projects.get(id);
@@ -150,10 +153,15 @@ export function createMemoryProjects(
 }
 
 export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaStore & {
-  tryReserve: (userId: string, atMs: number) => boolean;
+  tryReserve: (record: ImageJobRecord) => boolean;
 } {
   let cap = initialCap;
   const used = new Map<string, number>();
+  const userCaps = new Map<string, number>();
+  const boost = new Map<string, number>();
+  const ledger: BoostLedgerEntry[] = [];
+  const capFor = (userId: string) =>
+    effectiveDailyCap(cap, userCaps.has(userId) ? (userCaps.get(userId) ?? null) : null);
   return {
     async getCap() {
       return cap;
@@ -162,24 +170,74 @@ export function createMemoryQuota(initialCap = DEFAULT_DAILY_IMAGE_CAP): QuotaSt
       cap = next;
       return cap;
     },
+    async setUserCap(userId, next) {
+      userCaps.set(userId, next);
+    },
+    async clearUserCap(userId) {
+      userCaps.delete(userId);
+    },
+    async addBoost(input) {
+      const next = (boost.get(input.userId) ?? 0) + input.amount;
+      boost.set(input.userId, next);
+      ledger.push({
+        userId: input.userId,
+        kind: "grant",
+        amount: input.amount,
+        at: input.at,
+        adminId: input.adminId,
+        remark: input.note,
+        jobId: null,
+      });
+      return next;
+    },
+    async listBoostLedger(userId) {
+      return ledger.filter((entry) => entry.userId === userId).map((entry) => ({ ...entry }));
+    },
+    async listDailyUsed(userId, fromDay, toDay) {
+      const rows: { day: string; used: number }[] = [];
+      for (const [key, count] of used) {
+        const split = splitUsageKey(key);
+        if (!split || split.userId !== userId) continue;
+        if (split.day < fromDay || split.day > toDay) continue;
+        rows.push({ day: split.day, used: count });
+      }
+      return rows;
+    },
     async snapshot(userId, atMs) {
       const day = beijingCalendarDay(atMs);
-      return quotaFromParts(cap, used.get(`${userId}:${day}`) ?? 0, day);
+      return quotaFromParts(
+        capFor(userId),
+        used.get(`${userId}:${day}`) ?? 0,
+        day,
+        boost.get(userId) ?? 0,
+      );
     },
-    tryReserve(userId, atMs) {
-      const day = beijingCalendarDay(atMs);
-      const key = `${userId}:${day}`;
+    tryReserve(record) {
+      const day = beijingCalendarDay(record.createdAt);
+      const key = `${record.userId}:${day}`;
       const current = used.get(key) ?? 0;
-      if (current >= cap) return false;
-      used.set(key, current + 1);
+      if (current < capFor(record.userId)) {
+        used.set(key, current + 1);
+        return true;
+      }
+      const balance = boost.get(record.userId) ?? 0;
+      if (balance <= 0) return false;
+      boost.set(record.userId, balance - 1);
+      ledger.push({
+        userId: record.userId,
+        kind: "debit",
+        amount: 1,
+        at: record.createdAt,
+        adminId: null,
+        remark: null,
+        jobId: record.id,
+      });
       return true;
     },
   };
 }
 
-export function createMemoryRoles(
-  seed: Record<string, StudioRole> = {},
-): RoleStore {
+export function createMemoryRoles(seed: Record<string, StudioRole> = {}): RoleStore {
   const roles = new Map<string, StudioRole>(Object.entries(seed));
   return {
     async getRole(userId) {
@@ -194,9 +252,7 @@ export function createMemoryRoles(
   };
 }
 
-export function createMemoryJobs(
-  reserve: (record: ImageJobRecord) => boolean,
-): ImageJobStore {
+export function createMemoryJobs(reserve: (record: ImageJobRecord) => boolean): ImageJobStore {
   const jobs = new Map<string, ImageJobRecord>();
   return {
     async insertReserved(record) {
@@ -223,13 +279,20 @@ export function createMemoryJobs(
         .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
         .map(cloneJob);
     },
-    async finish(id, status, errorCode, finishedAt) {
+    async finish(id, status, errorCode, finishedAt, costInUsdTicks) {
       const job = jobs.get(id);
       if (!job) return null;
       job.status = status;
       job.errorCode = errorCode;
       job.finishedAt = finishedAt;
+      job.costInUsdTicks = costInUsdTicks;
       return cloneJob(job);
+    },
+    async listInRange(fromMs, toMs) {
+      return [...jobs.values()]
+        .filter((job) => job.createdAt >= fromMs && job.createdAt < toMs)
+        .sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .map(cloneJob);
     },
   };
 }
@@ -253,6 +316,25 @@ export function createMemoryRevs(): ImageRevStore {
   };
 }
 
+export function createMemoryHideAudit(): ImageHideAuditStore {
+  const rows: ImageHideAuditRecord[] = [];
+  return {
+    async append(record) {
+      const next = { ...record };
+      rows.push(next);
+      return { ...next };
+    },
+    async listByImage(imageId) {
+      return rows.filter((row) => row.imageId === imageId).map((row) => ({ ...row }));
+    },
+  };
+}
+
+function listOffset(offset: number | undefined): number {
+  if (typeof offset !== "number" || !Number.isInteger(offset) || offset < 0) return 0;
+  return offset;
+}
+
 export function createMemoryBlobs(): ImageBlobStore {
   const blobs = new Map<string, ImageBlobRecord>();
   return {
@@ -269,6 +351,36 @@ export function createMemoryBlobs(): ImageBlobStore {
       for (const [id, blob] of blobs) {
         if (blob.projectId === projectId) blobs.delete(id);
       }
+    },
+    async setHidden(id, hidden) {
+      const blob = blobs.get(id);
+      if (!blob) return false;
+      blob.hidden = hidden;
+      return true;
+    },
+    async listGenerated({ query, limit, offset }) {
+      const q = query.trim().toLowerCase();
+      const start = listOffset(offset);
+      return [...blobs.values()]
+        .filter((blob) => blob.kind === "job")
+        .filter((blob) => !q || blob.userId.toLowerCase().includes(q))
+        .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0))
+        .slice(start, start + limit)
+        .map((blob) => ({
+          id: blob.id,
+          userId: blob.userId,
+          userName: null,
+          userEmail: null,
+          projectId: blob.projectId,
+          createdAt: blob.createdAt,
+          hidden: blob.hidden === true,
+          contentType: blob.contentType,
+        }));
+    },
+    async listHiddenIds(userId) {
+      return [...blobs.values()]
+        .filter((blob) => blob.userId === userId && blob.hidden === true)
+        .map((blob) => blob.id);
     },
   };
 }
@@ -308,9 +420,10 @@ export function defaultCatalogSeed(): CatalogModel[] {
   ];
 }
 
-export function recordingUpstream(
-  impl?: ImageUpstream["run"],
-): { upstream: ImageUpstream; calls: ImageUpstreamRequest[] } {
+export function recordingUpstream(impl?: ImageUpstream["run"]): {
+  upstream: ImageUpstream;
+  calls: ImageUpstreamRequest[];
+} {
   const calls: ImageUpstreamRequest[] = [];
   return {
     calls,
@@ -364,9 +477,10 @@ export function createMemoryGatewayWorld(opts?: {
   return {
     catalog,
     projects,
-    jobs: createMemoryJobs((record) => quota.tryReserve(record.userId, record.createdAt)),
+    jobs: createMemoryJobs((record) => quota.tryReserve(record)),
     revs: createMemoryRevs(),
     blobs: createMemoryBlobs(),
+    audit: createMemoryHideAudit(),
     fetchImage: opts?.fetchImage ?? defaultMemoryFetchImage,
     quota,
     roles: createMemoryRoles(opts?.roles),

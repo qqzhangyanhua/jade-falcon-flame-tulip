@@ -4,8 +4,7 @@ import { referenceImageUrlsFrom, type Project, type ProjectDocument } from "./pr
 export type SyncSnapshot = ProjectDocumentSnapshot;
 
 export type SyncResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; code: ImageJobErrorCode; current?: SyncSnapshot };
+  { ok: true; value: T } | { ok: false; code: ImageJobErrorCode; current?: SyncSnapshot };
 
 export type SyncApi = {
   load: (projectId: string) => Promise<SyncResult<SyncSnapshot>>;
@@ -37,7 +36,8 @@ export type SyncHost = {
   debounceMs: number;
 };
 
-export type OpenResult = { ok: true; snapshot: SyncSnapshot } | { ok: false; code: ImageJobErrorCode };
+export type OpenResult =
+  { ok: true; snapshot: SyncSnapshot } | { ok: false; code: ImageJobErrorCode };
 
 /** The persisted shape of a Project: everything except UI state such as `mode`. */
 export function toDocument(project: Project): ProjectDocument {
@@ -213,11 +213,20 @@ export function createProjectSync(api: SyncApi, host: SyncHost) {
     return { ok: true, snapshot };
   }
 
+  /** Remember a save this device did not make, so the next local edit does not look stale. */
+  function noteSaved(id: string, version: number): void {
+    cancelTimer(id);
+    host.versions.set(id, version);
+    const local = host.getProject(id);
+    if (local) synced.set(id, stableStringify(toDocument(local)));
+  }
+
   return {
     touch,
     flush,
     open,
     forget,
+    noteSaved,
     /** Resolves once every save that has started has settled. */
     async idle(): Promise<void> {
       while (chains.size > 0) await Promise.all([...chains.values()]);

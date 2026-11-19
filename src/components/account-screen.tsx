@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
@@ -9,9 +10,23 @@ import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getProfile, saveProfile } from "@/app/actions/profile";
-import { getStudioAccessFn, setDailyImageCapFn } from "@/app/actions/studio";
-import { messageForImageJobError, type StudioQuota, type StudioRole } from "@/lib/image-jobs";
+import { getImageUsageFn, getStudioAccessFn, setDailyImageCapFn } from "@/app/actions/studio";
+import {
+  messageForImageJobError,
+  quotaExhausted,
+  type StudioQuota,
+  type StudioRole,
+} from "@/lib/image-jobs";
+import type { ImageUsageDay } from "@/lib/image-jobs/quota";
 import type { ProfileRecord } from "@/lib/types";
+
+const UsageChart = dynamic(
+  () => import("@/components/account-usage-chart").then((mod) => mod.AccountUsageChart),
+  {
+    ssr: false,
+    loading: () => <div className="h-64 animate-pulse rounded-md bg-surface-2" />,
+  },
+);
 
 export function AccountScreen() {
   const { user, isPending } = useCurrentUserState();
@@ -25,6 +40,7 @@ export function AccountScreen() {
   const [saving, setSaving] = useState(false);
   const [role, setRole] = useState<StudioRole>("user");
   const [quota, setQuota] = useState<StudioQuota | null>(null);
+  const [usage, setUsage] = useState<ImageUsageDay[] | null>(null);
   const [capDraft, setCapDraft] = useState("30");
   const [savingCap, setSavingCap] = useState(false);
 
@@ -32,8 +48,8 @@ export function AccountScreen() {
     if (isPending || !userId) return;
     let cancelled = false;
     setLoading(true);
-    void Promise.all([getProfile(), getStudioAccessFn()])
-      .then(([row, access]) => {
+    void Promise.all([getProfile(), getStudioAccessFn(), getImageUsageFn()])
+      .then(([row, access, days]) => {
         if (cancelled) return;
         setProfile(row);
         setDisplayName(row.displayName || sessionName);
@@ -41,7 +57,8 @@ export function AccountScreen() {
         setBio(row.bio);
         setRole(access.role);
         setQuota(access.quota);
-        setCapDraft(String(access.quota.cap));
+        setUsage(days);
+        setCapDraft(String(access.globalCap));
       })
       .catch((e) => {
         if (cancelled) return;
@@ -186,15 +203,19 @@ export function AccountScreen() {
               <h2 className="font-display text-xl tracking-tight">今日出图额度</h2>
               <p className="mt-2 text-sm leading-relaxed text-muted">
                 按北京时间自然日计算。方向候选、槽位出图、微调和换构图各计 1
-                次；解析描述不计。失败仍占用。
+                次；解析描述不计。失败仍占用。每日额度用完后从加量包扣，加量包不过期。
               </p>
-              <p className="mt-4 text-sm text-fg">
-                {quota
-                  ? quota.remaining <= 0
-                    ? "今日额度已用完"
-                    : `今日剩余 ${quota.remaining}/${quota.cap}（${quota.beijingDay}）`
-                  : "读取中…"}
-              </p>
+              {quota ? (
+                <div className="mt-4 space-y-1 text-sm text-fg">
+                  <p>
+                    今日剩余 {quota.remaining}/{quota.cap}（{quota.beijingDay}）
+                  </p>
+                  <p>加量包 {quota.boost}</p>
+                  {quotaExhausted(quota) ? <p>今日额度已用完</p> : null}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-fg">读取中…</p>
+              )}
               {role === "admin" ? (
                 <form
                   className="mt-5 space-y-3 border-t border-border pt-5"
@@ -206,6 +227,7 @@ export function AccountScreen() {
                         setCapDraft(String(saved.cap));
                         const access = await getStudioAccessFn();
                         setQuota(access.quota);
+                        setCapDraft(String(access.globalCap));
                         toast.success("全站每日额度已更新");
                       })
                       .catch((e) => {
@@ -214,7 +236,9 @@ export function AccountScreen() {
                       .finally(() => setSavingCap(false));
                   }}
                 >
-                  <p className="text-sm text-muted">管理员：修改全站每日上限（含管理员自己）</p>
+                  <p className="text-sm text-muted">
+                    管理员：修改全站每日上限。没有单独上限的用户都用这个数。
+                  </p>
                   <label className="block space-y-1.5">
                     <span className="text-sm text-muted">每日额度</span>
                     <Input
@@ -234,6 +258,27 @@ export function AccountScreen() {
               ) : null}
             </section>
 
+            <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface p-5">
+              <h2 className="font-display text-xl tracking-tight">近 30 日用量</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                按北京时间自然日。每日额度是从当天上限扣的张数，加量包是当天从加量包扣的张数。没有出图的日子是
+                0。
+              </p>
+              {usage ? (
+                <>
+                  <p className="mt-4 text-sm tabular-nums text-fg">
+                    今日已用 每日额度 {usage[usage.length - 1]?.daily ?? 0}，加量包{" "}
+                    {usage[usage.length - 1]?.boost ?? 0}
+                  </p>
+                  <div className="mt-4 min-w-0">
+                    <UsageChart days={usage} />
+                  </div>
+                </>
+              ) : (
+                <div className="mt-4 h-64 animate-pulse rounded-md bg-surface-2" />
+              )}
+            </section>
+
             {role === "admin" ? (
               <section className="rounded-xl border border-border bg-surface p-5">
                 <h2 className="font-display text-xl tracking-tight">模型目录</h2>
@@ -242,6 +287,42 @@ export function AccountScreen() {
                 </p>
                 <Link href="/models" className="btn btn-ink mt-4 h-11 px-4">
                   打开模型目录
+                </Link>
+              </section>
+            ) : null}
+
+            {role === "admin" ? (
+              <section className="rounded-xl border border-border bg-surface p-5">
+                <h2 className="font-display text-xl tracking-tight">用户</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  查看今日用量和生效上限，并为单个用户设置或清除每日上限。
+                </p>
+                <Link href="/admin/users" className="btn btn-ink mt-4 h-11 px-4">
+                  打开用户列表
+                </Link>
+              </section>
+            ) : null}
+
+            {role === "admin" ? (
+              <section className="rounded-xl border border-border bg-surface p-5">
+                <h2 className="font-display text-xl tracking-tight">任务统计</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  按模型查看任务数、失败率、耗时和实际成本。
+                </p>
+                <Link href="/admin/stats" className="btn btn-ink mt-4 h-11 px-4">
+                  打开任务统计
+                </Link>
+              </section>
+            ) : null}
+
+            {role === "admin" ? (
+              <section className="rounded-xl border border-border bg-surface p-5">
+                <h2 className="font-display text-xl tracking-tight">内容审核</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  浏览最近生成的图片，隐藏不当内容，或撤销隐藏。
+                </p>
+                <Link href="/admin/review" className="btn btn-ink mt-4 h-11 px-4">
+                  打开内容审核
                 </Link>
               </section>
             ) : null}

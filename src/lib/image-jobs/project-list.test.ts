@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createMemoryGatewayWorld } from "./memory.ts";
 import { deleteStudioProject } from "./projects.ts";
-import { importLocalProject, listProjectSummaries, PROJECT_SUMMARY_LIMIT } from "./project-list.ts";
-import { loadProjectDocument, saveProjectDocument } from "./project-document.ts";
+import {
+  importLocalProject,
+  listProjectSummaries,
+  listUsedProjectTags,
+  PROJECT_SUMMARY_LIMIT,
+} from "./project-list.ts";
+import {
+  copyProject,
+  loadProjectDocument,
+  saveProjectDocument,
+} from "./project-document.ts";
 import { emptyAssets } from "../project/schema.ts";
 import { sampleProject, sampleStyle } from "../project/fixtures.ts";
 
@@ -33,9 +42,14 @@ async function seedProject(
   assert.equal(saved.status, "saved");
 }
 
-function ids(result: Awaited<ReturnType<typeof listProjectSummaries>>): string[] {
+function page(result: Awaited<ReturnType<typeof listProjectSummaries>>) {
   assert.equal(result.ok, true);
-  return result.ok ? result.value.map((p) => p.id) : [];
+  if (!result.ok) throw new Error("expected a project page");
+  return result.value;
+}
+
+function ids(result: Awaited<ReturnType<typeof listProjectSummaries>>): string[] {
+  return page(result).items.map((p) => p.id);
 }
 
 function kvAssets(revs: { id: string; url: string }[], adoptedId: string | null) {
@@ -82,6 +96,28 @@ describe("listProjectSummaries", () => {
     assert.deepEqual(ids(result), ["synced"]);
   });
 
+  it("orders by created time, newest first, when asked", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "early", 50, { createdAt: 100 });
+    await seedProject(world, "late", 10, { createdAt: 300 });
+    await seedProject(world, "mid", 20, { createdAt: 200 });
+    assert.deepEqual(
+      ids(await listProjectSummaries(world, { userId: world.userId, sort: "created" })),
+      ["late", "mid", "early"],
+    );
+  });
+
+  it("orders by name, case-insensitively, when asked", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "c", 1, { name: "citrus" });
+    await seedProject(world, "a", 2, { name: "apple" });
+    await seedProject(world, "b", 3, { name: "Banana" });
+    assert.deepEqual(
+      ids(await listProjectSummaries(world, { userId: world.userId, sort: "name" })),
+      ["a", "b", "c"],
+    );
+  });
+
   it("orders by last update, newest first", async () => {
     const world = createMemoryGatewayWorld();
     await seedProject(world, "old", 10);
@@ -99,20 +135,83 @@ describe("listProjectSummaries", () => {
     for (let i = 0; i < 25; i += 1) await seedProject(world, `p${i}`, 100 + i);
     const result = await listProjectSummaries(world, { userId: world.userId });
     assert.equal(PROJECT_SUMMARY_LIMIT, 20);
-    const listed = ids(result);
-    assert.equal(listed.length, 20);
-    assert.equal(listed[0], "p24");
-    assert.equal(listed[19], "p5");
+    const listed = page(result);
+    assert.equal(listed.total, 25);
+    assert.equal(listed.items.length, 20);
+    assert.equal(listed.items[0]?.id, "p24");
+    assert.equal(listed.items[19]?.id, "p5");
   });
 
-  it("carries only id, name, stage, cover and update time", async () => {
+  it("returns the next page after the first 20", async () => {
     const world = createMemoryGatewayWorld();
-    await seedProject(world, "a", 42, { name: "茶空间", phase: "direction", currentStyleId: null, styles: [] });
+    for (let i = 0; i < 25; i += 1) await seedProject(world, `p${i}`, 100 + i);
+    const second = page(await listProjectSummaries(world, { userId: world.userId, offset: 20 }));
+    assert.equal(second.total, 25);
+    assert.deepEqual(
+      second.items.map((item) => item.id),
+      ["p4", "p3", "p2", "p1", "p0"],
+    );
+    const past = page(await listProjectSummaries(world, { userId: world.userId, offset: 40 }));
+    assert.equal(past.total, 25);
+    assert.deepEqual(past.items, []);
+  });
+
+  it("carries id, name, stage, cover, update time and created time", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "a", 42, {
+      name: "茶空间",
+      phase: "direction",
+      currentStyleId: null,
+      styles: [],
+      createdAt: 7,
+    });
     const result = await listProjectSummaries(world, { userId: world.userId });
     assert.deepEqual(result, {
       ok: true,
-      value: [{ id: "a", name: "茶空间", stage: "direction", coverUrl: null, updatedAt: 42 }],
+      value: {
+        items: [
+          {
+            id: "a",
+            name: "茶空间",
+            stage: "direction",
+            coverUrl: null,
+            updatedAt: 42,
+            createdAt: 7,
+            tags: [],
+          },
+        ],
+        total: 1,
+      },
     });
+  });
+
+  it("includes the tags stored on the project", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "a", 42, { name: "茶空间", tags: ["客户", "春季"], createdAt: 7 });
+    const listed = page(await listProjectSummaries(world, { userId: world.userId }));
+    assert.deepEqual(listed.items[0]?.tags, ["客户", "春季"]);
+  });
+
+  it("lists an old document that has no tags as none", async () => {
+    const world = createMemoryGatewayWorld();
+    const document = toDoc({ id: "old", name: "旧项目" });
+    delete (document as { tags?: unknown }).tags;
+    await world.projects.create({
+      id: "old",
+      userId: world.userId,
+      currentImageModelId: "m",
+      createdAt: 1,
+      deletedAt: null,
+    });
+    const saved = await world.projects.saveDocument(
+      "old",
+      document as ReturnType<typeof toDoc>,
+      0,
+      9,
+    );
+    assert.equal(saved.status, "saved");
+    const listed = page(await listProjectSummaries(world, { userId: world.userId }));
+    assert.deepEqual(listed.items[0]?.tags, []);
   });
 
   it("rejects an anonymous caller", async () => {
@@ -121,6 +220,102 @@ describe("listProjectSummaries", () => {
       ok: false,
       code: "unauthorized",
     });
+  });
+
+  it("finds projects by a case-insensitive part of the name", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "tea", 30, { name: "Tea House" });
+    await seedProject(world, "cha", 20, { name: "茶空间" });
+    await seedProject(world, "coffee", 10, { name: "咖啡店" });
+    assert.deepEqual(
+      ids(await listProjectSummaries(world, { userId: world.userId, keyword: "tea" })),
+      ["tea"],
+    );
+    assert.deepEqual(
+      ids(await listProjectSummaries(world, { userId: world.userId, keyword: " 茶 " })),
+      ["cha"],
+    );
+  });
+
+  it("does not match a keyword that appears only in the brief", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "named", 10, { name: "甲", brief: "茶空间" });
+    assert.deepEqual(
+      ids(await listProjectSummaries(world, { userId: world.userId, keyword: "茶" })),
+      [],
+    );
+  });
+
+  it("keeps a project only when it has every selected tag", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "both", 30, { tags: ["客户", "春季"] });
+    await seedProject(world, "client-only", 20, { tags: ["客户"] });
+    await seedProject(world, "extra", 10, { tags: ["春季", "客户", "已交付"] });
+    await seedProject(world, "season", 5, { tags: ["春季"] });
+    assert.deepEqual(
+      ids(
+        await listProjectSummaries(world, {
+          userId: world.userId,
+          tags: ["客户", "春季"],
+        }),
+      ),
+      ["both", "extra"],
+    );
+  });
+
+  it("filters by tags and a name search together, and still sorts by name", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "yi", 10, { name: "茶乙", tags: ["客户", "Q1"] });
+    await seedProject(world, "jia", 30, { name: "茶甲", tags: ["客户", "Q1"] });
+    await seedProject(world, "bing", 40, { name: "茶丙", tags: ["客户"] });
+    await seedProject(world, "coffee", 50, { name: "咖啡", tags: ["客户", "Q1"] });
+    assert.deepEqual(
+      ids(
+        await listProjectSummaries(world, {
+          userId: world.userId,
+          keyword: "茶",
+          tags: [" 客户 ", "Q1"],
+          sort: "name",
+        }),
+      ),
+      ["jia", "yi"],
+    );
+  });
+
+  it("tag filter returns only the caller's projects", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "mine", 10, { name: "茶空间", tags: ["客户", "春季"] });
+    await seedProject(world, "partial", 25, { name: "茶摊", tags: ["客户"] });
+    await seedProject(world, "gone", 30, { name: "茶室", tags: ["客户", "春季"] });
+    await seedProject(
+      world,
+      "theirs",
+      40,
+      { name: "茶馆", tags: ["客户", "春季"] },
+      "someone-else",
+    );
+    await deleteStudioProject(world, { userId: world.userId, projectId: "gone" });
+    assert.deepEqual(
+      ids(
+        await listProjectSummaries(world, {
+          userId: world.userId,
+          tags: ["客户", "春季"],
+        }),
+      ),
+      ["mine"],
+    );
+  });
+
+  it("search skips deleted projects and other users", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "keep", 10, { name: "茶空间" });
+    await seedProject(world, "gone", 30, { name: "茶室" });
+    await seedProject(world, "theirs", 40, { name: "茶馆" }, "someone-else");
+    await deleteStudioProject(world, { userId: world.userId, projectId: "gone" });
+    assert.deepEqual(
+      ids(await listProjectSummaries(world, { userId: world.userId, keyword: "茶" })),
+      ["keep"],
+    );
   });
 
   describe("cover", () => {
@@ -135,8 +330,7 @@ describe("listProjectSummaries", () => {
     async function coverOf(world: World, patch: Parameters<typeof sampleProject>[0]) {
       await seedProject(world, "c", 5, patch);
       const result = await listProjectSummaries(world, { userId: world.userId });
-      assert.equal(result.ok, true);
-      return result.ok ? result.value[0]?.coverUrl : undefined;
+      return page(result).items[0]?.coverUrl;
     }
 
     it("prefers the adopted main visual of the current style line", async () => {
@@ -188,7 +382,9 @@ describe("listProjectSummaries", () => {
 
     it("ignores other style lines and other slots", async () => {
       const world = createMemoryGatewayWorld();
-      const other = sampleStyle("b", { assets: kvAssets([{ id: "x", url: "/api/images/b_kv" }], null) });
+      const other = sampleStyle("b", {
+        assets: kvAssets([{ id: "x", url: "/api/images/b_kv" }], null),
+      });
       const assets = emptyAssets();
       assets.ui_hero.revs = [
         {
@@ -202,10 +398,110 @@ describe("listProjectSummaries", () => {
           styleRev: 1,
         },
       ];
-      const current = sampleStyle("a", { status: "active", candidateUrl: "/api/images/preview_a", assets });
+      const current = sampleStyle("a", {
+        status: "active",
+        candidateUrl: "/api/images/preview_a",
+        assets,
+      });
       const cover = await coverOf(world, { currentStyleId: "a", styles: [current, other] });
       assert.equal(cover, "/api/images/preview_a");
     });
+  });
+});
+
+describe("listUsedProjectTags", () => {
+  it("suggests tags this user has used that start with what they typed", async () => {
+    const world = createMemoryGatewayWorld();
+    await seedProject(world, "a", 10, { tags: ["客户", "春季"] });
+    await seedProject(world, "b", 20, { tags: ["客户", "秋季", "Q1"] });
+    await seedProject(world, "c", 30, { tags: ["机密"] }, "someone-else");
+    await seedProject(world, "gone", 40, { tags: ["作废"] });
+    await deleteStudioProject(world, { userId: world.userId, projectId: "gone" });
+    assert.deepEqual(await listUsedProjectTags(world, { userId: world.userId, prefix: " 春 " }), {
+      ok: true,
+      value: ["春季"],
+    });
+    assert.deepEqual(await listUsedProjectTags(world, { userId: world.userId, prefix: "q" }), {
+      ok: true,
+      value: ["Q1"],
+    });
+    assert.deepEqual(await listUsedProjectTags(world, { userId: world.userId }), {
+      ok: true,
+      value: ["春季", "客户", "秋季", "Q1"],
+    });
+  });
+
+  it("rejects an anonymous caller", async () => {
+    const world = createMemoryGatewayWorld();
+    assert.deepEqual(await listUsedProjectTags(world, { userId: "" }), {
+      ok: false,
+      code: "unauthorized",
+    });
+  });
+});
+
+describe("copyProject in the list", () => {
+  it("shows the copy in the list so it can be opened, and editing it leaves the source", async () => {
+    const world = createMemoryGatewayWorld({ now: () => 9_000 });
+    await seedProject(world, "src", 1_000, { name: "茶空间", brief: "原文", createdAt: 50 });
+    const copied = await copyProject(
+      { ...world, newId: () => "prj_copy" },
+      { userId: world.userId, projectId: "src" },
+    );
+    assert.deepEqual(copied, {
+      ok: true,
+      value: { id: "prj_copy", name: "茶空间 副本", version: 1 },
+    });
+
+    const listed = page(await listProjectSummaries(world, { userId: world.userId }));
+    const copyRow = listed.items.find((item) => item.id === "prj_copy");
+    assert.ok(copyRow);
+    assert.equal(copyRow.name, "茶空间 副本");
+    assert.equal(
+      listed.items.some((item) => item.id === "src" && item.name === "茶空间"),
+      true,
+    );
+
+    const opened = await loadProjectDocument(world, {
+      userId: world.userId,
+      projectId: "prj_copy",
+    });
+    assert.equal(opened.ok, true);
+    if (!opened.ok || !opened.value.document) return;
+    assert.equal(opened.value.document.name, "茶空间 副本");
+    assert.equal(opened.value.document.brief, "原文");
+
+    const edited = await saveProjectDocument(world, {
+      userId: world.userId,
+      projectId: "prj_copy",
+      document: { ...opened.value.document, brief: "只改副本" },
+      expectedVersion: opened.value.version,
+    });
+    assert.equal(edited.ok, true);
+
+    const source = await loadProjectDocument(world, { userId: world.userId, projectId: "src" });
+    assert.equal(source.ok && source.value.document?.name, "茶空间");
+    assert.equal(source.ok && source.value.document?.brief, "原文");
+    const owner = await world.projects.get("prj_copy");
+    assert.equal(owner?.userId, world.userId);
+    assert.equal(owner?.currentImageModelId, "m");
+  });
+
+  it("sorts a copy as newly created, using the copy time rather than the source time", async () => {
+    const world = createMemoryGatewayWorld({ now: () => 9_000 });
+    await seedProject(world, "src", 1_000, { name: "茶空间", createdAt: 100 });
+    const copied = await copyProject(
+      { ...world, newId: () => "zzz_copy" },
+      { userId: world.userId, projectId: "src" },
+    );
+    assert.equal(copied.ok, true);
+    const listed = page(
+      await listProjectSummaries(world, { userId: world.userId, sort: "created" }),
+    );
+    assert.equal(listed.items[0]?.id, "zzz_copy");
+    assert.equal(listed.items[0]?.createdAt, 9_000);
+    assert.equal(listed.items[1]?.id, "src");
+    assert.equal(listed.items[1]?.createdAt, 100);
   });
 });
 
@@ -218,7 +514,10 @@ describe("importLocalProject", () => {
     const world = createMemoryGatewayWorld();
     const result = await importLocalProject(world, input(world));
     assert.deepEqual(result, { ok: true, value: { status: "imported", version: 1 } });
-    const loaded = await loadProjectDocument(world, { userId: world.userId, projectId: world.projectId });
+    const loaded = await loadProjectDocument(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+    });
     assert.equal(loaded.ok && loaded.value.document?.name, "本地项目");
   });
 
@@ -265,7 +564,10 @@ describe("importLocalProject", () => {
     assert.equal(first.ok, true);
     const result = await importLocalProject(world, input(world));
     assert.deepEqual(result, { ok: true, value: { status: "already_synced", version: 1 } });
-    const loaded = await loadProjectDocument(world, { userId: world.userId, projectId: world.projectId });
+    const loaded = await loadProjectDocument(world, {
+      userId: world.userId,
+      projectId: world.projectId,
+    });
     assert.equal(loaded.ok && loaded.value.document?.name, "服务端");
   });
 

@@ -7,8 +7,9 @@ const REFERENCE_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
 
 /**
  * Every image_blobs row has a non-null user_id, so ownership is the whole rule.
- * Foreign, anonymous and missing all answer null so the route can reply 404 for each
- * and never confirm that someone else's id exists.
+ * A hidden image answers null for the owner too: the route must not send those bytes.
+ * Foreign, anonymous, hidden and missing all answer null so the route can reply 404
+ * for each and never confirm that someone else's id exists.
  */
 export async function readImageForUser(
   blobs: Pick<ImageBlobStore, "get">,
@@ -17,7 +18,7 @@ export async function readImageForUser(
 ): Promise<ImageBlobRecord | null> {
   if (!userId) return null;
   const blob = await blobs.get(imageId);
-  if (!blob || blob.userId !== userId) return null;
+  if (!blob || blob.hidden || blob.userId !== userId) return null;
   return blob;
 }
 

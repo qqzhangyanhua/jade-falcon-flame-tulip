@@ -6,6 +6,7 @@ export {
   messageForImageJobError,
 } from "./errors";
 export { durableImageUrl, listJobImages, openJobImage } from "./durable";
+export { quotaExhausted, quotaSpendable } from "./quota";
 export { listUserJobs } from "./list-jobs";
 export type {
   ActionAvailability,

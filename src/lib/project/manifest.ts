@@ -1,5 +1,5 @@
 import { designTokens, promptPack, promptsMarkdown } from "./dna-export.ts";
-import { adoptedRev, currentDna, type Slot, type StyleBranch } from "./schema.ts";
+import { currentDna, revForExport, type Slot, type StyleBranch } from "./schema.ts";
 import { DEFAULT_ENABLED_SLOT_IDS, slotPromptMetas, type SlotPromptMeta } from "./slots.ts";
 
 export type ExportImage = { slot: Slot; fileName: string; url: string };
@@ -22,6 +22,12 @@ export type ExportManifestOptions = {
   customSlots?: readonly SlotPromptMeta[];
   /** Product name pasted into the prompt pack. Defaults to the style line's name. */
   product?: string;
+  /**
+   * Image ids to leave out (the blob id in `/api/images/<id>`).
+   * The rev a slot would export — adopted, otherwise latest — is dropped with that slot.
+   * Another rev is not substituted.
+   */
+  excludeImageIds?: readonly string[];
 };
 
 const KNOWN_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
@@ -37,19 +43,22 @@ function extensionOf(url: string): string {
 
 /**
  * What an export of a Style Line contains: each enabled Slot's adopted image
- * (the latest one when none is adopted; Slots with no image are skipped), the
- * viewed rev's DNA, and design tokens plus prompts.md from that same rev.
+ * (the latest one when none is adopted; Slots with no image, and slots whose
+ * chosen image is excluded, are skipped — exclusion does not fall back to
+ * another rev), the viewed rev's DNA, and design tokens plus prompts.md from
+ * that same rev.
  */
 export function exportManifest(
   styleLine: StyleBranch,
   options?: ExportManifestOptions,
 ): ExportManifest {
   const enabledSlotIds = options?.enabledSlotIds ?? DEFAULT_ENABLED_SLOT_IDS;
+  const excluded = new Set(options?.excludeImageIds ?? []);
   const images: ExportImage[] = [];
   for (const slot of enabledSlotIds) {
     const asset = styleLine.assets[slot];
     if (!asset) continue;
-    const rev = adoptedRev(asset);
+    const rev = revForExport(asset, excluded);
     if (!rev) continue;
     images.push({ slot, fileName: `${slot}.${extensionOf(rev.url)}`, url: rev.url });
   }

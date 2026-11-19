@@ -1,11 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DeleteProjectControl } from "@/components/delete-project-control";
-import { getProjectSync } from "@/components/project-sync";
 import { listProjectSummariesFn } from "@/app/actions/studio";
+import { DeleteProjectControl } from "@/components/delete-project-control";
+import { OwnedImage } from "@/components/owned-image";
+import { getProjectSync } from "@/components/project-sync";
+import { ProjectCopyControl } from "@/components/project-copy-control";
+import { ProjectRenameControl } from "@/components/project-rename-control";
+import { ProjectTagControl, ProjectTagFilter } from "@/components/project-tag-control";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select";
 import { IMAGE_JOB_USER_MESSAGES } from "@/lib/image-jobs/errors";
+import type { ProjectListSort } from "@/lib/image-jobs/project-list";
 import type { ProjectSummary } from "@/lib/image-jobs/types";
 import { useStudio } from "@/lib/store";
 
@@ -17,21 +25,75 @@ const STAGE_LABELS: Record<ProjectSummary["stage"], string> = {
   brief: "草稿",
 };
 
+const SORTS: { value: ProjectListSort; label: string }[] = [
+  { value: "updated", label: "最近更新" },
+  { value: "created", label: "创建时间" },
+  { value: "name", label: "名称" },
+];
+
+function isSort(value: string): value is ProjectListSort {
+  return SORTS.some((item) => item.value === value);
+}
+
 export function RecentProjects() {
   const [items, setItems] = useState<ProjectSummary[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [keyword, setKeyword] = useState("");
+  const [appliedKeyword, setAppliedKeyword] = useState("");
+  const [filterTags, setFilterTags] = useState<string[]>([]);
+  const [sort, setSort] = useState<ProjectListSort>("updated");
   const [opening, setOpening] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setAppliedKeyword(keyword), 300);
+    return () => window.clearTimeout(handle);
+  }, [keyword]);
 
   const refresh = useCallback(() => {
-    void listProjectSummariesFn()
-      .then(setItems)
-      .catch(() => setItems((prev) => prev ?? []));
-  }, []);
+    const id = ++requestId.current;
+    void listProjectSummariesFn({
+      data: { keyword: appliedKeyword, sort, offset: 0, tags: filterTags },
+    })
+      .then((page) => {
+        if (requestId.current !== id) return;
+        setItems(page.items);
+        setTotal(page.total);
+      })
+      .catch(() => {
+        if (requestId.current !== id) return;
+        setItems((prev) => prev ?? []);
+      });
+  }, [appliedKeyword, filterTags, sort]);
 
   useEffect(() => {
     refresh();
     window.addEventListener(PROJECTS_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, refresh);
   }, [refresh]);
+
+  async function loadMore() {
+    if (!items || loadingMore || items.length >= total) return;
+    const id = requestId.current;
+    const offset = items.length;
+    setLoadingMore(true);
+    try {
+      const page = await listProjectSummariesFn({
+        data: { keyword: appliedKeyword, sort, offset, tags: filterTags },
+      });
+      if (requestId.current !== id) return;
+      setTotal(page.total);
+      setItems((prev) => {
+        const seen = new Set((prev ?? []).map((item) => item.id));
+        return [...(prev ?? []), ...page.items.filter((item) => !seen.has(item.id))];
+      });
+    } catch {
+      toast.error("没能加载更多项目");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   async function open(id: string) {
     setOpening(id);
@@ -52,48 +114,134 @@ export function RecentProjects() {
     }
   }
 
-  if (!items || items.length === 0) return null;
+  const searching =
+    keyword.trim().length > 0 || appliedKeyword.trim().length > 0 || filterTags.length > 0;
+  if (!items) return null;
+  if (items.length === 0 && total === 0 && !searching) return null;
 
   return (
-    <section className="mt-16" aria-label="最近项目">
-      <p className="mb-4 section-label">最近项目</p>
-      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((p) => (
-          <li key={p.id} className="overflow-hidden rounded-lg bg-surface shadow-border">
-            <button
-              type="button"
-              className="block w-full text-left disabled:opacity-60"
-              disabled={opening === p.id}
-              onClick={() => void open(p.id)}
-            >
-              <div className="aspect-video bg-surface-2">
-                {p.coverUrl ? (
-                  <img src={p.coverUrl} alt="" className="frame size-full object-cover" />
-                ) : (
-                  <div className="flex size-full items-center justify-center text-xs text-subtle">
-                    尚未出图
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-3 px-3 py-3">
-                <span className="min-w-0">
-                  <span className="block truncate text-sm text-fg">{p.name}</span>
-                  <span className="text-xs text-subtle">
-                    {opening === p.id ? "打开中…" : STAGE_LABELS[p.stage]}
+    <section className="mt-16" aria-label="项目">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <p className="section-label">项目</p>
+        <div className="flex min-w-0 flex-col gap-2 sm:items-end">
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              type="search"
+              value={keyword}
+              placeholder="搜索项目名称"
+              aria-label="搜索项目名称"
+              className="sm:w-64"
+              onChange={(event) => setKeyword(event.target.value)}
+            />
+            <SelectField
+              label="排序"
+              className="sm:w-36"
+              value={sort}
+              items={SORTS}
+              onValueChange={(value) => {
+                if (isSort(value)) setSort(value);
+              }}
+            />
+          </div>
+          <div className="w-full sm:w-64">
+            <ProjectTagFilter tags={filterTags} onChange={setFilterTags} />
+          </div>
+        </div>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">没有匹配的项目</p>
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((p) => (
+            <li key={p.id} className="rounded-lg bg-surface shadow-border">
+              <button
+                type="button"
+                className="block w-full text-left disabled:opacity-60"
+                disabled={opening === p.id}
+                onClick={() => void open(p.id)}
+              >
+                <div className="aspect-video overflow-hidden bg-surface-2">
+                  {p.coverUrl ? (
+                    <OwnedImage
+                      src={p.coverUrl}
+                      alt=""
+                      className="frame size-full object-cover"
+                      placeholderClassName="size-full"
+                    />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-xs text-subtle">
+                      尚未出图
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-3 px-3 py-3">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm text-fg">{p.name}</span>
+                    <span className="text-xs text-subtle">
+                      {opening === p.id ? "打开中…" : STAGE_LABELS[p.stage]}
+                    </span>
                   </span>
-                </span>
+                </div>
+              </button>
+              <div className="px-3 pb-3">
+                <ProjectTagControl
+                  projectId={p.id}
+                  tags={p.tags}
+                  onChange={(tags) => {
+                    setItems(
+                      (prev) =>
+                        prev?.map((item) => (item.id === p.id ? { ...item, tags } : item)) ?? prev,
+                    );
+                    window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                  }}
+                />
               </div>
-            </button>
-            <div className="flex justify-end border-t border-border px-2 py-1">
-              <DeleteProjectControl
-                projectId={p.id}
-                compact
-                onDeleted={() => setItems((prev) => prev?.filter((x) => x.id !== p.id) ?? prev)}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-2 py-1">
+                <div className="flex flex-wrap items-center">
+                  <ProjectRenameControl
+                    projectId={p.id}
+                    name={p.name}
+                    onRenamed={(next) => {
+                      setItems(
+                        (prev) =>
+                          prev?.map((item) =>
+                            item.id === p.id ? { ...item, name: next } : item,
+                          ) ?? prev,
+                      );
+                      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                    }}
+                  />
+                  <ProjectCopyControl
+                    projectId={p.id}
+                    onCopied={() => {
+                      window.dispatchEvent(new Event(PROJECTS_CHANGED_EVENT));
+                    }}
+                  />
+                </div>
+                <DeleteProjectControl
+                  projectId={p.id}
+                  compact
+                  onDeleted={() => {
+                    setItems((prev) => prev?.filter((item) => item.id !== p.id) ?? prev);
+                    setTotal((count) => Math.max(0, count - 1));
+                  }}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {items.length < total ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 min-h-11 w-full sm:w-auto"
+          disabled={loadingMore}
+          onClick={() => void loadMore()}
+        >
+          {loadingMore ? "加载中…" : "加载更多"}
+        </Button>
+      ) : null}
     </section>
   );
 }

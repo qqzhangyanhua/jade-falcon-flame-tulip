@@ -7,6 +7,7 @@ import { ImageJobError } from "@/lib/image-jobs/errors";
 import { runImageJob, unwrapImageJob } from "@/lib/image-jobs/gateway";
 import { listUserJobs } from "@/lib/image-jobs/list-jobs";
 import {
+  copyProject,
   loadProjectDocument,
   renameProject,
   saveProjectDocument,
@@ -484,6 +485,15 @@ export async function listProjectSummariesFn(input?: {
       offset: data?.offset,
     }),
   );
+}
+
+export async function copyProjectFn(input: {
+  data: { projectId: string };
+}): Promise<ProjectDocumentActionResult<{ id: string; name: string; version: number }>> {
+  const ctx = await resolveActionContext(input.data);
+  if (!ctx.ok) return ctx;
+  const deps = await createSqlGatewayDeps();
+  return copyProject(deps, { userId: ctx.userId, projectId: ctx.projectId });
 }
 
 export async function renameProjectFn(input: {
